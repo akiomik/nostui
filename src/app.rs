@@ -1,17 +1,17 @@
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
+use nostr_sdk::prelude::*;
 use ratatui::prelude::Rect;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
-use nostr_sdk::prelude::*;
 
 use crate::{
     action::Action,
-    components::{home::Home, fps::FpsCounter, Component},
+    components::{fps::FpsCounter, home::Home, Component},
     config::Config,
+    conn::Conn,
     mode::Mode,
     tui,
-    conn::Conn,
 };
 
 pub struct App {
@@ -46,7 +46,9 @@ impl App {
     pub async fn run(&mut self) -> Result<()> {
         let (action_tx, mut action_rx) = mpsc::unbounded_channel();
 
-        let mut tui = tui::Tui::new()?.tick_rate(self.tick_rate).frame_rate(self.frame_rate);
+        let mut tui = tui::Tui::new()?
+            .tick_rate(self.tick_rate)
+            .frame_rate(self.frame_rate);
         // tui.mouse(true);
         tui.enter()?;
 
@@ -88,8 +90,8 @@ impl App {
                                 }
                             }
                         };
-                    },
-                    _ => {},
+                    }
+                    _ => {}
                 }
                 for component in self.components.iter_mut() {
                     if let Some(action) = component.handle_events(Some(e.clone()))? {
@@ -109,7 +111,7 @@ impl App {
                 match action {
                     Action::Tick => {
                         self.last_tick_key_events.drain(..);
-                    },
+                    }
                     Action::Quit => self.should_quit = true,
                     Action::Suspend => self.should_suspend = true,
                     Action::Resume => self.should_suspend = false,
@@ -119,25 +121,29 @@ impl App {
                             for component in self.components.iter_mut() {
                                 let r = component.draw(f, f.size());
                                 if let Err(e) = r {
-                                    action_tx.send(Action::Error(format!("Failed to draw: {:?}", e))).unwrap();
+                                    action_tx
+                                        .send(Action::Error(format!("Failed to draw: {:?}", e)))
+                                        .unwrap();
                                 }
                             }
                         })?;
-                    },
+                    }
                     Action::Render => {
                         tui.draw(|f| {
                             for component in self.components.iter_mut() {
                                 let r = component.draw(f, f.size());
                                 if let Err(e) = r {
-                                    action_tx.send(Action::Error(format!("Failed to draw: {:?}", e))).unwrap();
+                                    action_tx
+                                        .send(Action::Error(format!("Failed to draw: {:?}", e)))
+                                        .unwrap();
                                 }
                             }
                         })?;
-                    },
+                    }
                     Action::ReceiveEvent(ref event) => {
                         log::info!("Got nostr event: {event:?}");
-                    },
-                    _ => {},
+                    }
+                    _ => {}
                 }
                 for component in self.components.iter_mut() {
                     if let Some(action) = component.update(action.clone())? {
@@ -148,7 +154,9 @@ impl App {
             if self.should_suspend {
                 tui.suspend()?;
                 action_tx.send(Action::Resume)?;
-                tui = tui::Tui::new()?.tick_rate(self.tick_rate).frame_rate(self.frame_rate);
+                tui = tui::Tui::new()?
+                    .tick_rate(self.tick_rate)
+                    .frame_rate(self.frame_rate);
                 // tui.mouse(true);
                 tui.enter()?;
             } else if self.should_quit {
