@@ -1,7 +1,13 @@
 use nostr_sdk::prelude::*;
 
 pub struct Conn {
-    pub rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
+    rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
+}
+
+impl Default for Conn {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Conn {
@@ -40,7 +46,7 @@ impl Conn {
         Conn { rx }
     }
 
-    pub fn next(&mut self) -> Result<Event, tokio::sync::mpsc::error::TryRecvError> {
+    pub fn recv(&mut self) -> Result<Event, tokio::sync::mpsc::error::TryRecvError> {
         self.rx.try_recv()
     }
 }

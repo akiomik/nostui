@@ -36,9 +36,8 @@ impl Component for Home {
     }
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
-        match action {
-            Action::Tick => {}
-            _ => {}
+        if action == Action::Tick {
+            // noop
         }
         Ok(None)
     }

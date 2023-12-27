@@ -9,7 +9,9 @@ use tracing_subscriber::{
     self, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, Layer,
 };
 
-pub static GIT_COMMIT_HASH: &'static str = env!("_GIT_INFO");
+use crate::tui::Tui;
+
+pub static GIT_COMMIT_HASH: &str = env!("_GIT_INFO");
 
 lazy_static! {
     pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase().to_string();
@@ -41,7 +43,7 @@ pub fn initialize_panic_handler() -> Result<()> {
         .into_hooks();
     eyre_hook.install()?;
     std::panic::set_hook(Box::new(move |panic_info| {
-        if let Ok(mut t) = crate::tui::Tui::new() {
+        if let Ok(mut t) = Tui::new() {
             if let Err(r) = t.exit() {
                 error!("Unable to exit Terminal: {:?}", r);
             }

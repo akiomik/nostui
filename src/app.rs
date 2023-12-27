@@ -100,7 +100,7 @@ impl App {
                 }
             }
 
-            while let Ok(event) = conn.next() {
+            while let Ok(event) = conn.recv() {
                 action_tx.send(Action::ReceiveEvent(event))?;
             }
 
