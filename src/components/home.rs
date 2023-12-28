@@ -130,7 +130,9 @@ impl Component for Home {
                 let selection = match self.list_state.selected() {
                     _ if self.events.is_empty() => None,
                     Some(i) if i < self.events.len() - 1 => Some(i + 1),
-                    _ => Some(self.events.len() - 1),
+                    Some(_) => Some(self.events.len() - 1),
+                    None if self.events.len() > 1 => Some(1),
+                    None => Some(0),
                 };
                 self.list_state.select(selection);
             }
