@@ -4,6 +4,7 @@ use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 use nostr_sdk::prelude::Event;
+use nostr_sdk::{EventId, Kind, Tag};
 use ratatui::{prelude::*, widgets::*};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
@@ -19,6 +20,7 @@ pub struct Home {
     command_tx: Option<UnboundedSender<Action>>,
     config: Config,
     events: Vec<Event>,
+    reactions: HashMap<EventId, Vec<Event>>,
 }
 
 impl Home {
@@ -47,7 +49,42 @@ impl Component for Home {
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
-            Action::ReceiveEvent(ev) => self.events.push(ev),
+            Action::ReceiveEvent(ev) => match ev.kind {
+                Kind::TextNote | Kind::Repost => self.events.push(ev),
+                Kind::Reaction => {
+                    // reactions grouped by event_id
+                    let maybe_reacted_event_tag = ev
+                        .tags
+                        .iter()
+                        .filter(|tag| match tag {
+                            Tag::Event {
+                                event_id,
+                                relay_url,
+                                marker,
+                            } => true,
+                            _ => false,
+                        })
+                        .last();
+                    match maybe_reacted_event_tag {
+                        Some(Tag::Event {
+                            event_id,
+                            relay_url,
+                            marker,
+                        }) => {
+                            if self.reactions.contains_key(&event_id) {
+                                self.reactions
+                                    .get_mut(&event_id)
+                                    .expect("failed to get reactions")
+                                    .push(ev);
+                            } else {
+                                self.reactions.insert(*event_id, vec![ev]);
+                            }
+                        }
+                        _ => {}
+                    };
+                }
+                _ => {}
+            },
             _ => {}
         }
         Ok(None)
@@ -62,6 +99,8 @@ impl Component for Home {
                     .expect("Invalid created_at")
                     .with_timezone(&Local)
                     .format("%H:%m:%d");
+                let default_reactions = Vec::new();
+                let reactions = self.reactions.get(&ev.id).unwrap_or(&default_reactions);
 
                 let mut text = Text::default();
                 text.extend(Text::raw(""));
@@ -73,6 +112,10 @@ impl Component for Home {
                 text.extend(Text::styled(
                     created_at.to_string(),
                     Style::default().fg(Color::Gray),
+                ));
+                text.extend(Text::styled(
+                    format!("{}Liked", reactions.len()),
+                    Style::default().fg(Color::Red),
                 ));
                 ListItem::new(text)
             })

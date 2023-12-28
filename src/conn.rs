@@ -24,16 +24,19 @@ impl Conn {
 
             let filters = Filter::new()
                 // .author(keys.public_key())
-                .kind(Kind::TextNote)
+                .kinds([Kind::TextNote, Kind::Repost, Kind::Reaction])
                 .since(Timestamp::now());
             nostr_client.subscribe(vec![filters]).await;
 
             nostr_client
                 .handle_notifications(|notification| async {
                     if let RelayPoolNotification::Event { event, .. } = notification {
-                        if event.kind == Kind::TextNote {
-                            tx.send(event)?;
-                        };
+                        match event.kind {
+                            Kind::TextNote | Kind::Repost | Kind::Reaction => {
+                                tx.send(event)?;
+                            }
+                            _ => {}
+                        }
                     };
 
                     Ok(false)
