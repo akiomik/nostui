@@ -11,6 +11,7 @@ use serde::{
 };
 use serde_json::Value as JsonValue;
 
+use crate::utils;
 use crate::{action::Action, mode::Mode};
 
 const CONFIG: &str = include_str!("../.config/config.json5");
@@ -36,8 +37,8 @@ pub struct Config {
 impl Config {
     pub fn new() -> Result<Self, config::ConfigError> {
         let default_config: Config = json5::from_str(CONFIG).unwrap();
-        let data_dir = crate::utils::get_data_dir();
-        let config_dir = crate::utils::get_config_dir();
+        let data_dir = utils::get_data_dir();
+        let config_dir = utils::get_config_dir();
         let mut builder = config::Config::builder()
             .set_default("_data_dir", data_dir.to_str().unwrap())?
             .set_default("_config_dir", config_dir.to_str().unwrap())?;
