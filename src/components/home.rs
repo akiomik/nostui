@@ -206,14 +206,21 @@ impl Component for Home {
                     ),
                 ]);
                 text.extend::<Text>(line.into());
-                text.extend(Text::raw("─".repeat(area.width as usize)));
+                text.extend(Text::styled(
+                    "─".repeat(area.width as usize),
+                    Style::default().fg(Color::Gray),
+                ));
 
                 ListItem::new(text)
             })
             .collect();
 
         let list = List::new(items.clone())
-            .block(Block::default().title("Timeline").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Timeline")
+                    .padding(Padding::new(1, 1, 1, 1)),
+            )
             .style(Style::default().fg(Color::White))
             .highlight_style(Style::default().reversed())
             .direction(ListDirection::TopToBottom);
