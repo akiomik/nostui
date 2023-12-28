@@ -21,6 +21,7 @@ pub struct Home {
     config: Config,
     events: Vec<Event>,
     reactions: HashMap<EventId, Vec<Event>>,
+    reposts: HashMap<EventId, Vec<Event>>,
 }
 
 impl Home {
@@ -33,6 +34,59 @@ impl Home {
         let heading = &pubkey[0..5];
         let trail = &pubkey[(len - 5)..len];
         format!("{}:{}", heading, trail)
+    }
+
+    fn find_last_event_tag(&self, ev: &Event) -> Option<Tag> {
+        ev.tags
+            .iter()
+            .filter(|tag| match tag {
+                Tag::Event {
+                    event_id,
+                    relay_url,
+                    marker,
+                } => true,
+                _ => false,
+            })
+            .last()
+            .map(|t| t.clone())
+    }
+
+    fn append_reaction(&mut self, reaction: Event) {
+        // reactions grouped by event_id
+        if let Some(Tag::Event {
+            event_id,
+            relay_url,
+            marker,
+        }) = self.find_last_event_tag(&reaction)
+        {
+            if self.reactions.contains_key(&event_id) {
+                self.reactions
+                    .get_mut(&event_id)
+                    .expect("failed to get reactions")
+                    .push(reaction);
+            } else {
+                self.reactions.insert(event_id, vec![reaction]);
+            }
+        }
+    }
+
+    fn append_repost(&mut self, repost: Event) {
+        // reposts grouped by event_id
+        if let Some(Tag::Event {
+            event_id,
+            relay_url,
+            marker,
+        }) = self.find_last_event_tag(&repost)
+        {
+            if self.reposts.contains_key(&event_id) {
+                self.reposts
+                    .get_mut(&event_id)
+                    .expect("failed to get reactions")
+                    .push(repost);
+            } else {
+                self.reposts.insert(event_id, vec![repost]);
+            }
+        }
     }
 }
 
@@ -50,39 +104,9 @@ impl Component for Home {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::ReceiveEvent(ev) => match ev.kind {
-                Kind::TextNote | Kind::Repost => self.events.push(ev),
-                Kind::Reaction => {
-                    // reactions grouped by event_id
-                    let maybe_reacted_event_tag = ev
-                        .tags
-                        .iter()
-                        .filter(|tag| match tag {
-                            Tag::Event {
-                                event_id,
-                                relay_url,
-                                marker,
-                            } => true,
-                            _ => false,
-                        })
-                        .last();
-                    match maybe_reacted_event_tag {
-                        Some(Tag::Event {
-                            event_id,
-                            relay_url,
-                            marker,
-                        }) => {
-                            if self.reactions.contains_key(&event_id) {
-                                self.reactions
-                                    .get_mut(&event_id)
-                                    .expect("failed to get reactions")
-                                    .push(ev);
-                            } else {
-                                self.reactions.insert(*event_id, vec![ev]);
-                            }
-                        }
-                        _ => {}
-                    };
-                }
+                Kind::TextNote => self.events.push(ev),
+                Kind::Reaction => self.append_reaction(ev),
+                Kind::Repost => self.append_repost(ev), // TODO: show reposts on feed
                 _ => {}
             },
             _ => {}
@@ -99,8 +123,10 @@ impl Component for Home {
                     .expect("Invalid created_at")
                     .with_timezone(&Local)
                     .format("%H:%m:%d");
-                let default_reactions = Vec::new();
+                let default_reactions = vec![];
+                let default_reposts = vec![];
                 let reactions = self.reactions.get(&ev.id).unwrap_or(&default_reactions);
+                let reposts = self.reposts.get(&ev.id).unwrap_or(&default_reposts);
 
                 let mut text = Text::default();
                 text.extend(Text::raw(""));
@@ -113,10 +139,18 @@ impl Component for Home {
                     created_at.to_string(),
                     Style::default().fg(Color::Gray),
                 ));
-                text.extend(Text::styled(
-                    format!("{}Liked", reactions.len()),
-                    Style::default().fg(Color::Red),
-                ));
+                let line = Line::from(vec![
+                    Span::styled(
+                        format!("{}Likes", reactions.len()),
+                        Style::default().fg(Color::LightRed),
+                    ),
+                    Span::raw(" "),
+                    Span::styled(
+                        format!("{}Reposts", reposts.len()),
+                        Style::default().fg(Color::LightGreen),
+                    ),
+                ]);
+                text.extend::<Text>(line.into());
                 ListItem::new(text)
             })
             .collect();
