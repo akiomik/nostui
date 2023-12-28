@@ -19,4 +19,8 @@ pub enum Action {
     Error(String),
     Help,
     ReceiveEvent(nostr_sdk::Event),
+    ScrollUp,
+    ScrollDown,
+    ScrollTop,
+    ScrollBottom,
 }

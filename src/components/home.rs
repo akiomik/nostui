@@ -19,6 +19,7 @@ use crate::{
 pub struct Home {
     command_tx: Option<UnboundedSender<Action>>,
     config: Config,
+    list_state: ListState,
     events: Vec<Event>,
     reactions: HashMap<EventId, Vec<Event>>,
     reposts: HashMap<EventId, Vec<Event>>,
@@ -88,43 +89,6 @@ impl Home {
             }
         }
     }
-
-    fn list_item_widget(&self, ev: &Event) -> ListItem {
-        let created_at = DateTime::from_timestamp(ev.created_at.as_i64(), 0)
-            .expect("Invalid created_at")
-            .with_timezone(&Local)
-            .format("%H:%m:%d");
-        let default_reactions = vec![];
-        let default_reposts = vec![];
-        let reactions = self.reactions.get(&ev.id).unwrap_or(&default_reactions);
-        let reposts = self.reposts.get(&ev.id).unwrap_or(&default_reposts);
-
-        let mut text = Text::default();
-        text.extend(Text::raw(""));
-        text.extend(Text::styled(
-            self.format_pubkey(ev.pubkey.to_string()),
-            Style::default().bold(),
-        ));
-        text.extend(Text::raw(ev.content.clone())); // TODO: wrap line
-        text.extend(Text::styled(
-            created_at.to_string(),
-            Style::default().fg(Color::Gray),
-        ));
-        let line = Line::from(vec![
-            Span::styled(
-                format!("{}Likes", reactions.len()),
-                Style::default().fg(Color::LightRed),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                format!("{}Reposts", reposts.len()),
-                Style::default().fg(Color::LightGreen),
-            ),
-        ]);
-        text.extend::<Text>(line.into());
-
-        ListItem::new(text)
-    }
 }
 
 impl Component for Home {
@@ -146,6 +110,36 @@ impl Component for Home {
                 Kind::Repost => self.append_repost(ev), // TODO: show reposts on feed
                 _ => {}
             },
+            Action::ScrollUp => {
+                let selection = match self.list_state.selected() {
+                    _ if self.events.len() == 0 => None,
+                    Some(i) if i < self.events.len() - 1 => Some(i + 1),
+                    _ => Some(self.events.len() - 1),
+                };
+                self.list_state.select(selection);
+            }
+            Action::ScrollDown => {
+                let selection = match self.list_state.selected() {
+                    _ if self.events.len() == 0 => None,
+                    Some(i) if i > 1 => Some(i - 1),
+                    _ => Some(0),
+                };
+                self.list_state.select(selection);
+            }
+            Action::ScrollTop => {
+                let selection = match self.list_state.selected() {
+                    _ if self.events.len() == 0 => None,
+                    _ => Some(self.events.len() - 1),
+                };
+                self.list_state.select(selection);
+            }
+            Action::ScrollBottom => {
+                let selection = match self.list_state.selected() {
+                    _ if self.events.len() == 0 => None,
+                    _ => Some(0),
+                };
+                self.list_state.select(selection);
+            }
             _ => {}
         }
         Ok(None)
@@ -155,18 +149,52 @@ impl Component for Home {
         let items: Vec<ListItem> = self
             .events
             .iter()
-            .map(|ev| self.list_item_widget(ev))
+            .map(|ev| {
+                let created_at = DateTime::from_timestamp(ev.created_at.as_i64(), 0)
+                    .expect("Invalid created_at")
+                    .with_timezone(&Local)
+                    .format("%H:%m:%d");
+                let default_reactions = vec![];
+                let default_reposts = vec![];
+                let reactions = self.reactions.get(&ev.id).unwrap_or(&default_reactions);
+                let reposts = self.reposts.get(&ev.id).unwrap_or(&default_reposts);
+
+                let mut text = Text::default();
+                text.extend(Text::raw(""));
+                text.extend(Text::styled(
+                    self.format_pubkey(ev.pubkey.to_string()),
+                    Style::default().bold(),
+                ));
+                text.extend(Text::raw(ev.content.clone())); // TODO: wrap line
+                text.extend(Text::styled(
+                    created_at.to_string(),
+                    Style::default().fg(Color::Gray),
+                ));
+                let line = Line::from(vec![
+                    Span::styled(
+                        format!("{}Likes", reactions.len()),
+                        Style::default().fg(Color::LightRed),
+                    ),
+                    Span::raw(" "),
+                    Span::styled(
+                        format!("{}Reposts", reposts.len()),
+                        Style::default().fg(Color::LightGreen),
+                    ),
+                ]);
+                text.extend::<Text>(line.into());
+
+                ListItem::new(text)
+            })
             .collect();
 
-        let list = List::new(items)
+        let list = List::new(items.clone())
             .block(Block::default().title("Timeline").borders(Borders::ALL))
             .style(Style::default().fg(Color::White))
             .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
-            .highlight_symbol(">>")
-            .repeat_highlight_symbol(true)
             .direction(ListDirection::BottomToTop);
 
-        f.render_widget(list, area);
+        f.render_stateful_widget(list, area, &mut self.list_state);
+
         Ok(())
     }
 }
