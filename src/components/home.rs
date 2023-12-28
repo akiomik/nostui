@@ -147,6 +147,18 @@ impl Component for Home {
                 };
                 self.list_state.select(selection);
             }
+            Action::React => {
+                if let (Some(i), Some(tx)) = (self.list_state.selected(), &self.command_tx) {
+                    let event = self.events.get(i).expect("failed to get target event");
+                    tx.send(Action::SendReaction(event.id))?;
+                }
+            }
+            Action::Repost => {
+                if let (Some(i), Some(tx)) = (self.list_state.selected(), &self.command_tx) {
+                    let event = self.events.get(i).expect("failed to get target event");
+                    tx.send(Action::SendRepost(event.id))?;
+                }
+            }
             _ => {}
         }
         Ok(None)

@@ -23,4 +23,8 @@ pub enum Action {
     ScrollDown,
     ScrollTop,
     ScrollBottom,
+    React,
+    SendReaction(EventId),
+    Repost,
+    SendRepost(EventId),
 }

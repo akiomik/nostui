@@ -9,6 +9,8 @@
       "<g><g>": "ScrollTop",       // Scroll to top of the page
       "<end>": "ScrollBottom",     // Scroll to bottom of the page
       "<Shift-g>": "ScrollBottom", // Scroll to bottom of the page
+      "<f>": "React",              // React to the post
+      "<t>": "Repost",             // Repost the post
       "<q>": "Quit",               // Quit the application
       "<Ctrl-d>": "Quit",          // Another way to quit
       "<Ctrl-c>": "Quit",          // Yet another way to quit
