@@ -88,6 +88,43 @@ impl Home {
             }
         }
     }
+
+    fn list_item_widget(&self, ev: &Event) -> ListItem {
+        let created_at = DateTime::from_timestamp(ev.created_at.as_i64(), 0)
+            .expect("Invalid created_at")
+            .with_timezone(&Local)
+            .format("%H:%m:%d");
+        let default_reactions = vec![];
+        let default_reposts = vec![];
+        let reactions = self.reactions.get(&ev.id).unwrap_or(&default_reactions);
+        let reposts = self.reposts.get(&ev.id).unwrap_or(&default_reposts);
+
+        let mut text = Text::default();
+        text.extend(Text::raw(""));
+        text.extend(Text::styled(
+            self.format_pubkey(ev.pubkey.to_string()),
+            Style::default().bold(),
+        ));
+        text.extend(Text::raw(ev.content.clone())); // TODO: wrap line
+        text.extend(Text::styled(
+            created_at.to_string(),
+            Style::default().fg(Color::Gray),
+        ));
+        let line = Line::from(vec![
+            Span::styled(
+                format!("{}Likes", reactions.len()),
+                Style::default().fg(Color::LightRed),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                format!("{}Reposts", reposts.len()),
+                Style::default().fg(Color::LightGreen),
+            ),
+        ]);
+        text.extend::<Text>(line.into());
+
+        ListItem::new(text)
+    }
 }
 
 impl Component for Home {
@@ -118,41 +155,7 @@ impl Component for Home {
         let items: Vec<ListItem> = self
             .events
             .iter()
-            .map(|ev| {
-                let created_at = DateTime::from_timestamp(ev.created_at.as_i64(), 0)
-                    .expect("Invalid created_at")
-                    .with_timezone(&Local)
-                    .format("%H:%m:%d");
-                let default_reactions = vec![];
-                let default_reposts = vec![];
-                let reactions = self.reactions.get(&ev.id).unwrap_or(&default_reactions);
-                let reposts = self.reposts.get(&ev.id).unwrap_or(&default_reposts);
-
-                let mut text = Text::default();
-                text.extend(Text::raw(""));
-                text.extend(Text::styled(
-                    self.format_pubkey(ev.pubkey.to_string()),
-                    Style::default().bold(),
-                ));
-                text.extend(Text::raw(ev.content.clone())); // TODO: wrap line
-                text.extend(Text::styled(
-                    created_at.to_string(),
-                    Style::default().fg(Color::Gray),
-                ));
-                let line = Line::from(vec![
-                    Span::styled(
-                        format!("{}Likes", reactions.len()),
-                        Style::default().fg(Color::LightRed),
-                    ),
-                    Span::raw(" "),
-                    Span::styled(
-                        format!("{}Reposts", reposts.len()),
-                        Style::default().fg(Color::LightGreen),
-                    ),
-                ]);
-                text.extend::<Text>(line.into());
-                ListItem::new(text)
-            })
+            .map(|ev| self.list_item_widget(ev))
             .collect();
 
         let list = List::new(items)
