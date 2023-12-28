@@ -179,7 +179,7 @@ impl Component for Home {
                 let reposts = self.reposts.get(&ev.id).unwrap_or(&default_reposts);
 
                 let mut text = Text::default();
-                text.extend(Text::raw(""));
+                text.extend(Text::raw("─".repeat(area.width as usize)));
                 text.extend(Text::styled(
                     self.format_pubkey(ev.pubkey.to_string()),
                     Style::default().bold(),
