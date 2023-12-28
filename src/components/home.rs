@@ -1,4 +1,9 @@
-use std::{collections::HashMap, fmt::format, time::Duration};
+use std::collections::hash_map::VacantEntry;
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    fmt::format,
+    time::Duration,
+};
 
 use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
@@ -40,16 +45,18 @@ impl Home {
     fn find_last_event_tag(&self, ev: &Event) -> Option<Tag> {
         ev.tags
             .iter()
-            .filter(|tag| match tag {
-                Tag::Event {
-                    event_id,
-                    relay_url,
-                    marker,
-                } => true,
-                _ => false,
+            .filter(|tag| {
+                matches!(
+                    tag,
+                    Tag::Event {
+                        event_id,
+                        relay_url,
+                        marker,
+                    }
+                )
             })
             .last()
-            .map(|t| t.clone())
+            .cloned()
     }
 
     fn append_reaction(&mut self, reaction: Event) {
@@ -60,13 +67,13 @@ impl Home {
             marker,
         }) = self.find_last_event_tag(&reaction)
         {
-            if self.reactions.contains_key(&event_id) {
+            if let Entry::Vacant(e) = self.reactions.entry(event_id) {
+                e.insert(vec![reaction]);
+            } else {
                 self.reactions
                     .get_mut(&event_id)
                     .expect("failed to get reactions")
                     .push(reaction);
-            } else {
-                self.reactions.insert(event_id, vec![reaction]);
             }
         }
     }
@@ -79,13 +86,13 @@ impl Home {
             marker,
         }) = self.find_last_event_tag(&repost)
         {
-            if self.reposts.contains_key(&event_id) {
+            if let Entry::Vacant(e) = self.reposts.entry(event_id) {
+                e.insert(vec![repost]);
+            } else {
                 self.reposts
                     .get_mut(&event_id)
                     .expect("failed to get reactions")
                     .push(repost);
-            } else {
-                self.reposts.insert(event_id, vec![repost]);
             }
         }
     }
@@ -112,7 +119,7 @@ impl Component for Home {
             },
             Action::ScrollUp => {
                 let selection = match self.list_state.selected() {
-                    _ if self.events.len() == 0 => None,
+                    _ if self.events.is_empty() => None,
                     Some(i) if i < self.events.len() - 1 => Some(i + 1),
                     _ => Some(self.events.len() - 1),
                 };
@@ -120,7 +127,7 @@ impl Component for Home {
             }
             Action::ScrollDown => {
                 let selection = match self.list_state.selected() {
-                    _ if self.events.len() == 0 => None,
+                    _ if self.events.is_empty() => None,
                     Some(i) if i > 1 => Some(i - 1),
                     _ => Some(0),
                 };
@@ -128,14 +135,14 @@ impl Component for Home {
             }
             Action::ScrollTop => {
                 let selection = match self.list_state.selected() {
-                    _ if self.events.len() == 0 => None,
+                    _ if self.events.is_empty() => None,
                     _ => Some(self.events.len() - 1),
                 };
                 self.list_state.select(selection);
             }
             Action::ScrollBottom => {
                 let selection = match self.list_state.selected() {
-                    _ if self.events.len() == 0 => None,
+                    _ if self.events.is_empty() => None,
                     _ => Some(0),
                 };
                 self.list_state.select(selection);
