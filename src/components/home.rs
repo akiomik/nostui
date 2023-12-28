@@ -213,7 +213,7 @@ impl Component for Home {
         let list = List::new(items.clone())
             .block(Block::default().title("Timeline").borders(Borders::ALL))
             .style(Style::default().fg(Color::White))
-            .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
+            .highlight_style(Style::default().reversed())
             .direction(ListDirection::TopToBottom);
 
         f.render_stateful_widget(list, area, &mut self.list_state);
