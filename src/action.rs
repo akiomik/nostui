@@ -27,4 +27,5 @@ pub enum Action {
     SendReaction(EventId),
     Repost,
     SendRepost(EventId),
+    Unselect,
 }

@@ -159,6 +159,9 @@ impl Component for Home {
                     tx.send(Action::SendRepost(event.id))?;
                 }
             }
+            Action::Unselect => {
+                self.list_state.select(None);
+            }
             _ => {}
         }
         Ok(None)

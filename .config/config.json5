@@ -11,6 +11,7 @@
       "<Shift-g>": "ScrollBottom", // Scroll to bottom of the page
       "<f>": "React",              // React to the post
       "<t>": "Repost",             // Repost the post
+      "<esc>": "Unselect",         // Unselect the posts
       "<q>": "Quit",               // Quit the application
       "<Ctrl-d>": "Quit",          // Another way to quit
       "<Ctrl-c>": "Quit",          // Yet another way to quit
