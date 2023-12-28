@@ -1,4 +1,5 @@
 use std::collections::hash_map::VacantEntry;
+use std::collections::VecDeque;
 use std::{
     collections::{hash_map::Entry, HashMap},
     fmt::format,
@@ -25,7 +26,7 @@ pub struct Home {
     command_tx: Option<UnboundedSender<Action>>,
     config: Config,
     list_state: ListState,
-    events: Vec<Event>,
+    events: VecDeque<Event>,
     reactions: HashMap<EventId, Vec<Event>>,
     reposts: HashMap<EventId, Vec<Event>>,
 }
@@ -112,7 +113,7 @@ impl Component for Home {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::ReceiveEvent(ev) => match ev.kind {
-                Kind::TextNote => self.events.push(ev),
+                Kind::TextNote => self.events.push_front(ev),
                 Kind::Reaction => self.append_reaction(ev),
                 Kind::Repost => self.append_repost(ev), // TODO: show reposts on feed
                 _ => {}
@@ -120,30 +121,30 @@ impl Component for Home {
             Action::ScrollUp => {
                 let selection = match self.list_state.selected() {
                     _ if self.events.is_empty() => None,
-                    Some(i) if i < self.events.len() - 1 => Some(i + 1),
-                    _ => Some(self.events.len() - 1),
+                    Some(i) if i > 1 => Some(i - 1),
+                    _ => Some(0),
                 };
                 self.list_state.select(selection);
             }
             Action::ScrollDown => {
                 let selection = match self.list_state.selected() {
                     _ if self.events.is_empty() => None,
-                    Some(i) if i > 1 => Some(i - 1),
-                    _ => Some(0),
+                    Some(i) if i < self.events.len() - 1 => Some(i + 1),
+                    _ => Some(self.events.len() - 1),
                 };
                 self.list_state.select(selection);
             }
             Action::ScrollTop => {
                 let selection = match self.list_state.selected() {
                     _ if self.events.is_empty() => None,
-                    _ => Some(self.events.len() - 1),
+                    _ => Some(0),
                 };
                 self.list_state.select(selection);
             }
             Action::ScrollBottom => {
                 let selection = match self.list_state.selected() {
                     _ if self.events.is_empty() => None,
-                    _ => Some(0),
+                    _ => Some(self.events.len() - 1),
                 };
                 self.list_state.select(selection);
             }
@@ -182,7 +183,6 @@ impl Component for Home {
                 let reposts = self.reposts.get(&ev.id).unwrap_or(&default_reposts);
 
                 let mut text = Text::default();
-                text.extend(Text::raw("─".repeat(area.width as usize)));
                 text.extend(Text::styled(
                     self.format_pubkey(ev.pubkey.to_string()),
                     Style::default().bold(),
@@ -204,6 +204,7 @@ impl Component for Home {
                     ),
                 ]);
                 text.extend::<Text>(line.into());
+                text.extend(Text::raw("─".repeat(area.width as usize)));
 
                 ListItem::new(text)
             })
@@ -213,7 +214,7 @@ impl Component for Home {
             .block(Block::default().title("Timeline").borders(Borders::ALL))
             .style(Style::default().fg(Color::White))
             .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
-            .direction(ListDirection::BottomToTop);
+            .direction(ListDirection::TopToBottom);
 
         f.render_stateful_widget(list, area, &mut self.list_state);
 
