@@ -30,6 +30,7 @@ pub struct Home {
     events: VecDeque<Event>,
     reactions: HashMap<EventId, Vec<Event>>,
     reposts: HashMap<EventId, Vec<Event>>,
+    zap_receipts: HashMap<EventId, Vec<Event>>,
 }
 
 impl Home {
@@ -53,10 +54,18 @@ impl Home {
                     Tag::Event {
                         event_id,
                         relay_url,
-                        marker,
+                        marker
                     }
                 )
             })
+            .last()
+            .cloned()
+    }
+
+    fn find_amount(&self, ev: &Event) -> Option<Tag> {
+        ev.tags
+            .iter()
+            .filter(|tag| matches!(tag, Tag::Amount { millisats, bolt11 }))
             .last()
             .cloned()
     }
@@ -93,10 +102,51 @@ impl Home {
             } else {
                 self.reposts
                     .get_mut(&event_id)
-                    .expect("failed to get reactions")
+                    .expect("failed to get repost")
                     .push(repost);
             }
         }
+    }
+
+    fn append_zap_receipt(&mut self, zap_receipt: Event) {
+        // zap receipts grouped by event_id
+        if let Some(Tag::Event {
+            event_id,
+            relay_url,
+            marker,
+        }) = self.find_last_event_tag(&zap_receipt)
+        {
+            if let Entry::Vacant(e) = self.zap_receipts.entry(event_id) {
+                e.insert(vec![zap_receipt]);
+            } else {
+                self.zap_receipts
+                    .get_mut(&event_id)
+                    .expect("failed to get zap_receipt")
+                    .push(zap_receipt);
+            }
+        }
+    }
+
+    fn calc_reactions_count(&self, ev: &Event) -> usize {
+        self.reactions.get(&ev.id).unwrap_or(&vec![]).len()
+    }
+
+    fn calc_reposts_count(&self, ev: &Event) -> usize {
+        self.reposts.get(&ev.id).unwrap_or(&vec![]).len()
+    }
+
+    fn calc_zap_amount(&self, ev: &Event) -> u64 {
+        self.zap_receipts
+            .get(&ev.id)
+            .unwrap_or(&vec![])
+            .iter()
+            .fold(0, |acc, ev| {
+                if let Some(Tag::Amount { millisats, bolt11 }) = self.find_amount(ev) {
+                    acc + millisats
+                } else {
+                    acc
+                }
+            })
     }
 }
 
@@ -117,6 +167,7 @@ impl Component for Home {
                 Kind::TextNote => self.events.push_front(ev),
                 Kind::Reaction => self.append_reaction(ev),
                 Kind::Repost => self.append_repost(ev), // TODO: show reposts on feed
+                Kind::ZapReceipt => self.append_zap_receipt(ev),
                 _ => {}
             },
             Action::ScrollUp => {
@@ -180,10 +231,9 @@ impl Component for Home {
                     .expect("Invalid created_at")
                     .with_timezone(&Local)
                     .format("%H:%m:%d");
-                let default_reactions = vec![];
-                let default_reposts = vec![];
-                let reactions = self.reactions.get(&ev.id).unwrap_or(&default_reactions);
-                let reposts = self.reposts.get(&ev.id).unwrap_or(&default_reposts);
+                let reactions = self.calc_reactions_count(&ev);
+                let reposts = self.calc_reposts_count(&ev);
+                let zaps = self.calc_zap_amount(&ev);
                 let inner_width = area.width - 2; // NOTE: paddingを引いて調整している
                 let content = text::wrap_text(&ev.content, inner_width as usize);
 
@@ -199,13 +249,18 @@ impl Component for Home {
                 ));
                 let line = Line::from(vec![
                     Span::styled(
-                        format!("{}Likes", reactions.len()),
+                        format!("{}Likes", reactions),
                         Style::default().fg(Color::LightRed),
                     ),
                     Span::raw(" "),
                     Span::styled(
-                        format!("{}Reposts", reposts.len()),
+                        format!("{}Reposts", reposts),
                         Style::default().fg(Color::LightGreen),
+                    ),
+                    Span::raw(" "),
+                    Span::styled(
+                        format!("{}Sats", zaps / 1000),
+                        Style::default().fg(Color::LightYellow),
                     ),
                 ]);
                 text.extend::<Text>(line.into());

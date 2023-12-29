@@ -24,7 +24,12 @@ impl Conn {
 
             let filters = Filter::new()
                 // .author(keys.public_key())
-                .kinds([Kind::TextNote, Kind::Repost, Kind::Reaction])
+                .kinds([
+                    Kind::TextNote,
+                    Kind::Repost,
+                    Kind::Reaction,
+                    Kind::ZapReceipt,
+                ])
                 .since(Timestamp::now());
             nostr_client.subscribe(vec![filters]).await;
 
