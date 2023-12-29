@@ -9,6 +9,7 @@ pub mod components;
 pub mod config;
 pub mod conn;
 pub mod mode;
+pub mod text;
 pub mod tui;
 pub mod utils;
 

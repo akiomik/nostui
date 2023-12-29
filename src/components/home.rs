@@ -19,6 +19,7 @@ use super::{Component, Frame};
 use crate::{
     action::Action,
     config::{Config, KeyBindings},
+    text,
 };
 
 #[derive(Default)]
@@ -183,13 +184,15 @@ impl Component for Home {
                 let default_reposts = vec![];
                 let reactions = self.reactions.get(&ev.id).unwrap_or(&default_reactions);
                 let reposts = self.reposts.get(&ev.id).unwrap_or(&default_reposts);
+                let inner_width = area.width - 2; // NOTE: paddingを引いて調整している
+                let content = text::wrap_text(&ev.content, inner_width as usize);
 
                 let mut text = Text::default();
                 text.extend(Text::styled(
                     self.format_pubkey(ev.pubkey.to_string()),
                     Style::default().bold(),
                 ));
-                text.extend(Text::raw(ev.content.clone())); // TODO: wrap line
+                text.extend(Text::raw(content)); // TODO: wrap line
                 text.extend(Text::styled(
                     created_at.to_string(),
                     Style::default().fg(Color::Gray),
