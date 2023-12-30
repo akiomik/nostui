@@ -1,3 +1,4 @@
+use std::time::Duration;
 use nostr_sdk::prelude::*;
 
 pub struct Conn {
@@ -30,7 +31,7 @@ impl Conn {
                     Kind::Reaction,
                     Kind::ZapReceipt,
                 ])
-                .since(Timestamp::now());
+                .since(Timestamp::now() - Duration::new(60 * 5, 0)); // 5min
             nostr_client.subscribe(vec![filters]).await;
 
             nostr_client
