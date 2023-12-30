@@ -1,5 +1,5 @@
-use std::time::Duration;
 use nostr_sdk::prelude::*;
+use std::time::Duration;
 
 pub struct Conn {
     rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
