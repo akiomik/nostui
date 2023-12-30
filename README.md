@@ -6,7 +6,7 @@ tui client for nostr
 
 ## Getting Started
 
-```
+```shell
 cargo build --release
 target/release/nostui
 ```
