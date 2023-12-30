@@ -232,9 +232,9 @@ impl Component for Home {
                     .expect("Invalid created_at")
                     .with_timezone(&Local)
                     .format("%H:%m:%d");
-                let reactions = self.calc_reactions_count(&ev);
-                let reposts = self.calc_reposts_count(&ev);
-                let zaps = self.calc_zap_amount(&ev);
+                let reactions = self.calc_reactions_count(ev);
+                let reposts = self.calc_reposts_count(ev);
+                let zaps = self.calc_zap_amount(ev);
                 let content_width = area.width.saturating_sub(2); // NOTE: paddingを引いて調整している
                 let content_height = area.height.saturating_sub(7); // NOTE: paddingと他の行を引いて調整している
                 let content =
