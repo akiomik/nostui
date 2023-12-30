@@ -20,6 +20,7 @@ use crate::{
     action::Action,
     config::{Config, KeyBindings},
     text,
+    widgets::shrink_text::ShrinkText,
 };
 
 #[derive(Default)]
@@ -236,18 +237,15 @@ impl Component for Home {
                 let zaps = self.calc_zap_amount(&ev);
                 let content_width = area.width.saturating_sub(2); // NOTE: paddingを引いて調整している
                 let content_height = area.height.saturating_sub(7); // NOTE: paddingと他の行を引いて調整している
-                let content = text::truncate_text(
-                    &text::wrap_text(&ev.content, content_width as usize),
-                    content_height as usize,
-                );
-                log::info!("height: {}, content: {}", content_height, content);
+                let content =
+                    ShrinkText::new(&ev.content, content_width as usize, content_height as usize);
 
                 let mut text = Text::default();
                 text.extend(Text::styled(
                     self.format_pubkey(ev.pubkey.to_string()),
                     Style::default().bold(),
                 ));
-                text.extend(Text::raw(content)); // TODO: wrap line
+                text.extend::<Text>(content.into());
                 text.extend(Text::styled(
                     created_at.to_string(),
                     Style::default().fg(Color::Gray),
