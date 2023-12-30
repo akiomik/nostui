@@ -28,7 +28,7 @@ pub struct Home {
     command_tx: Option<UnboundedSender<Action>>,
     config: Config,
     list_state: ListState,
-    events: VecDeque<Event>,
+    notes: VecDeque<Event>,
     reactions: HashMap<EventId, Vec<Event>>,
     reposts: HashMap<EventId, Vec<Event>>,
     zap_receipts: HashMap<EventId, Vec<Event>>,
@@ -165,7 +165,7 @@ impl Component for Home {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::ReceiveEvent(ev) => match ev.kind {
-                Kind::TextNote => self.events.push_front(ev),
+                Kind::TextNote => self.notes.push_front(ev),
                 Kind::Reaction => self.append_reaction(ev),
                 Kind::Repost => self.append_repost(ev), // TODO: show reposts on feed
                 Kind::ZapReceipt => self.append_zap_receipt(ev),
@@ -173,7 +173,7 @@ impl Component for Home {
             },
             Action::ScrollUp => {
                 let selection = match self.list_state.selected() {
-                    _ if self.events.is_empty() => None,
+                    _ if self.notes.is_empty() => None,
                     Some(i) if i > 1 => Some(i - 1),
                     _ => Some(0),
                 };
@@ -181,37 +181,37 @@ impl Component for Home {
             }
             Action::ScrollDown => {
                 let selection = match self.list_state.selected() {
-                    _ if self.events.is_empty() => None,
-                    Some(i) if i < self.events.len() - 1 => Some(i + 1),
-                    Some(_) => Some(self.events.len() - 1),
-                    None if self.events.len() > 1 => Some(1),
+                    _ if self.notes.is_empty() => None,
+                    Some(i) if i < self.notes.len() - 1 => Some(i + 1),
+                    Some(_) => Some(self.notes.len() - 1),
+                    None if self.notes.len() > 1 => Some(1),
                     None => Some(0),
                 };
                 self.list_state.select(selection);
             }
             Action::ScrollTop => {
                 let selection = match self.list_state.selected() {
-                    _ if self.events.is_empty() => None,
+                    _ if self.notes.is_empty() => None,
                     _ => Some(0),
                 };
                 self.list_state.select(selection);
             }
             Action::ScrollBottom => {
                 let selection = match self.list_state.selected() {
-                    _ if self.events.is_empty() => None,
-                    _ => Some(self.events.len() - 1),
+                    _ if self.notes.is_empty() => None,
+                    _ => Some(self.notes.len() - 1),
                 };
                 self.list_state.select(selection);
             }
             Action::React => {
                 if let (Some(i), Some(tx)) = (self.list_state.selected(), &self.command_tx) {
-                    let event = self.events.get(i).expect("failed to get target event");
+                    let event = self.notes.get(i).expect("failed to get target event");
                     tx.send(Action::SendReaction(event.id))?;
                 }
             }
             Action::Repost => {
                 if let (Some(i), Some(tx)) = (self.list_state.selected(), &self.command_tx) {
-                    let event = self.events.get(i).expect("failed to get target event");
+                    let event = self.notes.get(i).expect("failed to get target event");
                     tx.send(Action::SendRepost(event.id))?;
                 }
             }
@@ -225,7 +225,7 @@ impl Component for Home {
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         let items: Vec<ListItem> = self
-            .events
+            .notes
             .iter()
             .map(|ev| {
                 let created_at = DateTime::from_timestamp(ev.created_at.as_i64(), 0)
