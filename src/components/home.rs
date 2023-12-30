@@ -234,8 +234,13 @@ impl Component for Home {
                 let reactions = self.calc_reactions_count(&ev);
                 let reposts = self.calc_reposts_count(&ev);
                 let zaps = self.calc_zap_amount(&ev);
-                let inner_width = area.width - 2; // NOTE: paddingを引いて調整している
-                let content = text::wrap_text(&ev.content, inner_width as usize);
+                let content_width = area.width - 2; // NOTE: paddingを引いて調整している
+                let content_height = area.height - 7; // NOTE: paddingと他の行を引いて調整している
+                let content = text::truncate_text(
+                    &text::wrap_text(&ev.content, content_width as usize),
+                    content_height as usize,
+                );
+                log::info!("height: {}, content: {}", content_height, content);
 
                 let mut text = Text::default();
                 text.extend(Text::styled(
