@@ -165,7 +165,11 @@ impl Component for Home {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::ReceiveEvent(ev) => match ev.kind {
-                Kind::TextNote => self.notes.push_front(ev),
+                Kind::TextNote => {
+                    self.notes.push_front(ev);
+                    let selection = self.list_state.selected().map(|i| i + 1);
+                    self.list_state.select(selection);
+                }
                 Kind::Reaction => self.append_reaction(ev),
                 Kind::Repost => self.append_repost(ev), // TODO: show reposts on feed
                 Kind::ZapReceipt => self.append_zap_receipt(ev),
