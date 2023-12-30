@@ -1,6 +1,10 @@
 use unicode_width::UnicodeWidthStr;
 
 pub fn wrap_text(s: &str, width: usize) -> String {
+    if width == 0 {
+        return String::from("");
+    }
+
     s.chars().fold(String::from(""), |acc: String, c: char| {
         let last_line = acc.lines().last().unwrap_or(&acc);
         if last_line.width() + c.to_string().width() > width {
@@ -73,6 +77,13 @@ mod tests {
     fn test_wrap_text_wrap_emoji() {
         let actual = wrap_text("🫲🫱🫲🫱🫲🫱", 5);
         let expected = "🫲🫱\n🫲🫱\n🫲🫱";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_wrap_text_zero_width() {
+        let actual = wrap_text("hello, world!", 0);
+        let expected = "";
         assert_eq!(actual, expected);
     }
 
