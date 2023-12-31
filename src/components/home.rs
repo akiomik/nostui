@@ -20,7 +20,7 @@ use crate::{
     action::Action,
     config::{Config, KeyBindings},
     text,
-    widgets::shrink_text::ShrinkText,
+    widgets::text_note::TextNote,
 };
 
 #[derive(Default)]
@@ -39,13 +39,6 @@ impl Home {
         Self::default()
     }
 
-    fn format_pubkey(&self, pubkey: String) -> String {
-        let len = pubkey.len();
-        let heading = &pubkey[0..5];
-        let trail = &pubkey[(len - 5)..len];
-        format!("{}:{}", heading, trail)
-    }
-
     fn find_last_event_tag(&self, ev: &Event) -> Option<Tag> {
         ev.tags
             .iter()
@@ -59,14 +52,6 @@ impl Home {
                     }
                 )
             })
-            .last()
-            .cloned()
-    }
-
-    fn find_amount(&self, ev: &Event) -> Option<Tag> {
-        ev.tags
-            .iter()
-            .filter(|tag| matches!(tag, Tag::Amount { millisats, bolt11 }))
             .last()
             .cloned()
     }
@@ -126,28 +111,6 @@ impl Home {
                     .push(zap_receipt);
             }
         }
-    }
-
-    fn calc_reactions_count(&self, ev: &Event) -> usize {
-        self.reactions.get(&ev.id).unwrap_or(&vec![]).len()
-    }
-
-    fn calc_reposts_count(&self, ev: &Event) -> usize {
-        self.reposts.get(&ev.id).unwrap_or(&vec![]).len()
-    }
-
-    fn calc_zap_amount(&self, ev: &Event) -> u64 {
-        self.zap_receipts
-            .get(&ev.id)
-            .unwrap_or(&vec![])
-            .iter()
-            .fold(0, |acc, ev| {
-                if let Some(Tag::Amount { millisats, bolt11 }) = self.find_amount(ev) {
-                    acc + millisats
-                } else {
-                    acc
-                }
-            })
     }
 }
 
@@ -228,64 +191,34 @@ impl Component for Home {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
+        let padding = Padding::new(1, 1, 1, 1);
         let items: Vec<ListItem> = self
             .notes
             .iter()
             .map(|ev| {
-                let created_at = DateTime::from_timestamp(ev.created_at.as_i64(), 0)
-                    .expect("Invalid created_at")
-                    .with_timezone(&Local)
-                    .format("%H:%m:%d");
-                let reactions = self.calc_reactions_count(ev);
-                let reposts = self.calc_reposts_count(ev);
-                let zaps = self.calc_zap_amount(ev);
-                let content_width = area.width.saturating_sub(2); // NOTE: paddingを引いて調整している
-                let content_height = area.height.saturating_sub(7); // NOTE: paddingと他の行を引いて調整している
-                let content =
-                    ShrinkText::new(&ev.content, content_width as usize, content_height as usize);
-
-                let mut text = Text::default();
-                text.extend(Text::styled(
-                    self.format_pubkey(ev.pubkey.to_string()),
-                    Style::default().bold(),
-                ));
-                text.extend::<Text>(content.into());
-                text.extend(Text::styled(
-                    created_at.to_string(),
-                    Style::default().fg(Color::Gray),
-                ));
-                let line = Line::from(vec![
-                    Span::styled(
-                        format!("{}Likes", reactions),
-                        Style::default().fg(Color::LightRed),
-                    ),
-                    Span::raw(" "),
-                    Span::styled(
-                        format!("{}Reposts", reposts),
-                        Style::default().fg(Color::LightGreen),
-                    ),
-                    Span::raw(" "),
-                    Span::styled(
-                        format!("{}Sats", zaps / 1000),
-                        Style::default().fg(Color::LightYellow),
-                    ),
-                ]);
-                text.extend::<Text>(line.into());
-                text.extend(Text::styled(
-                    "─".repeat(area.width as usize),
-                    Style::default().fg(Color::Gray),
-                ));
-
-                ListItem::new(text)
+                let default_reactions = vec![];
+                let default_reposts = vec![];
+                let default_zap_receipts = vec![];
+                let reactions = self.reactions.get(&ev.id).unwrap_or(&default_reactions);
+                let reposts = self.reposts.get(&ev.id).unwrap_or(&default_reposts);
+                let zap_receipts = self
+                    .zap_receipts
+                    .get(&ev.id)
+                    .unwrap_or(&default_zap_receipts);
+                let note = TextNote::new(
+                    ev.clone(),
+                    reactions.clone(),
+                    reposts.clone(),
+                    zap_receipts.clone(),
+                    area,
+                    padding,
+                );
+                ListItem::new(note)
             })
             .collect();
 
         let list = List::new(items.clone())
-            .block(
-                Block::default()
-                    .title("Timeline")
-                    .padding(Padding::new(1, 1, 1, 1)),
-            )
+            .block(Block::default().title("Timeline").padding(padding))
             .style(Style::default().fg(Color::White))
             .highlight_style(Style::default().reversed())
             .direction(ListDirection::TopToBottom);
