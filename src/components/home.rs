@@ -42,28 +42,14 @@ impl Home {
     fn find_last_event_tag(&self, ev: &Event) -> Option<Tag> {
         ev.tags
             .iter()
-            .filter(|tag| {
-                matches!(
-                    tag,
-                    Tag::Event {
-                        event_id,
-                        relay_url,
-                        marker
-                    }
-                )
-            })
+            .filter(|tag| matches!(tag, Tag::Event { .. }))
             .last()
             .cloned()
     }
 
     fn append_reaction(&mut self, reaction: Event) {
         // reactions grouped by event_id
-        if let Some(Tag::Event {
-            event_id,
-            relay_url,
-            marker,
-        }) = self.find_last_event_tag(&reaction)
-        {
+        if let Some(Tag::Event { event_id, .. }) = self.find_last_event_tag(&reaction) {
             if let Entry::Vacant(e) = self.reactions.entry(event_id) {
                 e.insert(vec![reaction]);
             } else {
@@ -77,12 +63,7 @@ impl Home {
 
     fn append_repost(&mut self, repost: Event) {
         // reposts grouped by event_id
-        if let Some(Tag::Event {
-            event_id,
-            relay_url,
-            marker,
-        }) = self.find_last_event_tag(&repost)
-        {
+        if let Some(Tag::Event { event_id, .. }) = self.find_last_event_tag(&repost) {
             if let Entry::Vacant(e) = self.reposts.entry(event_id) {
                 e.insert(vec![repost]);
             } else {
@@ -96,12 +77,7 @@ impl Home {
 
     fn append_zap_receipt(&mut self, zap_receipt: Event) {
         // zap receipts grouped by event_id
-        if let Some(Tag::Event {
-            event_id,
-            relay_url,
-            marker,
-        }) = self.find_last_event_tag(&zap_receipt)
-        {
+        if let Some(Tag::Event { event_id, .. }) = self.find_last_event_tag(&zap_receipt) {
             if let Entry::Vacant(e) = self.zap_receipts.entry(event_id) {
                 e.insert(vec![zap_receipt]);
             } else {
