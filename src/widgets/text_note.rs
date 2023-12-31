@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use chrono::{DateTime, Local};
 use nostr_sdk::{Event, Tag};
 use ratatui::{prelude::*, widgets::*};
@@ -7,9 +9,9 @@ use crate::widgets::shrink_text::ShrinkText;
 #[derive(Clone, Debug)]
 pub struct TextNote {
     pub event: Event,
-    pub reactions: Vec<Event>,
-    pub reposts: Vec<Event>,
-    pub zap_receipts: Vec<Event>,
+    pub reactions: HashSet<Event>,
+    pub reposts: HashSet<Event>,
+    pub zap_receipts: HashSet<Event>,
     pub area: Rect,
     pub padding: Padding, // Only use to calc width/height
 }
@@ -17,9 +19,9 @@ pub struct TextNote {
 impl TextNote {
     pub fn new(
         event: Event,
-        reactions: Vec<Event>,
-        reposts: Vec<Event>,
-        zap_receipts: Vec<Event>,
+        reactions: HashSet<Event>,
+        reposts: HashSet<Event>,
+        zap_receipts: HashSet<Event>,
         area: Rect,
         padding: Padding,
     ) -> Self {

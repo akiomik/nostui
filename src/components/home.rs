@@ -1,5 +1,5 @@
 use std::collections::hash_map::VacantEntry;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::{
     collections::{hash_map::Entry, HashMap},
     fmt::format,
@@ -29,9 +29,9 @@ pub struct Home {
     config: Config,
     list_state: ListState,
     notes: VecDeque<Event>,
-    reactions: HashMap<EventId, Vec<Event>>,
-    reposts: HashMap<EventId, Vec<Event>>,
-    zap_receipts: HashMap<EventId, Vec<Event>>,
+    reactions: HashMap<EventId, HashSet<Event>>,
+    reposts: HashMap<EventId, HashSet<Event>>,
+    zap_receipts: HashMap<EventId, HashSet<Event>>,
 }
 
 impl Home {
@@ -50,13 +50,13 @@ impl Home {
     fn append_reaction(&mut self, reaction: Event) {
         // reactions grouped by event_id
         if let Some(Tag::Event { event_id, .. }) = self.find_last_event_tag(&reaction) {
-            if let Entry::Vacant(e) = self.reactions.entry(event_id) {
-                e.insert(vec![reaction]);
-            } else {
-                self.reactions
-                    .get_mut(&event_id)
-                    .expect("failed to get reactions")
-                    .push(reaction);
+            match self.reactions.entry(event_id) {
+                Entry::Vacant(e) => {
+                    e.insert(HashSet::from([reaction]));
+                }
+                Entry::Occupied(mut e) => {
+                    e.get_mut().insert(reaction);
+                }
             }
         }
     }
@@ -64,35 +64,35 @@ impl Home {
     fn append_repost(&mut self, repost: Event) {
         // reposts grouped by event_id
         if let Some(Tag::Event { event_id, .. }) = self.find_last_event_tag(&repost) {
-            if let Entry::Vacant(e) = self.reposts.entry(event_id) {
-                e.insert(vec![repost]);
-            } else {
-                self.reposts
-                    .get_mut(&event_id)
-                    .expect("failed to get repost")
-                    .push(repost);
-            }
-        }
+            match self.reposts.entry(event_id) {
+                Entry::Vacant(e) => {
+                    e.insert(HashSet::from([repost]));
+                }
+                Entry::Occupied(mut e) => {
+                    e.get_mut().insert(repost);
+                }
+            };
+        };
     }
 
     fn append_zap_receipt(&mut self, zap_receipt: Event) {
         // zap receipts grouped by event_id
         if let Some(Tag::Event { event_id, .. }) = self.find_last_event_tag(&zap_receipt) {
-            if let Entry::Vacant(e) = self.zap_receipts.entry(event_id) {
-                e.insert(vec![zap_receipt]);
-            } else {
-                self.zap_receipts
-                    .get_mut(&event_id)
-                    .expect("failed to get zap_receipt")
-                    .push(zap_receipt);
+            match self.zap_receipts.entry(event_id) {
+                Entry::Vacant(e) => {
+                    e.insert(HashSet::from([zap_receipt]));
+                }
+                Entry::Occupied(mut e) => {
+                    e.get_mut().insert(zap_receipt);
+                }
             }
         }
     }
 
     fn text_note(&self, event: Event, area: Rect, padding: Padding) -> TextNote {
-        let default_reactions = vec![];
-        let default_reposts = vec![];
-        let default_zap_receipts = vec![];
+        let default_reactions = HashSet::new();
+        let default_reposts = HashSet::new();
+        let default_zap_receipts = HashSet::new();
         let reactions = self.reactions.get(&event.id).unwrap_or(&default_reactions);
         let reposts = self.reposts.get(&event.id).unwrap_or(&default_reposts);
         let zap_receipts = self
