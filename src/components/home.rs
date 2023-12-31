@@ -1,24 +1,14 @@
-use std::collections::hash_map::VacantEntry;
+use std::collections::{hash_map::Entry, HashMap};
 use std::collections::{HashSet, VecDeque};
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    fmt::format,
-    time::Duration,
-};
 
-use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
-use crossterm::event::{KeyCode, KeyEvent};
 use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets, widgets::*};
-use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::{Component, Frame};
 use crate::{
-    action::Action,
-    config::{Config, KeyBindings},
-    text,
+    action::Action, config::Config, text, widgets::scrollable_list::ScrollableList,
     widgets::text_note::TextNote,
 };
 
@@ -115,42 +105,6 @@ impl Home {
             padding,
         )
     }
-
-    fn scroll_up(&mut self) {
-        let selection = match self.list_state.selected() {
-            _ if self.notes.is_empty() => None,
-            Some(i) if i > 1 => Some(i - 1),
-            _ => Some(0),
-        };
-        self.list_state.select(selection);
-    }
-
-    fn scroll_down(&mut self) {
-        let selection = match self.list_state.selected() {
-            _ if self.notes.is_empty() => None,
-            Some(i) if i < self.notes.len() - 1 => Some(i + 1),
-            Some(_) => Some(self.notes.len() - 1),
-            None if self.notes.len() > 1 => Some(1),
-            None => Some(0),
-        };
-        self.list_state.select(selection);
-    }
-
-    fn scroll_to_top(&mut self) {
-        let selection = match self.list_state.selected() {
-            _ if self.notes.is_empty() => None,
-            _ => Some(0),
-        };
-        self.list_state.select(selection);
-    }
-
-    fn scroll_to_bottom(&mut self) {
-        let selection = match self.list_state.selected() {
-            _ if self.notes.is_empty() => None,
-            _ => Some(self.notes.len() - 1),
-        };
-        self.list_state.select(selection);
-    }
 }
 
 impl Component for Home {
@@ -217,215 +171,20 @@ impl Component for Home {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use nostr_sdk::EventBuilder;
-    use pretty_assertions::assert_eq;
-    use rstest::*;
-
-    use super::*;
-
-    #[fixture]
-    fn keys() -> Keys {
-        let nsec = "nsec12kcgs78l06p30jz7z7h3n2x2cy99nw2z6zspjdp7qc206887mwvs95lnkx";
-        let seckey = SecretKey::from_bech32(nsec).unwrap();
-        Keys::new(seckey)
+impl ScrollableList<Event> for Home {
+    fn select(&mut self, index: Option<usize>) {
+        self.list_state.select(index);
     }
 
-    #[fixture]
-    fn event(keys: Keys) -> Event {
-        EventBuilder::new_text_note("foo", [])
-            .to_event(&keys)
-            .unwrap()
+    fn selected(&self) -> Option<usize> {
+        self.list_state.selected()
     }
 
-    #[fixture]
-    fn event2(keys: Keys) -> Event {
-        EventBuilder::new_text_note("bar", [])
-            .to_event(&keys)
-            .unwrap()
+    fn len(&self) -> usize {
+        self.notes.len()
     }
 
-    #[fixture]
-    fn event3(keys: Keys) -> Event {
-        EventBuilder::new_text_note("baz", [])
-            .to_event(&keys)
-            .unwrap()
-    }
-
-    #[rstest]
-    fn test_scroll_up_empty() {
-        let mut home = Home::new();
-        home.scroll_up();
-        assert_eq!(home.list_state.selected(), None)
-    }
-
-    #[rstest]
-    fn test_scroll_up_normal(event: Event, event2: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.list_state.select(Some(1));
-        assert_eq!(home.list_state.selected(), Some(1));
-        home.scroll_up();
-        assert_eq!(home.list_state.selected(), Some(0));
-    }
-
-    #[rstest]
-    fn test_scroll_up_unselected(event: Event, event2: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.scroll_up();
-        assert_eq!(home.list_state.selected(), Some(0));
-    }
-
-    #[rstest]
-    fn test_scroll_up_saturated_top(event: Event, event2: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.scroll_up();
-        assert_eq!(home.list_state.selected(), Some(0));
-        home.scroll_up();
-        assert_eq!(home.list_state.selected(), Some(0));
-    }
-
-    #[rstest]
-    fn test_scroll_down_empty() {
-        let mut home = Home::new();
-        home.scroll_down();
-        assert_eq!(home.list_state.selected(), None)
-    }
-
-    #[rstest]
-    fn test_scroll_down_normal(event: Event, event2: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.list_state.select(Some(0));
-        assert_eq!(home.list_state.selected(), Some(0));
-        home.scroll_down();
-        assert_eq!(home.list_state.selected(), Some(1));
-    }
-
-    #[rstest]
-    fn test_scroll_down_unselected_1(event: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.scroll_down();
-        assert_eq!(home.list_state.selected(), Some(0));
-    }
-
-    #[rstest]
-    fn test_scroll_down_unselected_2(event: Event, event2: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.scroll_down();
-        assert_eq!(home.list_state.selected(), Some(1));
-    }
-
-    #[rstest]
-    fn test_scroll_down_unselected_3(event: Event, event2: Event, event3: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.add_note(event3);
-        home.scroll_down();
-        assert_eq!(home.list_state.selected(), Some(1));
-    }
-
-    #[rstest]
-    fn test_scroll_down_saturated_bottom(event: Event, event2: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.scroll_down();
-        assert_eq!(home.list_state.selected(), Some(1));
-        home.scroll_down();
-        assert_eq!(home.list_state.selected(), Some(1));
-    }
-
-    #[rstest]
-    fn test_scroll_to_top_empty() {
-        let mut home = Home::new();
-        home.scroll_to_top();
-        assert_eq!(home.list_state.selected(), None);
-    }
-
-    #[rstest]
-    fn test_scroll_to_top_unselected(event: Event, event2: Event, event3: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.add_note(event3);
-        home.scroll_to_top();
-        assert_eq!(home.list_state.selected(), Some(0));
-    }
-
-    #[rstest]
-    fn test_scroll_to_top_selected(event: Event, event2: Event, event3: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.add_note(event3);
-        home.list_state.select(Some(2));
-        assert_eq!(home.list_state.selected(), Some(2));
-        home.scroll_to_top();
-        assert_eq!(home.list_state.selected(), Some(0));
-    }
-
-    #[rstest]
-    fn test_scroll_to_top_saturated_top(event: Event, event2: Event, event3: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.add_note(event3);
-        home.list_state.select(Some(0));
-        assert_eq!(home.list_state.selected(), Some(0));
-        home.scroll_to_top();
-        assert_eq!(home.list_state.selected(), Some(0));
-    }
-
-    #[rstest]
-    fn test_scroll_to_bottom_empty() {
-        let mut home = Home::new();
-        home.scroll_to_bottom();
-        assert_eq!(home.list_state.selected(), None);
-    }
-
-    #[rstest]
-    fn test_scroll_to_bottom_unselected(event: Event, event2: Event, event3: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.add_note(event3);
-        home.scroll_to_bottom();
-        assert_eq!(home.list_state.selected(), Some(2));
-    }
-
-    #[rstest]
-    fn test_scroll_to_bottom_selected(event: Event, event2: Event, event3: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.add_note(event3);
-        home.list_state.select(Some(0));
-        assert_eq!(home.list_state.selected(), Some(0));
-        home.scroll_to_bottom();
-        assert_eq!(home.list_state.selected(), Some(2));
-    }
-
-    #[rstest]
-    fn test_scroll_to_bottom_saturated_bottom(event: Event, event2: Event, event3: Event) {
-        let mut home = Home::new();
-        home.add_note(event);
-        home.add_note(event2);
-        home.add_note(event3);
-        home.list_state.select(Some(2));
-        assert_eq!(home.list_state.selected(), Some(2));
-        home.scroll_to_bottom();
-        assert_eq!(home.list_state.selected(), Some(2));
+    fn is_empty(&self) -> bool {
+        self.notes.is_empty()
     }
 }
