@@ -9,9 +9,8 @@ use std::{
 use chrono::{DateTime, Local};
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent};
-use nostr_sdk::prelude::Event;
-use nostr_sdk::{EventId, Kind, Tag};
-use ratatui::{prelude::*, widgets::*};
+use nostr_sdk::prelude::*;
+use ratatui::{prelude::*, widgets, widgets::*};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -45,6 +44,14 @@ impl Home {
             .filter(|tag| matches!(tag, Tag::Event { .. }))
             .last()
             .cloned()
+    }
+
+    fn add_note(&mut self, event: Event) {
+        self.notes.push_front(event);
+
+        // Keep selected position
+        let selection = self.list_state.selected().map(|i| i + 1);
+        self.list_state.select(selection);
     }
 
     fn append_reaction(&mut self, reaction: Event) {
@@ -160,11 +167,7 @@ impl Component for Home {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::ReceiveEvent(ev) => match ev.kind {
-                Kind::TextNote => {
-                    self.notes.push_front(ev);
-                    let selection = self.list_state.selected().map(|i| i + 1);
-                    self.list_state.select(selection);
-                }
+                Kind::TextNote => self.add_note(ev),
                 Kind::Reaction => self.append_reaction(ev),
                 Kind::Repost => self.append_repost(ev), // TODO: show reposts on feed
                 Kind::ZapReceipt => self.append_zap_receipt(ev),
@@ -203,7 +206,7 @@ impl Component for Home {
             .collect();
 
         let list = List::new(items.clone())
-            .block(Block::default().title("Timeline").padding(padding))
+            .block(widgets::Block::default().title("Timeline").padding(padding))
             .style(Style::default().fg(Color::White))
             .highlight_style(Style::default().reversed())
             .direction(ListDirection::TopToBottom);
@@ -211,5 +214,218 @@ impl Component for Home {
         f.render_stateful_widget(list, area, &mut self.list_state);
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use nostr_sdk::EventBuilder;
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+
+    use super::*;
+
+    #[fixture]
+    fn keys() -> Keys {
+        let nsec = "nsec12kcgs78l06p30jz7z7h3n2x2cy99nw2z6zspjdp7qc206887mwvs95lnkx";
+        let seckey = SecretKey::from_bech32(nsec).unwrap();
+        Keys::new(seckey)
+    }
+
+    #[fixture]
+    fn event(keys: Keys) -> Event {
+        EventBuilder::new_text_note("foo", [])
+            .to_event(&keys)
+            .unwrap()
+    }
+
+    #[fixture]
+    fn event2(keys: Keys) -> Event {
+        EventBuilder::new_text_note("bar", [])
+            .to_event(&keys)
+            .unwrap()
+    }
+
+    #[fixture]
+    fn event3(keys: Keys) -> Event {
+        EventBuilder::new_text_note("baz", [])
+            .to_event(&keys)
+            .unwrap()
+    }
+
+    #[rstest]
+    fn test_scroll_up_empty() {
+        let mut home = Home::new();
+        home.scroll_up();
+        assert_eq!(home.list_state.selected(), None)
+    }
+
+    #[rstest]
+    fn test_scroll_up_normal(event: Event, event2: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.list_state.select(Some(1));
+        assert_eq!(home.list_state.selected(), Some(1));
+        home.scroll_up();
+        assert_eq!(home.list_state.selected(), Some(0));
+    }
+
+    #[rstest]
+    fn test_scroll_up_unselected(event: Event, event2: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.scroll_up();
+        assert_eq!(home.list_state.selected(), Some(0));
+    }
+
+    #[rstest]
+    fn test_scroll_up_saturated_top(event: Event, event2: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.scroll_up();
+        assert_eq!(home.list_state.selected(), Some(0));
+        home.scroll_up();
+        assert_eq!(home.list_state.selected(), Some(0));
+    }
+
+    #[rstest]
+    fn test_scroll_down_empty() {
+        let mut home = Home::new();
+        home.scroll_down();
+        assert_eq!(home.list_state.selected(), None)
+    }
+
+    #[rstest]
+    fn test_scroll_down_normal(event: Event, event2: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.list_state.select(Some(0));
+        assert_eq!(home.list_state.selected(), Some(0));
+        home.scroll_down();
+        assert_eq!(home.list_state.selected(), Some(1));
+    }
+
+    #[rstest]
+    fn test_scroll_down_unselected_1(event: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.scroll_down();
+        assert_eq!(home.list_state.selected(), Some(0));
+    }
+
+    #[rstest]
+    fn test_scroll_down_unselected_2(event: Event, event2: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.scroll_down();
+        assert_eq!(home.list_state.selected(), Some(1));
+    }
+
+    #[rstest]
+    fn test_scroll_down_unselected_3(event: Event, event2: Event, event3: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.add_note(event3);
+        home.scroll_down();
+        assert_eq!(home.list_state.selected(), Some(1));
+    }
+
+    #[rstest]
+    fn test_scroll_down_saturated_bottom(event: Event, event2: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.scroll_down();
+        assert_eq!(home.list_state.selected(), Some(1));
+        home.scroll_down();
+        assert_eq!(home.list_state.selected(), Some(1));
+    }
+
+    #[rstest]
+    fn test_scroll_to_top_empty() {
+        let mut home = Home::new();
+        home.scroll_to_top();
+        assert_eq!(home.list_state.selected(), None);
+    }
+
+    #[rstest]
+    fn test_scroll_to_top_unselected(event: Event, event2: Event, event3: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.add_note(event3);
+        home.scroll_to_top();
+        assert_eq!(home.list_state.selected(), Some(0));
+    }
+
+    #[rstest]
+    fn test_scroll_to_top_selected(event: Event, event2: Event, event3: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.add_note(event3);
+        home.list_state.select(Some(2));
+        assert_eq!(home.list_state.selected(), Some(2));
+        home.scroll_to_top();
+        assert_eq!(home.list_state.selected(), Some(0));
+    }
+
+    #[rstest]
+    fn test_scroll_to_top_saturated_top(event: Event, event2: Event, event3: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.add_note(event3);
+        home.list_state.select(Some(0));
+        assert_eq!(home.list_state.selected(), Some(0));
+        home.scroll_to_top();
+        assert_eq!(home.list_state.selected(), Some(0));
+    }
+
+    #[rstest]
+    fn test_scroll_to_bottom_empty() {
+        let mut home = Home::new();
+        home.scroll_to_bottom();
+        assert_eq!(home.list_state.selected(), None);
+    }
+
+    #[rstest]
+    fn test_scroll_to_bottom_unselected(event: Event, event2: Event, event3: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.add_note(event3);
+        home.scroll_to_bottom();
+        assert_eq!(home.list_state.selected(), Some(2));
+    }
+
+    #[rstest]
+    fn test_scroll_to_bottom_selected(event: Event, event2: Event, event3: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.add_note(event3);
+        home.list_state.select(Some(0));
+        assert_eq!(home.list_state.selected(), Some(0));
+        home.scroll_to_bottom();
+        assert_eq!(home.list_state.selected(), Some(2));
+    }
+
+    #[rstest]
+    fn test_scroll_to_bottom_saturated_bottom(event: Event, event2: Event, event3: Event) {
+        let mut home = Home::new();
+        home.add_note(event);
+        home.add_note(event2);
+        home.add_note(event3);
+        home.list_state.select(Some(2));
+        assert_eq!(home.list_state.selected(), Some(2));
+        home.scroll_to_bottom();
+        assert_eq!(home.list_state.selected(), Some(2));
     }
 }
