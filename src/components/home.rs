@@ -112,6 +112,26 @@ impl Home {
             }
         }
     }
+
+    fn text_note(&self, event: Event, area: Rect, padding: Padding) -> TextNote {
+        let default_reactions = vec![];
+        let default_reposts = vec![];
+        let default_zap_receipts = vec![];
+        let reactions = self.reactions.get(&event.id).unwrap_or(&default_reactions);
+        let reposts = self.reposts.get(&event.id).unwrap_or(&default_reposts);
+        let zap_receipts = self
+            .zap_receipts
+            .get(&event.id)
+            .unwrap_or(&default_zap_receipts);
+        TextNote::new(
+            event,
+            reactions.clone(),
+            reposts.clone(),
+            zap_receipts.clone(),
+            area,
+            padding,
+        )
+    }
 }
 
 impl Component for Home {
@@ -195,26 +215,7 @@ impl Component for Home {
         let items: Vec<ListItem> = self
             .notes
             .iter()
-            .map(|ev| {
-                let default_reactions = vec![];
-                let default_reposts = vec![];
-                let default_zap_receipts = vec![];
-                let reactions = self.reactions.get(&ev.id).unwrap_or(&default_reactions);
-                let reposts = self.reposts.get(&ev.id).unwrap_or(&default_reposts);
-                let zap_receipts = self
-                    .zap_receipts
-                    .get(&ev.id)
-                    .unwrap_or(&default_zap_receipts);
-                let note = TextNote::new(
-                    ev.clone(),
-                    reactions.clone(),
-                    reposts.clone(),
-                    zap_receipts.clone(),
-                    area,
-                    padding,
-                );
-                ListItem::new(note)
-            })
+            .map(|ev| ListItem::new(self.text_note(ev.clone(), area, padding)))
             .collect();
 
         let list = List::new(items.clone())
