@@ -132,6 +132,42 @@ impl Home {
             padding,
         )
     }
+
+    fn scroll_up(&mut self) {
+        let selection = match self.list_state.selected() {
+            _ if self.notes.is_empty() => None,
+            Some(i) if i > 1 => Some(i - 1),
+            _ => Some(0),
+        };
+        self.list_state.select(selection);
+    }
+
+    fn scroll_down(&mut self) {
+        let selection = match self.list_state.selected() {
+            _ if self.notes.is_empty() => None,
+            Some(i) if i < self.notes.len() - 1 => Some(i + 1),
+            Some(_) => Some(self.notes.len() - 1),
+            None if self.notes.len() > 1 => Some(1),
+            None => Some(0),
+        };
+        self.list_state.select(selection);
+    }
+
+    fn scroll_to_top(&mut self) {
+        let selection = match self.list_state.selected() {
+            _ if self.notes.is_empty() => None,
+            _ => Some(0),
+        };
+        self.list_state.select(selection);
+    }
+
+    fn scroll_to_bottom(&mut self) {
+        let selection = match self.list_state.selected() {
+            _ if self.notes.is_empty() => None,
+            _ => Some(self.notes.len() - 1),
+        };
+        self.list_state.select(selection);
+    }
 }
 
 impl Component for Home {
@@ -158,38 +194,10 @@ impl Component for Home {
                 Kind::ZapReceipt => self.append_zap_receipt(ev),
                 _ => {}
             },
-            Action::ScrollUp => {
-                let selection = match self.list_state.selected() {
-                    _ if self.notes.is_empty() => None,
-                    Some(i) if i > 1 => Some(i - 1),
-                    _ => Some(0),
-                };
-                self.list_state.select(selection);
-            }
-            Action::ScrollDown => {
-                let selection = match self.list_state.selected() {
-                    _ if self.notes.is_empty() => None,
-                    Some(i) if i < self.notes.len() - 1 => Some(i + 1),
-                    Some(_) => Some(self.notes.len() - 1),
-                    None if self.notes.len() > 1 => Some(1),
-                    None => Some(0),
-                };
-                self.list_state.select(selection);
-            }
-            Action::ScrollTop => {
-                let selection = match self.list_state.selected() {
-                    _ if self.notes.is_empty() => None,
-                    _ => Some(0),
-                };
-                self.list_state.select(selection);
-            }
-            Action::ScrollBottom => {
-                let selection = match self.list_state.selected() {
-                    _ if self.notes.is_empty() => None,
-                    _ => Some(self.notes.len() - 1),
-                };
-                self.list_state.select(selection);
-            }
+            Action::ScrollUp => self.scroll_up(),
+            Action::ScrollDown => self.scroll_down(),
+            Action::ScrollToTop => self.scroll_to_top(),
+            Action::ScrollToBottom => self.scroll_to_bottom(),
             Action::React => {
                 if let (Some(i), Some(tx)) = (self.list_state.selected(), &self.command_tx) {
                     let event = self.notes.get(i).expect("failed to get target event");

@@ -1,21 +1,21 @@
 {
   "keybindings": {
     "Home": {
-      "<up>": "ScrollUp",          // Scroll up the page
-      "<k>": "ScrollUp",           // Scroll up the page
-      "<down>": "ScrollDown",      // Scroll down the page
-      "<j>": "ScrollDown",         // Scroll down the page
-      "<home>": "ScrollTop",       // Scroll to top of the page
-      "<g><g>": "ScrollTop",       // Scroll to top of the page
-      "<end>": "ScrollBottom",     // Scroll to bottom of the page
-      "<Shift-g>": "ScrollBottom", // Scroll to bottom of the page
-      "<f>": "React",              // React to the post
-      "<t>": "Repost",             // Repost the post
-      "<esc>": "Unselect",         // Unselect the posts
-      "<q>": "Quit",               // Quit the application
-      "<Ctrl-d>": "Quit",          // Another way to quit
-      "<Ctrl-c>": "Quit",          // Yet another way to quit
-      "<Ctrl-z>": "Suspend"        // Suspend the application
+      "<up>": "ScrollUp",            // Scroll up the page
+      "<k>": "ScrollUp",             // Scroll up the page
+      "<down>": "ScrollDown",        // Scroll down the page
+      "<j>": "ScrollDown",           // Scroll down the page
+      "<home>": "ScrollToTop",       // Scroll to top of the page
+      "<g><g>": "ScrollToTop",       // Scroll to top of the page
+      "<end>": "ScrollToBottom",     // Scroll to bottom of the page
+      "<Shift-g>": "ScrollToBottom", // Scroll to bottom of the page
+      "<f>": "React",                // React to the post
+      "<t>": "Repost",               // Repost the post
+      "<esc>": "Unselect",           // Unselect the posts
+      "<q>": "Quit",                 // Quit the application
+      "<Ctrl-d>": "Quit",            // Another way to quit
+      "<Ctrl-c>": "Quit",            // Yet another way to quit
+      "<Ctrl-z>": "Suspend"          // Suspend the application
     },
   }
 }
