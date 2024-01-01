@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use chrono::{DateTime, Local};
 use nostr_sdk::{Event, Metadata, Tag};
 use ratatui::{prelude::*, widgets::*};
-use tracing_subscriber::field::display;
 
 use crate::widgets::shrink_text::ShrinkText;
 
@@ -42,23 +41,33 @@ impl TextNote {
     pub fn display_name(&self) -> Option<String> {
         if let Some(profile) = self.profile.clone() {
             if let Some(display_name) = profile.display_name {
-                Some(display_name)
-            } else if profile.name.is_some() {
-                None
-            } else {
-                Some(self.pubkey())
+                if !display_name.is_empty() {
+                    return Some(display_name);
+                }
             }
-        } else {
-            Some(self.pubkey())
+
+            if let Some(name) = profile.name {
+                if !name.is_empty() {
+                    return None;
+                }
+            }
         }
+
+        Some(self.pubkey())
     }
 
     pub fn name(&self) -> Option<String> {
         if let Some(profile) = self.profile.clone() {
-            profile.name.map(|n| format!("@{n}"))
-        } else {
-            None
+            if let Some(name) = profile.name {
+                if let Some(display_name) = self.display_name() {
+                    if !name.is_empty() && display_name != name {
+                        return Some(format!("@{name}"));
+                    }
+                }
+            }
         }
+
+        None
     }
 
     pub fn pubkey(&self) -> String {
