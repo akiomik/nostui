@@ -59,9 +59,10 @@ impl TextNote {
     pub fn name(&self) -> Option<String> {
         if let Some(profile) = self.profile.clone() {
             if let Some(name) = profile.name {
-                if let Some(display_name) = self.display_name() {
-                    if !name.is_empty() && display_name != name {
-                        return Some(format!("@{name}"));
+                if !name.is_empty() {
+                    match self.display_name() {
+                        Some(display_name) if name == display_name => return None,
+                        _ => return Some(format!("@{name}")),
                     }
                 }
             }
@@ -202,6 +203,83 @@ mod tests {
                 "created_at":1704091367
             }"#,
         ).unwrap()
+    }
+
+    #[fixture]
+    fn area() -> Rect {
+        Rect::new(0, 0, 0, 0)
+    }
+
+    #[fixture]
+    fn padding() -> Padding {
+        Padding::new(0, 0, 0, 0)
+    }
+
+    #[rstest]
+    fn test_pubkey(event: Event, area: Rect, padding: Padding) {
+        let note = TextNote::new(
+            event,
+            None,
+            HashSet::new(),
+            HashSet::new(),
+            HashSet::new(),
+            area,
+            padding,
+        );
+        assert_eq!(note.pubkey(), "4d39c:aae25");
+    }
+
+    #[rstest]
+    #[case(None, Some(String::from("4d39c:aae25")))]
+    #[case(Some(Metadata::new()), Some(String::from("4d39c:aae25")))]
+    #[case(Some(Metadata::new().name("foo")), None)]
+    #[case(Some(Metadata::new().display_name("foo")), Some(String::from("foo")))]
+    #[case(Some(Metadata::new().display_name("")), Some(String::from("4d39c:aae25")))]
+    #[case(Some(Metadata::new().display_name("").name("")), Some(String::from("4d39c:aae25")))]
+    #[case(Some(Metadata::new().display_name("").name("hoge")), None)]
+    fn test_display_name(
+        #[case] metadata: Option<Metadata>,
+        #[case] expected: Option<String>,
+        event: Event,
+        area: Rect,
+        padding: Padding,
+    ) {
+        let note = TextNote::new(
+            event,
+            metadata,
+            HashSet::new(),
+            HashSet::new(),
+            HashSet::new(),
+            area,
+            padding,
+        );
+        assert_eq!(note.display_name(), expected);
+    }
+
+    #[rstest]
+    #[case(None, None)]
+    #[case(Some(Metadata::new()), None)]
+    #[case(Some(Metadata::new().name("foo")), Some(String::from("@foo")))]
+    #[case(Some(Metadata::new().display_name("foo")), None)]
+    #[case(Some(Metadata::new().name("")), None)]
+    #[case(Some(Metadata::new().name("foo").display_name("foo")), None)]
+    fn test_name(
+        #[case] metadata: Option<Metadata>,
+        #[case] expected: Option<String>,
+        event: Event,
+        area: Rect,
+        padding: Padding,
+    ) {
+        let note = TextNote::new(
+            event,
+            metadata,
+            HashSet::new(),
+            HashSet::new(),
+            HashSet::new(),
+            area,
+            padding,
+        );
+        assert_eq!(note.name(), expected);
     }
 
     #[rstest]
