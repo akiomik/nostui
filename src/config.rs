@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, path::PathBuf};
+use std::{collections::HashMap, fmt, path::PathBuf, process::exit};
 
 use color_eyre::eyre::Result;
 use config::Value;
@@ -32,6 +32,10 @@ pub struct Config {
     pub keybindings: KeyBindings,
     #[serde(default)]
     pub styles: Styles,
+    #[serde(default)]
+    pub privatekey: String,
+    #[serde(default)]
+    pub relays: Vec<String>,
 }
 
 impl Config {
@@ -62,7 +66,8 @@ impl Config {
             }
         }
         if !found_config {
-            log::error!("No configuration file found. Application may not behave as expected");
+            log::error!("No configuration file found");
+            exit(1);
         }
 
         let mut cfg: Self = builder.build()?.try_deserialize()?;
@@ -82,6 +87,10 @@ impl Config {
                     .entry(style_key.clone())
                     .or_insert_with(|| *style);
             }
+        }
+
+        if cfg.relays.is_empty() {
+            cfg.relays = default_config.relays.clone();
         }
 
         Ok(cfg)

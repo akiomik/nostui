@@ -1,30 +1,26 @@
 use nostr_sdk::prelude::*;
 use std::time::Duration;
 
+use crate::config::Config;
+
 pub struct Conn {
     rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
 }
 
-impl Default for Conn {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Conn {
-    pub fn new() -> Self {
+    pub fn new(privatekey: String, relays: Vec<String>) -> Self {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
         tokio::spawn(async move {
-            let keys = Keys::from_pk_str(
-                "npub12gtrhfv04634qsyfm6l3m7a06l04qta6yefkuwezwcw6z4qe5nvqddy5qj",
-            )?;
+            let keys = Keys::from_sk_str(&privatekey)?;
             let nostr_client = Client::new(&keys);
-            nostr_client.add_relays(["wss://yabu.me"]).await?;
+
+            nostr_client.add_relays(relays).await?;
             nostr_client.connect().await;
 
+            let followings = nostr_client.get_contact_list_public_keys(None).await?;
             let filters = Filter::new()
-                // .author(keys.public_key())
+                .authors(followings)
                 .kinds([
                     Kind::TextNote,
                     Kind::Repost,

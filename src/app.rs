@@ -64,7 +64,7 @@ impl App {
             component.init(tui.size()?)?;
         }
 
-        let mut conn = Conn::new();
+        let mut conn = Conn::new(self.config.privatekey.clone(), self.config.relays.clone());
 
         loop {
             if let Some(e) = tui.next().await {
