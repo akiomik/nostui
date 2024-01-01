@@ -55,11 +55,7 @@ impl TextNote {
 
     pub fn name(&self) -> Option<String> {
         if let Some(profile) = self.profile.clone() {
-            if let Some(name) = profile.name {
-                Some(format!("@{name}"))
-            } else {
-                None
-            }
+            profile.name.map(|n| format!("@{n}"))
         } else {
             None
         }
