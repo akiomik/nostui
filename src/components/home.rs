@@ -18,6 +18,7 @@ pub struct Home {
     config: Config,
     list_state: ListState,
     notes: VecDeque<Event>,
+    profiles: HashMap<XOnlyPublicKey, Metadata>,
     reactions: HashMap<EventId, HashSet<Event>>,
     reposts: HashMap<EventId, HashSet<Event>>,
     zap_receipts: HashMap<EventId, HashSet<Event>>,
@@ -37,11 +38,17 @@ impl Home {
     }
 
     fn add_note(&mut self, event: Event) {
-        self.notes.push_front(event);
+        self.notes.push_front(event); // TODO: sort
 
         // Keep selected position
         let selection = self.list_state.selected().map(|i| i + 1);
         self.list_state.select(selection);
+    }
+
+    fn add_profile(&mut self, event: Event) {
+        if let Ok(metadata) = Metadata::from_json(event.content) {
+            self.profiles.insert(event.pubkey, metadata);
+        }
     }
 
     fn append_reaction(&mut self, reaction: Event) {
@@ -90,6 +97,7 @@ impl Home {
         let default_reactions = HashSet::new();
         let default_reposts = HashSet::new();
         let default_zap_receipts = HashSet::new();
+        let profile = self.profiles.get(&event.pubkey);
         let reactions = self.reactions.get(&event.id).unwrap_or(&default_reactions);
         let reposts = self.reposts.get(&event.id).unwrap_or(&default_reposts);
         let zap_receipts = self
@@ -98,6 +106,7 @@ impl Home {
             .unwrap_or(&default_zap_receipts);
         TextNote::new(
             event,
+            profile.cloned(),
             reactions.clone(),
             reposts.clone(),
             zap_receipts.clone(),
@@ -121,6 +130,7 @@ impl Component for Home {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::ReceiveEvent(ev) => match ev.kind {
+                Kind::Metadata => self.add_profile(ev),
                 Kind::TextNote => self.add_note(ev),
                 Kind::Reaction => self.append_reaction(ev),
                 Kind::Repost => self.append_repost(ev), // TODO: show reposts on feed

@@ -19,8 +19,8 @@ impl Conn {
             nostr_client.connect().await;
 
             let followings = nostr_client.get_contact_list_public_keys(None).await?;
-            let filters = Filter::new()
-                .authors(followings)
+            let timeline_filter = Filter::new()
+                .authors(followings.clone())
                 .kinds([
                     Kind::TextNote,
                     Kind::Repost,
@@ -28,17 +28,13 @@ impl Conn {
                     Kind::ZapReceipt,
                 ])
                 .since(Timestamp::now() - Duration::new(60 * 5, 0)); // 5min
-            nostr_client.subscribe(vec![filters]).await;
+            let profile_filter = Filter::new().authors(followings).kinds([Kind::Metadata]);
+            nostr_client.subscribe(vec![timeline_filter, profile_filter]).await;
 
             nostr_client
                 .handle_notifications(|notification| async {
                     if let RelayPoolNotification::Event { event, .. } = notification {
-                        match event.kind {
-                            Kind::TextNote | Kind::Repost | Kind::Reaction => {
-                                tx.send(event)?;
-                            }
-                            _ => {}
-                        }
+                        tx.send(event)?;
                     };
 
                     Ok(false)

@@ -1,14 +1,16 @@
 use std::collections::HashSet;
 
 use chrono::{DateTime, Local};
-use nostr_sdk::{Event, Tag};
+use nostr_sdk::{Event, Metadata, Tag};
 use ratatui::{prelude::*, widgets::*};
+use tracing_subscriber::field::display;
 
 use crate::widgets::shrink_text::ShrinkText;
 
 #[derive(Clone, Debug)]
 pub struct TextNote {
     pub event: Event,
+    pub profile: Option<Metadata>,
     pub reactions: HashSet<Event>,
     pub reposts: HashSet<Event>,
     pub zap_receipts: HashSet<Event>,
@@ -19,6 +21,7 @@ pub struct TextNote {
 impl TextNote {
     pub fn new(
         event: Event,
+        profile: Option<Metadata>,
         reactions: HashSet<Event>,
         reposts: HashSet<Event>,
         zap_receipts: HashSet<Event>,
@@ -27,11 +30,38 @@ impl TextNote {
     ) -> Self {
         TextNote {
             event,
+            profile,
             reactions,
             reposts,
             zap_receipts,
             area,
             padding,
+        }
+    }
+
+    pub fn display_name(&self) -> Option<String> {
+        if let Some(profile) = self.profile.clone() {
+            if let Some(display_name) = profile.display_name {
+                Some(display_name)
+            } else if profile.name.is_some() {
+                None
+            } else {
+                Some(self.pubkey())
+            }
+        } else {
+            Some(self.pubkey())
+        }
+    }
+
+    pub fn name(&self) -> Option<String> {
+        if let Some(profile) = self.profile.clone() {
+            if let Some(name) = profile.name {
+                Some(format!("@{name}"))
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 
@@ -100,8 +130,21 @@ impl<'a> From<TextNote> for Text<'a> {
         )
         .into();
 
+        let display_name = value
+            .display_name()
+            .map(|name| format!("{name} "))
+            .unwrap_or_default();
+        let name = value
+            .name()
+            .map(|name| format!("{name} "))
+            .unwrap_or_default();
+
         let mut text = Text::default();
-        text.extend(Text::styled(value.pubkey(), Style::default().bold()));
+        let name_line = Line::from(vec![
+            Span::styled(display_name, Style::default().bold()),
+            Span::styled(name, Style::default().italic().fg(Color::Gray)),
+        ]);
+        text.extend::<Text>(name_line.into());
         text.extend(content);
         text.extend(Text::styled(
             value.created_at(),
