@@ -75,7 +75,7 @@ mod tests {
             self.items.is_empty()
         }
 
-        fn select(&mut self, index: Option<usize>) -> () {
+        fn select(&mut self, index: Option<usize>) {
             self.index = index;
         }
 
