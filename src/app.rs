@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     action::Action,
-    components::{FpsCounter, Home, Component},
+    components::{Component, FpsCounter, Home},
     config::Config,
     conn::Conn,
     mode::Mode,
