@@ -10,8 +10,8 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use super::{Component, Frame};
 use crate::{
-    action::Action, config::Config, nostr::event::SortableEvent, text,
-    widgets::scrollable_list::ScrollableList, widgets::text_note::TextNote,
+    action::Action, config::Config, nostr::event::SortableEvent, text, widgets::ScrollableList,
+    widgets::TextNote,
 };
 
 #[derive(Default)]
