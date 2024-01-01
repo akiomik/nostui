@@ -77,7 +77,7 @@ impl TextNote {
         DateTime::from_timestamp(self.event.created_at.as_i64(), 0)
             .expect("Invalid created_at")
             .with_timezone(&Local)
-            .format("%H:%m:%d")
+            .format("%T")
             .to_string()
     }
 
@@ -173,5 +173,43 @@ impl<'a> From<TextNote> for Text<'a> {
         ));
 
         text
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use nostr_sdk::{EventBuilder, JsonUtil, Keys};
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+
+    use super::*;
+
+    #[fixture]
+    fn event() -> Event {
+        Event::from_json(
+            r#"{
+                "kind":1,
+                "sig":"a8d944e323439d16f867d59f0fb5c4b6f9c1302c887ab45c546b1fe38d58bf20263c79b1ffa86258a7607578a29c46f2613b286fb81efb45e2b2524a350a4f51",
+                "id":"fcd6707cf1943d6f3ffa3c382bddb966027f98ddca15511a897a51ccfe160cd6",
+                "pubkey":"4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
+                "tags":[],
+                "content":"初force pushめでたい",
+                "created_at":1704091367
+            }"#,
+        ).unwrap()
+    }
+
+    #[rstest]
+    fn test_created_at(event: Event) {
+        let note = TextNote::new(
+            event,
+            None,
+            HashSet::new(),
+            HashSet::new(),
+            HashSet::new(),
+            Rect::new(0, 0, 0, 0),
+            Padding::new(0, 0, 0, 0),
+        );
+        assert_eq!(note.created_at(), "15:42:47");
     }
 }
