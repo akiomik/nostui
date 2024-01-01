@@ -70,7 +70,7 @@ impl Config {
         }
         if !found_config {
             log::error!("No configuration file found");
-            return Err(ConfigError::NotFound(String::from(
+            return Err(ConfigError::Message(String::from(
                 "No configuration file found",
             )));
         }
@@ -95,7 +95,7 @@ impl Config {
         }
 
         if cfg.privatekey.is_empty() {
-            return Err(ConfigError::NotFound(String::from("No `privatekey` found")));
+            return Err(ConfigError::NotFound(String::from("privatekey")));
         }
 
         if cfg.relays.is_empty() {
