@@ -29,7 +29,9 @@ impl Conn {
                 ])
                 .since(Timestamp::now() - Duration::new(60 * 5, 0)); // 5min
             let profile_filter = Filter::new().authors(followings).kinds([Kind::Metadata]);
-            nostr_client.subscribe(vec![timeline_filter, profile_filter]).await;
+            nostr_client
+                .subscribe(vec![timeline_filter, profile_filter])
+                .await;
 
             nostr_client
                 .handle_notifications(|notification| async {

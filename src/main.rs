@@ -9,11 +9,11 @@ pub mod components;
 pub mod config;
 pub mod conn;
 pub mod mode;
+pub mod nostr;
 pub mod text;
 pub mod tui;
 pub mod utils;
 pub mod widgets;
-pub mod nostr;
 
 use clap::Parser;
 use cli::Cli;
