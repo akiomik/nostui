@@ -1,15 +1,17 @@
+use std::cmp::Reverse;
 use std::collections::{hash_map::Entry, HashMap};
 use std::collections::{HashSet, VecDeque};
 
 use color_eyre::eyre::Result;
 use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets, widgets::*};
+use sorted_vec::ReverseSortedSet;
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::{Component, Frame};
 use crate::{
-    action::Action, config::Config, text, widgets::scrollable_list::ScrollableList,
-    widgets::text_note::TextNote,
+    action::Action, config::Config, nostr::event::SortableEvent, text,
+    widgets::scrollable_list::ScrollableList, widgets::text_note::TextNote,
 };
 
 #[derive(Default)]
@@ -17,7 +19,7 @@ pub struct Home {
     command_tx: Option<UnboundedSender<Action>>,
     config: Config,
     list_state: ListState,
-    notes: VecDeque<Event>,
+    notes: Vec<Event>,
     profiles: HashMap<XOnlyPublicKey, Metadata>,
     reactions: HashMap<EventId, HashSet<Event>>,
     reposts: HashMap<EventId, HashSet<Event>>,
@@ -38,7 +40,7 @@ impl Home {
     }
 
     fn add_note(&mut self, event: Event) {
-        self.notes.push_front(event); // TODO: sort
+        self.notes.push(event);
 
         // Keep selected position
         let selection = self.list_state.selected().map(|i| i + 1);
@@ -114,6 +116,15 @@ impl Home {
             padding,
         )
     }
+
+    fn sorted_notes(&self) -> ReverseSortedSet<SortableEvent> {
+        ReverseSortedSet::from_unsorted(
+            self.notes
+                .iter()
+                .map(|ev| Reverse(SortableEvent::new(ev.clone())))
+                .collect(),
+        )
+    }
 }
 
 impl Component for Home {
@@ -164,9 +175,9 @@ impl Component for Home {
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         let padding = Padding::new(1, 1, 1, 1);
         let items: Vec<ListItem> = self
-            .notes
+            .sorted_notes()
             .iter()
-            .map(|ev| ListItem::new(self.text_note(ev.clone(), area, padding)))
+            .map(|ev| ListItem::new(self.text_note(ev.0.event.clone(), area, padding)))
             .collect();
 
         let list = List::new(items.clone())

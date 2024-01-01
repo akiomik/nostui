@@ -13,6 +13,7 @@ pub mod text;
 pub mod tui;
 pub mod utils;
 pub mod widgets;
+pub mod nostr;
 
 use clap::Parser;
 use cli::Cli;
