@@ -18,5 +18,5 @@
       "<Ctrl-z>": "Suspend"          // Suspend the application
     }
   },
-  "relays": ["wss://yabu.me"]
+  "relays": ["wss://nos.lol", "wss://yabu.me"]
 }
