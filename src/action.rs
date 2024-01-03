@@ -1,5 +1,6 @@
 use std::{fmt, string::ToString};
 
+use crossterm::event::KeyEvent;
 use nostr_sdk::prelude::*;
 use serde::{
     de::{self, Deserializer, Visitor},
@@ -18,7 +19,7 @@ pub enum Action {
     Refresh,
     Error(String),
     Help,
-    ReceiveEvent(nostr_sdk::Event),
+    ReceiveEvent(Event),
     ScrollUp,
     ScrollDown,
     ScrollToTop,
@@ -28,4 +29,7 @@ pub enum Action {
     Repost,
     SendRepost(EventId),
     Unselect,
+    NewTextNote,
+    SendTextNote(String),
+    Key(KeyEvent),
 }

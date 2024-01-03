@@ -7,6 +7,7 @@ use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets, widgets::*};
 use sorted_vec::ReverseSortedSet;
 use tokio::sync::mpsc::UnboundedSender;
+use tui_textarea::{Input, Key, TextArea};
 
 use super::{Component, Frame};
 use crate::{
@@ -15,7 +16,7 @@ use crate::{
 };
 
 #[derive(Default)]
-pub struct Home {
+pub struct Home<'a> {
     command_tx: Option<UnboundedSender<Action>>,
     config: Config,
     list_state: ListState,
@@ -24,9 +25,11 @@ pub struct Home {
     reactions: HashMap<EventId, HashSet<Event>>,
     reposts: HashMap<EventId, HashSet<Event>>,
     zap_receipts: HashMap<EventId, HashSet<Event>>,
+    show_input: bool,
+    input: TextArea<'a>,
 }
 
-impl Home {
+impl<'a> Home<'a> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -127,7 +130,7 @@ impl Home {
     }
 }
 
-impl Component for Home {
+impl<'a> Component for Home<'a> {
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.command_tx = Some(tx);
         Ok(())
@@ -148,10 +151,26 @@ impl Component for Home {
                 Kind::ZapReceipt => self.append_zap_receipt(ev),
                 _ => {}
             },
-            Action::ScrollUp => self.scroll_up(),
-            Action::ScrollDown => self.scroll_down(),
-            Action::ScrollToTop => self.scroll_to_top(),
-            Action::ScrollToBottom => self.scroll_to_bottom(),
+            Action::ScrollUp => {
+                if !self.show_input {
+                    self.scroll_up()
+                }
+            }
+            Action::ScrollDown => {
+                if !self.show_input {
+                    self.scroll_down()
+                }
+            }
+            Action::ScrollToTop => {
+                if !self.show_input {
+                    self.scroll_to_top()
+                }
+            }
+            Action::ScrollToBottom => {
+                if !self.show_input {
+                    self.scroll_to_bottom()
+                }
+            }
             Action::React => {
                 if let (Some(i), Some(tx)) = (self.list_state.selected(), &self.command_tx) {
                     let event = self.notes.get(i).expect("failed to get target event");
@@ -166,6 +185,15 @@ impl Component for Home {
             }
             Action::Unselect => {
                 self.list_state.select(None);
+                self.show_input = false;
+            }
+            Action::NewTextNote => {
+                self.show_input = true;
+            }
+            Action::Key(key) => {
+                if self.show_input {
+                    self.input.input(key);
+                }
             }
             _ => {}
         }
@@ -188,11 +216,25 @@ impl Component for Home {
 
         f.render_stateful_widget(list, area, &mut self.list_state);
 
+        if self.show_input {
+            let mut input_area = f.size();
+            input_area.height /= 2;
+            input_area.y = input_area.height;
+            f.render_widget(Clear, input_area);
+
+            self.input.set_block(
+                widgets::Block::default()
+                    .borders(Borders::ALL)
+                    .title("New note: Press ESC to close"),
+            );
+            f.render_widget(self.input.widget(), input_area);
+        }
+
         Ok(())
     }
 }
 
-impl ScrollableList<Event> for Home {
+impl<'a> ScrollableList<Event> for Home<'a> {
     fn select(&mut self, index: Option<usize>) {
         self.list_state.select(index);
     }
