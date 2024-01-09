@@ -177,7 +177,15 @@ impl<'a> Component for Home<'a> {
                     self.list_state.selected(),
                     &self.command_tx,
                 ) {
-                    let event = self.notes.get(i).expect("failed to get target event");
+                    let event = self
+                        .sorted_notes()
+                        .get(i)
+                        .expect("failed to get target event")
+                        .0
+                        .event
+                        .clone();
+                    let content = event.content.clone();
+                    log::info!("Send Reaction: {i}, {content}");
                     tx.send(Action::SendReaction((event.id, event.pubkey)))?;
                 }
             }
@@ -187,7 +195,13 @@ impl<'a> Component for Home<'a> {
                     self.list_state.selected(),
                     &self.command_tx,
                 ) {
-                    let event = self.notes.get(i).expect("failed to get target event");
+                    let event = self
+                        .sorted_notes()
+                        .get(i)
+                        .expect("failed to get target event")
+                        .0
+                        .event
+                        .clone();
                     tx.send(Action::SendRepost((event.id, event.pubkey)))?;
                 }
             }
