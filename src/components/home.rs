@@ -3,15 +3,19 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::collections::{HashSet, VecDeque};
 
 use color_eyre::eyre::Result;
-use nostr_sdk::prelude::*;
+use nostr_sdk::prelude::{Metadata as NostrMetadata, *};
 use ratatui::{prelude::*, widgets, widgets::*};
 use sorted_vec::ReverseSortedSet;
 use tokio::sync::mpsc::UnboundedSender;
-use tui_textarea::{Input, Key, TextArea};
+use tui_textarea::{Key, TextArea};
 
 use super::{Component, Frame};
 use crate::{
-    action::Action, config::Config, nostr::SortableEvent, text, widgets::ScrollableList,
+    action::Action,
+    config::Config,
+    nostr::{Metadata, SortableEvent},
+    text,
+    widgets::ScrollableList,
     widgets::TextNote,
 };
 
@@ -21,7 +25,7 @@ pub struct Home<'a> {
     config: Config,
     list_state: ListState,
     notes: ReverseSortedSet<SortableEvent>,
-    profiles: HashMap<XOnlyPublicKey, Metadata>,
+    profiles: HashMap<XOnlyPublicKey, NostrMetadata>,
     reactions: HashMap<EventId, HashSet<Event>>,
     reposts: HashMap<EventId, HashSet<Event>>,
     zap_receipts: HashMap<EventId, HashSet<Event>>,
@@ -52,8 +56,9 @@ impl<'a> Home<'a> {
     }
 
     fn add_profile(&mut self, event: Event) {
-        if let Ok(metadata) = Metadata::from_json(event.content) {
-            self.profiles.insert(event.pubkey, metadata);
+        if let Ok(metadata) = Metadata::from_json(event.content.clone()) {
+            self.profiles
+                .insert(event.pubkey, NostrMetadata::from(metadata));
         }
     }
 

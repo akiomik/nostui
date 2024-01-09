@@ -6,3 +6,4 @@ mod metadata;
 pub use connection::Connection;
 pub use connection_process::ConnectionProcess;
 pub use event::SortableEvent;
+pub use metadata::Metadata;
