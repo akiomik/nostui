@@ -149,6 +149,11 @@ impl App {
                     Action::ReceiveEvent(ref event) => {
                         log::info!("Got nostr event: {event:?}");
                     }
+                    Action::SendReaction((id, pubkey)) => {
+                        let event = EventBuilder::new_reaction(id, pubkey, "+").to_event(&keys)?;
+                        log::info!("Send reaction: {event:?}");
+                        event_tx.send(event)?;
+                    }
                     Action::SendTextNote(ref content) => {
                         let event = EventBuilder::new_text_note(content, []).to_event(&keys)?;
                         log::info!("Send text note: {event:?}");

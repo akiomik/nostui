@@ -174,7 +174,7 @@ impl<'a> Component for Home<'a> {
             Action::React => {
                 if let (Some(i), Some(tx)) = (self.list_state.selected(), &self.command_tx) {
                     let event = self.notes.get(i).expect("failed to get target event");
-                    tx.send(Action::SendReaction(event.id))?;
+                    tx.send(Action::SendReaction((event.id, event.pubkey)))?;
                 }
             }
             Action::Repost => {

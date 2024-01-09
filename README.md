@@ -65,3 +65,4 @@ nostui
 | `esc`                 | Unselect         |
 | `n`                   | New text note    |
 | `Ctrl-p`              | Submit text note |
+| `f`                   | Send reaction    |

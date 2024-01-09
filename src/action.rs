@@ -25,7 +25,7 @@ pub enum Action {
     ScrollToTop,
     ScrollToBottom,
     React,
-    SendReaction(EventId),
+    SendReaction((EventId, XOnlyPublicKey)),
     Repost,
     SendRepost(EventId),
     Unselect,
