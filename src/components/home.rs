@@ -124,6 +124,11 @@ impl<'a> Home<'a> {
     fn get_note(&self, i: usize) -> Option<&Event> {
         self.notes.get(i).map(|note| &note.0.event)
     }
+
+    fn clear_input(&mut self) {
+        self.input.select_all();
+        self.input.delete_str(usize::MAX);
+    }
 }
 
 impl<'a> Component for Home<'a> {
@@ -200,6 +205,7 @@ impl<'a> Component for Home<'a> {
                     if !content.is_empty() {
                         tx.send(Action::SendTextNote(content))?;
                         self.show_input = false;
+                        self.clear_input();
                     }
                 }
             }
