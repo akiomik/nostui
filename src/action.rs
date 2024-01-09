@@ -27,7 +27,7 @@ pub enum Action {
     React,
     SendReaction((EventId, XOnlyPublicKey)),
     Repost,
-    SendRepost(EventId),
+    SendRepost((EventId, XOnlyPublicKey)),
     Unselect,
     NewTextNote,
     SubmitTextNote,

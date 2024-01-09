@@ -66,3 +66,4 @@ nostui
 | `n`                   | New text note    |
 | `Ctrl-p`              | Submit text note |
 | `f`                   | Send reaction    |
+| `t`                   | Repost           |
