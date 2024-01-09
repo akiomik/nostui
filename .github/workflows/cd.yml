@@ -7,10 +7,8 @@ on:
 
 jobs:
   publish:
-
     name: Publishing for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-
     strategy:
       matrix:
         include:
@@ -56,7 +54,6 @@ jobs:
             binary-postfix: ""
             use-cross: true
             binary-name: nostui
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -64,9 +61,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-
           target: ${{ matrix.target }}
-
           profile: minimal
           override: true
       - uses: Swatinem/rust-cache@v2
@@ -74,29 +69,20 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-
           use-cross: ${{ matrix.use-cross }}
-
           toolchain: stable
-
           args: --release --target ${{ matrix.target }}
-
-
       - name: install strip command
         shell: bash
         run: |
-
           if [[ ${{ matrix.target }} == aarch64-unknown-linux-gnu ]]; then
-
               sudo apt update
               sudo apt-get install -y binutils-aarch64-linux-gnu
           fi
       - name: Packaging final binary
         shell: bash
         run: |
-
           cd target/${{ matrix.target }}/release
-
 
           ####### reduce binary size by removing debug symbols #######
 
@@ -118,7 +104,6 @@ jobs:
           ########## create sha256 ##########
 
           if [[ ${{ runner.os }} == 'Windows' ]]; then
-
             certutil -hashfile $RELEASE_NAME.tar.gz sha256 | grep -E [A-Fa-f0-9]{64} > $RELEASE_NAME.sha256
           else
             shasum -a 256 $RELEASE_NAME.tar.gz > $RELEASE_NAME.sha256
@@ -127,14 +112,10 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-
             target/${{ matrix.target }}/release/${{ matrix.binary-name }}-*.tar.gz
             target/${{ matrix.target }}/release/${{ matrix.binary-name }}-*.sha256
-
         env:
-
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 
   publish-cargo:
     name: Publishing to Cargo
@@ -147,6 +128,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo publish
         env:
-
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
