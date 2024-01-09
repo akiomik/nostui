@@ -4,6 +4,13 @@
 
 A TUI client for [Nostr](https://nostr.com)
 
+![screenshot](screenshot.gif)
+
+## Current features
+
+- Timeline
+- Post, Reaction, Repost
+
 ## Getting Started
 
 ### Requirements
