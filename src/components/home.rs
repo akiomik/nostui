@@ -20,7 +20,7 @@ pub struct Home<'a> {
     command_tx: Option<UnboundedSender<Action>>,
     config: Config,
     list_state: ListState,
-    notes: Vec<Event>,
+    notes: ReverseSortedSet<SortableEvent>,
     profiles: HashMap<XOnlyPublicKey, Metadata>,
     reactions: HashMap<EventId, HashSet<Event>>,
     reposts: HashMap<EventId, HashSet<Event>>,
@@ -43,7 +43,8 @@ impl<'a> Home<'a> {
     }
 
     fn add_note(&mut self, event: Event) {
-        self.notes.push(event);
+        let note = Reverse(SortableEvent::new(event));
+        self.notes.find_or_insert(note);
 
         // Keep selected position
         let selection = self.list_state.selected().map(|i| i + 1);
@@ -120,13 +121,8 @@ impl<'a> Home<'a> {
         )
     }
 
-    fn sorted_notes(&self) -> ReverseSortedSet<SortableEvent> {
-        ReverseSortedSet::from_unsorted(
-            self.notes
-                .iter()
-                .map(|ev| Reverse(SortableEvent::new(ev.clone())))
-                .collect(),
-        )
+    fn get_note(&self, i: usize) -> Option<&Event> {
+        self.notes.get(i).map(|note| &note.0.event)
     }
 }
 
@@ -177,15 +173,7 @@ impl<'a> Component for Home<'a> {
                     self.list_state.selected(),
                     &self.command_tx,
                 ) {
-                    let event = self
-                        .sorted_notes()
-                        .get(i)
-                        .expect("failed to get target event")
-                        .0
-                        .event
-                        .clone();
-                    let content = event.content.clone();
-                    log::info!("Send Reaction: {i}, {content}");
+                    let event = self.get_note(i).expect("failed to get target event");
                     tx.send(Action::SendReaction((event.id, event.pubkey)))?;
                 }
             }
@@ -195,13 +183,7 @@ impl<'a> Component for Home<'a> {
                     self.list_state.selected(),
                     &self.command_tx,
                 ) {
-                    let event = self
-                        .sorted_notes()
-                        .get(i)
-                        .expect("failed to get target event")
-                        .0
-                        .event
-                        .clone();
+                    let event = self.get_note(i).expect("failed to get target event");
                     tx.send(Action::SendRepost((event.id, event.pubkey)))?;
                 }
             }
@@ -234,7 +216,7 @@ impl<'a> Component for Home<'a> {
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         let padding = Padding::new(1, 1, 1, 1);
         let items: Vec<ListItem> = self
-            .sorted_notes()
+            .notes
             .iter()
             .map(|ev| ListItem::new(self.text_note(ev.0.event.clone(), area, padding)))
             .collect();

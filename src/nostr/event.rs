@@ -19,6 +19,10 @@ impl PartialOrd for SortableEvent {
 
 impl Ord for SortableEvent {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.event.created_at.cmp(&other.event.created_at)
+        if self.event.created_at == other.event.created_at {
+            self.event.id.cmp(&other.event.id)
+        } else {
+            self.event.created_at.cmp(&other.event.created_at)
+        }
     }
 }
