@@ -172,13 +172,21 @@ impl<'a> Component for Home<'a> {
                 }
             }
             Action::React => {
-                if let (Some(i), Some(tx)) = (self.list_state.selected(), &self.command_tx) {
+                if let (false, Some(i), Some(tx)) = (
+                    self.show_input,
+                    self.list_state.selected(),
+                    &self.command_tx,
+                ) {
                     let event = self.notes.get(i).expect("failed to get target event");
                     tx.send(Action::SendReaction((event.id, event.pubkey)))?;
                 }
             }
             Action::Repost => {
-                if let (Some(i), Some(tx)) = (self.list_state.selected(), &self.command_tx) {
+                if let (false, Some(i), Some(tx)) = (
+                    self.show_input,
+                    self.list_state.selected(),
+                    &self.command_tx,
+                ) {
                     let event = self.notes.get(i).expect("failed to get target event");
                     tx.send(Action::SendRepost((event.id, event.pubkey)))?;
                 }
