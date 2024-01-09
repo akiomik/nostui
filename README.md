@@ -54,12 +54,14 @@ nostui
 
 ### Default Keybindings
 
-| Keybinding            | Description        |
-| --------------------- | ------------------ |
-| `k` `up`              | Scroll up          |
-| `j` `down`            | Scroll down        |
-| `q` `Ctrl-c` `Ctrl-d` | Quit               |
-| `home` `gg`           | Scroll to top      |
-| `end` `Shift-g`       | Scroll to bottom   |
-| `Ctrl-z`              | Suspend            |
-| `esc`                 | Unselect           |
+| Keybinding            | Description      |
+| --------------------- | ---------------- |
+| `k` `up`              | Scroll up        |
+| `j` `down`            | Scroll down      |
+| `q` `Ctrl-c` `Ctrl-d` | Quit             |
+| `home` `gg`           | Scroll to top    |
+| `end` `Shift-g`       | Scroll to bottom |
+| `Ctrl-z`              | Suspend          |
+| `esc`                 | Unselect         |
+| `n`                   | New text note    |
+| `Ctrl-p`              | Submit text note |

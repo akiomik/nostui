@@ -190,6 +190,13 @@ impl<'a> Component for Home<'a> {
             Action::NewTextNote => {
                 self.show_input = true;
             }
+            Action::SubmitTextNote => {
+                if let Some(tx) = &self.command_tx {
+                    let content = self.input.lines().join("\n");
+                    tx.send(Action::SendTextNote(content))?;
+                    self.show_input = false;
+                }
+            }
             Action::Key(key) => {
                 if self.show_input {
                     self.input.input(key);

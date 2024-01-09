@@ -149,6 +149,11 @@ impl App {
                     Action::ReceiveEvent(ref event) => {
                         log::info!("Got nostr event: {event:?}");
                     }
+                    Action::SendTextNote(ref content) => {
+                        let event = EventBuilder::new_text_note(content, []).to_event(&keys)?;
+                        log::info!("Send text note: {event:?}");
+                        event_tx.send(event)?;
+                    }
                     _ => {}
                 }
                 for component in self.components.iter_mut() {

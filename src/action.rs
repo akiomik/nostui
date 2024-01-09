@@ -30,6 +30,7 @@ pub enum Action {
     SendRepost(EventId),
     Unselect,
     NewTextNote,
+    SubmitTextNote,
     SendTextNote(String),
     Key(KeyEvent),
 }
