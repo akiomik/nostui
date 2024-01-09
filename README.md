@@ -59,7 +59,7 @@ nostui
 | `k` `up`              | Scroll up        |
 | `j` `down`            | Scroll down      |
 | `q` `Ctrl-c` `Ctrl-d` | Quit             |
-| `home` `gg`           | Scroll to top    |
+| `home` `g`            | Scroll to top    |
 | `end` `Shift-g`       | Scroll to bottom |
 | `Ctrl-z`              | Suspend          |
 | `esc`                 | Unselect         |

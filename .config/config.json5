@@ -6,7 +6,7 @@
       "<down>": "ScrollDown",        // Scroll down the page
       "<j>": "ScrollDown",           // Scroll down the page
       "<home>": "ScrollToTop",       // Scroll to top of the page
-      "<g><g>": "ScrollToTop",       // Scroll to top of the page
+      "<g>": "ScrollToTop",          // Scroll to top of the page
       "<end>": "ScrollToBottom",     // Scroll to bottom of the page
       "<Shift-g>": "ScrollToBottom", // Scroll to bottom of the page
       "<f>": "React",                // React to the post
