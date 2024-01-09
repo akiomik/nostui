@@ -9,8 +9,9 @@ use crate::{
     action::Action,
     components::{Component, FpsCounter, Home},
     config::Config,
-    conn::Conn,
     mode::Mode,
+    nostr::Connection,
+    nostr::ConnectionProcess,
     tui,
 };
 
@@ -64,7 +65,10 @@ impl App {
             component.init(tui.size()?)?;
         }
 
-        let mut conn = Conn::new(self.config.privatekey.clone(), self.config.relays.clone());
+        let keys = Keys::from_sk_str(&self.config.privatekey.clone())?;
+        let conn = Connection::new(keys.clone(), self.config.relays.clone()).await?;
+        let (mut req_rx, event_tx, terminate_tx, conn_wrapper) = ConnectionProcess::new(conn)?;
+        conn_wrapper.run();
 
         loop {
             if let Some(e) = tui.next().await {
@@ -102,7 +106,7 @@ impl App {
                 }
             }
 
-            while let Ok(event) = conn.recv() {
+            while let Ok(event) = req_rx.try_recv() {
                 action_tx.send(Action::ReceiveEvent(event))?;
             }
 
@@ -162,6 +166,7 @@ impl App {
                 // tui.mouse(true);
                 tui.enter()?;
             } else if self.should_quit {
+                terminate_tx.send(())?;
                 tui.stop()?;
                 break;
             }

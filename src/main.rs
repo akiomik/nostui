@@ -7,7 +7,6 @@ pub mod app;
 pub mod cli;
 pub mod components;
 pub mod config;
-pub mod conn;
 pub mod mode;
 pub mod nostr;
 pub mod text;
