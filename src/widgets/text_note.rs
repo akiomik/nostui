@@ -126,7 +126,70 @@ impl TextNote {
 
 impl Widget for TextNote {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        Paragraph::new(Text::from(self)).render(area, buf);
+        let content: Text = ShrinkText::new(
+            self.event.content.clone(),
+            self.content_width() as usize,
+            self.content_height() as usize,
+        )
+        .into();
+
+        let display_name = self.display_name();
+        let name = self.name();
+
+        let display_name_style = if self.highlight {
+            Style::default().bold().reversed()
+        } else {
+            Style::default().bold()
+        };
+
+        let name_style = if display_name.is_none() && self.highlight {
+            Style::default().italic().reversed()
+        } else {
+            Style::default().italic().fg(Color::Gray)
+        };
+
+        let name_line: Text = match (display_name, name) {
+            (Some(display_name), Some(name)) => Line::from(vec![
+                Span::styled(display_name, display_name_style),
+                Span::raw(" "),
+                Span::styled(name, name_style),
+            ])
+            .into(),
+            (Some(display_name), _) => Span::styled(display_name, display_name_style).into(),
+            (_, Some(name)) => Span::styled(name, name_style).into(),
+            (_, _) => Span::styled(self.pubkey(), display_name_style).into(),
+        };
+
+        let mut text = Text::default();
+        text.extend::<Text>(name_line);
+        text.extend(content);
+        text.extend(Text::styled(
+            self.created_at(),
+            Style::default().fg(Color::Gray),
+        ));
+        let line = Line::from(vec![
+            Span::styled(
+                format!("{}Likes", self.reactions_count()),
+                Style::default().fg(Color::LightRed),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                format!("{}Reposts", self.reposts_count()),
+                Style::default().fg(Color::LightGreen),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                format!("{}Sats", self.zap_amount() / 1000),
+                Style::default().fg(Color::LightYellow),
+            ),
+        ]);
+        text.extend::<Text>(line.into());
+        text.extend(Text::styled(
+            "─".repeat(self.content_width() as usize),
+            Style::default().fg(Color::Gray),
+        ));
+
+        Paragraph::new(text).render(area, buf);
     }
 }
 
@@ -148,75 +211,6 @@ impl Listable for TextNote {
             highlight: true,
             ..self
         }
-    }
-}
-
-impl<'a> From<TextNote> for Text<'a> {
-    fn from(value: TextNote) -> Self {
-        let content: Text = ShrinkText::new(
-            value.event.content.clone(),
-            value.content_width() as usize,
-            value.content_height() as usize,
-        )
-        .into();
-
-        let display_name = value.display_name();
-        let name = value.name();
-
-        let display_name_style = if value.highlight {
-            Style::default().bold().reversed()
-        } else {
-            Style::default().bold()
-        };
-
-        let name_style = if display_name.is_none() && value.highlight {
-            Style::default().italic().reversed()
-        } else {
-            Style::default().italic().fg(Color::Gray)
-        };
-
-        let name_line: Text = match (display_name, name) {
-            (Some(display_name), Some(name)) => Line::from(vec![
-                Span::styled(display_name, display_name_style),
-                Span::raw(" "),
-                Span::styled(name, name_style),
-            ])
-            .into(),
-            (Some(display_name), _) => Span::styled(display_name, display_name_style).into(),
-            (_, Some(name)) => Span::styled(name, name_style).into(),
-            (_, _) => Span::styled(value.pubkey(), display_name_style).into(),
-        };
-
-        let mut text = Text::default();
-        text.extend::<Text>(name_line);
-        text.extend(content);
-        text.extend(Text::styled(
-            value.created_at(),
-            Style::default().fg(Color::Gray),
-        ));
-        let line = Line::from(vec![
-            Span::styled(
-                format!("{}Likes", value.reactions_count()),
-                Style::default().fg(Color::LightRed),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                format!("{}Reposts", value.reposts_count()),
-                Style::default().fg(Color::LightGreen),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                format!("{}Sats", value.zap_amount() / 1000),
-                Style::default().fg(Color::LightYellow),
-            ),
-        ]);
-        text.extend::<Text>(line.into());
-        text.extend(Text::styled(
-            "─".repeat(value.content_width() as usize),
-            Style::default().fg(Color::Gray),
-        ));
-
-        text
     }
 }
 
