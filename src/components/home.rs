@@ -8,6 +8,7 @@ use ratatui::{prelude::*, widgets, widgets::*};
 use sorted_vec::ReverseSortedSet;
 use tokio::sync::mpsc::UnboundedSender;
 use tui_textarea::{Key, TextArea};
+use tui_widget_list::{List, ListState};
 
 use super::{Component, Frame};
 use crate::{
@@ -23,7 +24,7 @@ use crate::{
 pub struct Home<'a> {
     command_tx: Option<UnboundedSender<Action>>,
     config: Config,
-    list_state: ListState,
+    list_state: tui_widget_list::ListState,
     notes: ReverseSortedSet<SortableEvent>,
     profiles: HashMap<XOnlyPublicKey, NostrMetadata>,
     reactions: HashMap<EventId, HashSet<Event>>,
@@ -226,17 +227,16 @@ impl<'a> Component for Home<'a> {
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         let padding = Padding::new(1, 1, 1, 1);
-        let items: Vec<ListItem> = self
+        let items: Vec<TextNote> = self
             .notes
             .iter()
-            .map(|ev| ListItem::new(self.text_note(ev.0.event.clone(), area, padding)))
+            .map(|ev| self.text_note(ev.0.event.clone(), area, padding))
             .collect();
 
-        let list = List::new(items.clone())
+        let list = List::new(items)
             .block(widgets::Block::default().title("Timeline").padding(padding))
             .style(Style::default().fg(Color::White))
-            .highlight_style(Style::default().reversed())
-            .direction(ListDirection::TopToBottom);
+            .truncate(true);
 
         f.render_stateful_widget(list, area, &mut self.list_state);
 
