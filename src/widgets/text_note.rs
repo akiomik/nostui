@@ -17,6 +17,7 @@ pub struct TextNote {
     pub area: Rect,
     pub padding: Padding, // Only use to calc width/height
     pub highlight: bool,
+    pub top_truncated_height: Option<usize>,
 }
 
 impl TextNote {
@@ -38,6 +39,7 @@ impl TextNote {
             area,
             padding,
             highlight: false,
+            top_truncated_height: None,
         }
     }
 
@@ -127,10 +129,6 @@ impl TextNote {
 impl Widget for TextNote {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut text = Text::default();
-        text.extend(Text::styled(
-            "─".repeat(self.content_width() as usize),
-            Style::default().fg(Color::Gray),
-        ));
 
         let display_name = self.display_name();
         let name = self.name();
@@ -190,6 +188,19 @@ impl Widget for TextNote {
         ]);
         text.extend::<Text>(line.into());
 
+        text.extend(Text::styled(
+            "─".repeat(self.content_width() as usize),
+            Style::default().fg(Color::Gray),
+        ));
+
+        if let Some(height) = self.top_truncated_height {
+            let len = text.lines.len();
+            let index = len.saturating_sub(height);
+            let lines: Vec<Line> = Vec::from(&text.lines[index..]);
+            Paragraph::new(lines).render(area, buf);
+            return;
+        }
+
         Paragraph::new(text).render(area, buf);
     }
 }
@@ -210,6 +221,13 @@ impl Listable for TextNote {
     fn highlight(self) -> Self {
         Self {
             highlight: true,
+            ..self
+        }
+    }
+
+    fn truncate_top(self, height: usize) -> Self {
+        Self {
+            top_truncated_height: Some(height),
             ..self
         }
     }
