@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use chrono::{DateTime, Local};
 use nostr_sdk::{Event, Metadata, Tag};
 use ratatui::{prelude::*, widgets::*};
+use tui_widget_list::Listable;
 
 use crate::widgets::shrink_text::ShrinkText;
 
@@ -15,6 +16,7 @@ pub struct TextNote {
     pub zap_receipts: HashSet<Event>,
     pub area: Rect,
     pub padding: Padding, // Only use to calc width/height
+    pub highlight: bool,
 }
 
 impl TextNote {
@@ -35,6 +37,7 @@ impl TextNote {
             zap_receipts,
             area,
             padding,
+            highlight: false,
         }
     }
 
@@ -127,6 +130,32 @@ impl TextNote {
     }
 }
 
+impl Widget for TextNote {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        Paragraph::new(Text::from(self)).render(area, buf);
+    }
+}
+
+impl Listable for TextNote {
+    fn height(&self) -> usize {
+        let content: Text = ShrinkText::new(
+            self.event.content.clone(),
+            self.content_width() as usize,
+            self.content_height() as usize,
+        )
+        .into();
+
+        4 + content.height()
+    }
+
+    fn highlight(self) -> Self {
+        Self {
+            highlight: true,
+            ..self
+        }
+    }
+}
+
 impl<'a> From<TextNote> for Text<'a> {
     fn from(value: TextNote) -> Self {
         let content: Text = ShrinkText::new(
@@ -145,10 +174,22 @@ impl<'a> From<TextNote> for Text<'a> {
             .map(|name| format!("{name} "))
             .unwrap_or_default();
 
+        let display_name_style = if value.highlight {
+            Style::default().bold().reversed()
+        } else {
+            Style::default().bold()
+        };
+
+        let name_style = if display_name.is_empty() && value.highlight {
+            Style::default().italic().fg(Color::Gray).reversed()
+        } else {
+            Style::default().italic().fg(Color::Gray)
+        };
+
         let mut text = Text::default();
         let name_line = Line::from(vec![
-            Span::styled(display_name, Style::default().bold()),
-            Span::styled(name, Style::default().italic().fg(Color::Gray)),
+            Span::styled(display_name, display_name_style),
+            Span::styled(name, name_style),
         ]);
         text.extend::<Text>(name_line.into());
         text.extend(content);
