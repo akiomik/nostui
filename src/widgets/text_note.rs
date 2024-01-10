@@ -139,6 +139,7 @@ impl Listable for TextNote {
         )
         .into();
 
+        // NOTE: 4 = name + created_at + stats + separator
         4 + content.height()
     }
 
