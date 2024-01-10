@@ -48,15 +48,9 @@ impl TextNote {
                     return Some(display_name);
                 }
             }
-
-            if let Some(name) = profile.name {
-                if !name.is_empty() {
-                    return None;
-                }
-            }
         }
 
-        Some(self.pubkey())
+        None
     }
 
     pub fn name(&self) -> Option<String> {
@@ -165,14 +159,8 @@ impl<'a> From<TextNote> for Text<'a> {
         )
         .into();
 
-        let display_name = value
-            .display_name()
-            .map(|name| format!("{name} "))
-            .unwrap_or_default();
-        let name = value
-            .name()
-            .map(|name| format!("{name} "))
-            .unwrap_or_default();
+        let display_name = value.display_name();
+        let name = value.name();
 
         let display_name_style = if value.highlight {
             Style::default().bold().reversed()
@@ -180,18 +168,26 @@ impl<'a> From<TextNote> for Text<'a> {
             Style::default().bold()
         };
 
-        let name_style = if display_name.is_empty() && value.highlight {
-            Style::default().italic().fg(Color::Gray).reversed()
+        let name_style = if display_name.is_none() && value.highlight {
+            Style::default().italic().reversed()
         } else {
             Style::default().italic().fg(Color::Gray)
         };
 
+        let name_line: Text = match (display_name, name) {
+            (Some(display_name), Some(name)) => Line::from(vec![
+                Span::styled(display_name, display_name_style),
+                Span::raw(" "),
+                Span::styled(name, name_style),
+            ])
+            .into(),
+            (Some(display_name), _) => Span::styled(display_name, display_name_style).into(),
+            (_, Some(name)) => Span::styled(name, name_style).into(),
+            (_, _) => Span::styled(value.pubkey(), display_name_style).into(),
+        };
+
         let mut text = Text::default();
-        let name_line = Line::from(vec![
-            Span::styled(display_name, display_name_style),
-            Span::styled(name, name_style),
-        ]);
-        text.extend::<Text>(name_line.into());
+        text.extend::<Text>(name_line);
         text.extend(content);
         text.extend(Text::styled(
             value.created_at(),
@@ -271,12 +267,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(None, Some(String::from("4d39c:aae25")))]
-    #[case(Some(Metadata::new()), Some(String::from("4d39c:aae25")))]
+    #[case(None, None)]
+    #[case(Some(Metadata::new()), None)]
     #[case(Some(Metadata::new().name("foo")), None)]
     #[case(Some(Metadata::new().display_name("foo")), Some(String::from("foo")))]
-    #[case(Some(Metadata::new().display_name("")), Some(String::from("4d39c:aae25")))]
-    #[case(Some(Metadata::new().display_name("").name("")), Some(String::from("4d39c:aae25")))]
+    #[case(Some(Metadata::new().display_name("")), None)]
+    #[case(Some(Metadata::new().display_name("").name("")), None)]
     #[case(Some(Metadata::new().display_name("").name("hoge")), None)]
     fn test_display_name(
         #[case] metadata: Option<Metadata>,
