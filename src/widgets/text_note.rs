@@ -126,12 +126,11 @@ impl TextNote {
 
 impl Widget for TextNote {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let content: Text = ShrinkText::new(
-            self.event.content.clone(),
-            self.content_width() as usize,
-            self.content_height() as usize,
-        )
-        .into();
+        let mut text = Text::default();
+        text.extend(Text::styled(
+            "─".repeat(self.content_width() as usize),
+            Style::default().fg(Color::Gray),
+        ));
 
         let display_name = self.display_name();
         let name = self.name();
@@ -159,10 +158,16 @@ impl Widget for TextNote {
             (_, Some(name)) => Span::styled(name, name_style).into(),
             (_, _) => Span::styled(self.pubkey(), display_name_style).into(),
         };
-
-        let mut text = Text::default();
         text.extend::<Text>(name_line);
+
+        let content: Text = ShrinkText::new(
+            self.event.content.clone(),
+            self.content_width() as usize,
+            self.content_height() as usize,
+        )
+        .into();
         text.extend(content);
+
         text.extend(Text::styled(
             self.created_at(),
             Style::default().fg(Color::Gray),
@@ -184,10 +189,6 @@ impl Widget for TextNote {
             ),
         ]);
         text.extend::<Text>(line.into());
-        text.extend(Text::styled(
-            "─".repeat(self.content_width() as usize),
-            Style::default().fg(Color::Gray),
-        ));
 
         Paragraph::new(text).render(area, buf);
     }

@@ -33,7 +33,7 @@ impl Connection {
                 Kind::Reaction,
                 Kind::ZapReceipt,
             ])
-            .since(Timestamp::now() - Duration::new(60 * 5, 0)); // 5min
+            .since(Timestamp::now() - Duration::new(60 * 10, 0)); // 5min
         let profile_filter = Filter::new().authors(followings).kinds([Kind::Metadata]);
         self.client
             .subscribe(vec![timeline_filter, profile_filter])
