@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     action::Action,
-    components::{Component, FpsCounter, Home},
+    components::{Component, FpsCounter, Home, StatusBar},
     config::Config,
     mode::Mode,
     nostr::Connection,
@@ -31,11 +31,13 @@ impl App {
         let home = Home::new();
         let fps = FpsCounter::default();
         let config = Config::new()?;
+        let pubkey = Keys::from_sk_str(config.privatekey.as_str())?.public_key();
+        let status_bar = StatusBar::new(pubkey, None);
         let mode = Mode::Home;
         Ok(Self {
             tick_rate,
             frame_rate,
-            components: vec![Box::new(home), Box::new(fps)],
+            components: vec![Box::new(home), Box::new(fps), Box::new(status_bar)],
             should_quit: false,
             should_suspend: false,
             config,

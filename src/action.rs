@@ -33,4 +33,5 @@ pub enum Action {
     SubmitTextNote,
     SendTextNote(String),
     Key(KeyEvent),
+    MetadataUpdated(Metadata),
 }

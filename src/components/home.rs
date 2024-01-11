@@ -226,7 +226,7 @@ impl<'a> Component for Home<'a> {
     }
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        let padding = Padding::new(1, 1, 1, 1);
+        let padding = Padding::new(1, 1, 1, 2);
         let items: Vec<TextNote> = self
             .notes
             .iter()

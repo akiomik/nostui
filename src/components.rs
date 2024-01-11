@@ -11,9 +11,11 @@ use crate::{
 
 mod fps;
 mod home;
+mod status_bar;
 
 pub use fps::FpsCounter;
 pub use home::Home;
+pub use status_bar::StatusBar;
 
 /// `Component` is a trait that represents a visual and interactive element of the user interface.
 /// Implementors of this trait can be registered with the main application loop and will be able to receive events,
