@@ -32,7 +32,7 @@ impl App {
         let fps = FpsCounter::default();
         let config = Config::new()?;
         let pubkey = Keys::from_sk_str(config.privatekey.as_str())?.public_key();
-        let status_bar = StatusBar::new(pubkey, None);
+        let status_bar = StatusBar::new(pubkey, None, None, true);
         let mode = Mode::Home;
         Ok(Self {
             tick_rate,
@@ -155,16 +155,19 @@ impl App {
                         let event = EventBuilder::new_reaction(id, pubkey, "+").to_event(&keys)?;
                         log::info!("Send reaction: {event:?}");
                         event_tx.send(event)?;
+                        action_tx.send(Action::SystemMessage(format!("[Liked] {id}")))?;
                     }
                     Action::SendRepost((id, pubkey)) => {
                         let event = EventBuilder::repost(id, pubkey).to_event(&keys)?;
                         log::info!("Send repost: {event:?}");
                         event_tx.send(event)?;
+                        action_tx.send(Action::SystemMessage(format!("[Reposted] {id}")))?;
                     }
                     Action::SendTextNote(ref content) => {
                         let event = EventBuilder::new_text_note(content, []).to_event(&keys)?;
                         log::info!("Send text note: {event:?}");
                         event_tx.send(event)?;
+                        action_tx.send(Action::SystemMessage(format!("[Posted] {content}")))?;
                     }
                     _ => {}
                 }

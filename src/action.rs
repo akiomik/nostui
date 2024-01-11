@@ -34,4 +34,5 @@ pub enum Action {
     SendTextNote(String),
     Key(KeyEvent),
     MetadataUpdated(Metadata),
+    SystemMessage(String),
 }
