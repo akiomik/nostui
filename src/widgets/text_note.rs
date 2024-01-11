@@ -5,7 +5,7 @@ use nostr_sdk::{Event, Metadata, Tag};
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::Listable;
 
-use crate::widgets::shrink_text::ShrinkText;
+use crate::widgets::{PublicKey, ShrinkText};
 
 #[derive(Clone, Debug)]
 pub struct TextNote {
@@ -68,14 +68,6 @@ impl TextNote {
         }
 
         None
-    }
-
-    pub fn pubkey(&self) -> String {
-        let pubkey = self.event.pubkey.to_string();
-        let len = pubkey.len();
-        let heading = &pubkey[0..5];
-        let trail = &pubkey[(len - 5)..len];
-        format!("{}:{}", heading, trail)
     }
 
     pub fn created_at(&self) -> String {
@@ -154,7 +146,10 @@ impl Widget for TextNote {
             .into(),
             (Some(display_name), _) => Span::styled(display_name, display_name_style).into(),
             (_, Some(name)) => Span::styled(name, name_style).into(),
-            (_, _) => Span::styled(self.pubkey(), display_name_style).into(),
+            (_, _) => Text::styled(
+                PublicKey::new(self.event.pubkey).shortened(),
+                display_name_style,
+            ),
         };
         text.extend::<Text>(name_line);
 
@@ -264,20 +259,6 @@ mod tests {
     #[fixture]
     fn padding() -> Padding {
         Padding::new(0, 0, 0, 0)
-    }
-
-    #[rstest]
-    fn test_pubkey(event: Event, area: Rect, padding: Padding) {
-        let note = TextNote::new(
-            event,
-            None,
-            HashSet::new(),
-            HashSet::new(),
-            HashSet::new(),
-            area,
-            padding,
-        );
-        assert_eq!(note.pubkey(), "4d39c:aae25");
     }
 
     #[rstest]
