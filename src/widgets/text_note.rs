@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use chrono::{DateTime, Local};
-use nostr_sdk::{Event, Metadata, Tag};
+use nostr_sdk::{Event, Metadata, Tag, ToBech32};
 use ratatui::{prelude::*, widgets::*};
 use thousands::Separable;
 use tui_widget_list::Listable;
@@ -95,6 +95,15 @@ impl TextNote {
             .cloned()
     }
 
+    fn find_reply_tag(&self) -> Option<Tag> {
+        self.event
+            .tags
+            .iter()
+            .filter(|tag| matches!(tag, Tag::Event { .. }))
+            .last()
+            .cloned()
+    }
+
     pub fn zap_amount(&self) -> u64 {
         self.zap_receipts.iter().fold(0, |acc, ev| {
             if let Some(Tag::Amount { millisats, bolt11 }) = self.find_amount(ev) {
@@ -122,6 +131,15 @@ impl TextNote {
 impl Widget for TextNote {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut text = Text::default();
+
+        if let Some(Tag::Event { event_id, .. }) = self.find_reply_tag() {
+            if let Ok(note1) = event_id.to_bech32() {
+                text.extend(Text::styled(
+                    format!("Reply to {}", note1),
+                    Style::default().fg(Color::Cyan),
+                ));
+            }
+        }
 
         let display_name = self.display_name();
         let name = self.name();
@@ -209,6 +227,11 @@ impl Listable for TextNote {
             self.content_height() as usize,
         )
         .into();
+
+        if self.find_reply_tag().is_some() {
+            // NOTE: 5 = annotation + name + created_at + stats + separator
+            return 5 + content.height();
+        }
 
         // NOTE: 4 = name + created_at + stats + separator
         4 + content.height()
