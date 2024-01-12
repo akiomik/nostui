@@ -247,7 +247,7 @@ impl Listable for TextNote {
 
 #[cfg(test)]
 mod tests {
-    use nostr_sdk::{EventBuilder, JsonUtil, Keys};
+    use nostr_sdk::JsonUtil;
     use pretty_assertions::assert_eq;
     use rstest::*;
 

@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 use nostr_sdk::{JsonUtil, Metadata as NostrMetadata};
-use tracing_subscriber::field::display;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Metadata {

@@ -1,21 +1,20 @@
 use std::cmp::Reverse;
+use std::collections::HashSet;
 use std::collections::{hash_map::Entry, HashMap};
-use std::collections::{HashSet, VecDeque};
 
 use color_eyre::eyre::Result;
 use nostr_sdk::prelude::{Metadata as NostrMetadata, *};
 use ratatui::{prelude::*, widgets, widgets::*};
 use sorted_vec::ReverseSortedSet;
 use tokio::sync::mpsc::UnboundedSender;
-use tui_textarea::{Key, TextArea};
-use tui_widget_list::{List, ListState};
+use tui_textarea::TextArea;
+use tui_widget_list::List;
 
 use super::{Component, Frame};
 use crate::{
     action::Action,
     config::Config,
     nostr::{Metadata, SortableEvent},
-    text,
     widgets::ScrollableList,
     widgets::TextNote,
 };

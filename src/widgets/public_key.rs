@@ -1,5 +1,5 @@
 use nostr_sdk::prelude::*;
-use ratatui::{prelude::*, widgets::*};
+use ratatui::prelude::*;
 
 pub struct PublicKey {
     key: XOnlyPublicKey,

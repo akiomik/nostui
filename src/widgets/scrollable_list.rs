@@ -1,5 +1,3 @@
-use ratatui::{prelude::*, widgets, widgets::*};
-
 pub trait ScrollableList<T> {
     fn select(&mut self, index: Option<usize>);
 

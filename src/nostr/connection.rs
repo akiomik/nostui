@@ -1,10 +1,7 @@
 use std::time::Duration;
 
 use color_eyre::eyre::Result;
-use futures::channel::mpsc::Receiver;
 use nostr_sdk::prelude::*;
-
-use crate::config::Config;
 
 pub struct Connection {
     keys: Keys,

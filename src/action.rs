@@ -1,11 +1,6 @@
-use std::{fmt, string::ToString};
-
 use crossterm::event::KeyEvent;
 use nostr_sdk::prelude::*;
-use serde::{
-    de::{self, Deserializer, Visitor},
-    Deserialize, Serialize,
-};
+use serde::{Deserialize, Serialize};
 use strum::Display;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Display, Deserialize)]

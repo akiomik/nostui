@@ -1,17 +1,10 @@
-use std::{collections::HashMap, fmt, path::PathBuf, process::exit};
+use std::collections::HashMap;
 
 use color_eyre::eyre::Result;
-use config::{ConfigError, Value};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use derive_deref::{Deref, DerefMut};
-use ratatui::style::{Color, Modifier, Style};
-use serde::{
-    de::{self, Deserializer, MapAccess, Visitor},
-    Deserialize, Serialize,
-};
-use serde_json::Value as JsonValue;
+use serde::{de::Deserializer, Deserialize};
 
-use crate::utils;
 use crate::{action::Action, mode::Mode};
 
 #[derive(Clone, Debug, Default, Deref, DerefMut)]
