@@ -1,6 +1,5 @@
 #![deny(warnings)]
 #![allow(dead_code)]
-#![allow(unused_variables)]
 
 pub mod action;
 pub mod app;

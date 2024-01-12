@@ -56,6 +56,7 @@ pub trait Component {
     /// # Returns
     ///
     /// * `Result<()>` - An Ok result or an error.
+    #[allow(unused_variables)]
     fn init(&mut self, area: Rect) -> Result<()> {
         Ok(())
     }

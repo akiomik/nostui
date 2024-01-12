@@ -90,7 +90,7 @@ impl TextNote {
     fn find_amount(&self, ev: &Event) -> Option<Tag> {
         ev.tags
             .iter()
-            .filter(|tag| matches!(tag, Tag::Amount { millisats, bolt11 }))
+            .filter(|tag| matches!(tag, Tag::Amount { .. }))
             .last()
             .cloned()
     }
@@ -106,7 +106,7 @@ impl TextNote {
 
     pub fn zap_amount(&self) -> u64 {
         self.zap_receipts.iter().fold(0, |acc, ev| {
-            if let Some(Tag::Amount { millisats, bolt11 }) = self.find_amount(ev) {
+            if let Some(Tag::Amount { millisats, .. }) = self.find_amount(ev) {
                 acc + millisats
             } else {
                 acc
