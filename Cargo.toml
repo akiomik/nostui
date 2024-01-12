@@ -10,7 +10,7 @@ homepage = "https://github.com/akiomik/nostui"
 authors = ["Akiomi Kamakura <akiomik@gmail.com>"]
 license = "MIT"
 readme = "README.md"
-include = ["src", "LICENSE", "README.md", "screenshot.gif"]
+include = ["src", "LICENSE", "README.md", "screenshot.gif", ".config"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
