@@ -59,7 +59,13 @@ cargo install --path .
 ### Commands
 
 ```shell
-nostui
+nostui [OPTIONS]
+
+Options:
+  -t, --tick-rate <FLOAT>   Tick rate, i.e. number of ticks per second [default: 16]
+  -f, --frame-rate <FLOAT>  Frame rate, i.e. number of frames per second [default: 16]
+  -h, --help                Print help
+  -V, --version             Print version
 ```
 
 ### Default Keybindings
