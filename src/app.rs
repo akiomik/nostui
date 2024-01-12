@@ -155,13 +155,15 @@ impl App {
                         let event = EventBuilder::new_reaction(id, pubkey, "+").to_event(&keys)?;
                         log::info!("Send reaction: {event:?}");
                         event_tx.send(event)?;
-                        action_tx.send(Action::SystemMessage(format!("[Liked] {id}")))?;
+                        let note1 = id.to_bech32()?;
+                        action_tx.send(Action::SystemMessage(format!("[Liked] {note1}")))?;
                     }
                     Action::SendRepost((id, pubkey)) => {
                         let event = EventBuilder::repost(id, pubkey).to_event(&keys)?;
                         log::info!("Send repost: {event:?}");
                         event_tx.send(event)?;
-                        action_tx.send(Action::SystemMessage(format!("[Reposted] {id}")))?;
+                        let note1 = id.to_bech32()?;
+                        action_tx.send(Action::SystemMessage(format!("[Reposted] {note1}")))?;
                     }
                     Action::SendTextNote(ref content) => {
                         let event = EventBuilder::new_text_note(content, []).to_event(&keys)?;
