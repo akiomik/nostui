@@ -243,13 +243,6 @@ impl Listable for TextNote {
             ..self
         }
     }
-
-    // fn truncate_top(self, height: usize) -> Self {
-    //     Self {
-    //         top_truncated_height: Some(height),
-    //         ..self
-    //     }
-    // }
 }
 
 #[cfg(test)]
