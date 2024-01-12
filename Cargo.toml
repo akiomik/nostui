@@ -45,7 +45,7 @@ tracing = "0.1.37"
 tracing-error = "0.2.0"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter", "serde"] }
 tui-textarea = "0.4.0"
-tui-widget-list = { git = "https://github.com/preiter93/tui-widget-list.git", branch = "i-6/truncate-top-item" }
+tui-widget-list = "0.6.1"
 unicode-width = "0.1.11"
 
 [dev-dependencies]
