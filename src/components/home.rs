@@ -243,6 +243,7 @@ impl<'a> Component for Home<'a> {
             let mut input_area = f.size();
             input_area.height /= 2;
             input_area.y = input_area.height;
+            input_area.height -= 2;
             f.render_widget(Clear, input_area);
 
             self.input.set_block(
