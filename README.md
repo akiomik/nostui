@@ -36,6 +36,9 @@ cargo install --path .
 
 ### Setup
 
+> [!NOTE]
+> Other extensions supported are `.json5`, `.yaml`, `.toml` and `.ini`.
+
 1. Create a `config.json` to the following path:
 
 - Linux: `~/.config/notsui/config.json`
@@ -44,7 +47,7 @@ cargo install --path .
 
 2. Add your privatekey to the `config.json`:
 
-```jsonc
+```json5
 {
     "privatekey": "nsec1...",
     "relays": ["wss://nos.lol"] // optional
