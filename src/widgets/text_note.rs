@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use chrono::{DateTime, Local};
 use nostr_sdk::{Event, Metadata, Tag};
 use ratatui::{prelude::*, widgets::*};
+use thousands::Separable;
 use tui_widget_list::Listable;
 
 use crate::widgets::{PublicKey, ShrinkText};
@@ -167,17 +168,17 @@ impl Widget for TextNote {
         ));
         let line = Line::from(vec![
             Span::styled(
-                format!("{}Likes", self.reactions_count()),
+                format!("{}Likes", self.reactions_count().separate_with_commas()),
                 Style::default().fg(Color::LightRed),
             ),
             Span::raw(" "),
             Span::styled(
-                format!("{}Reposts", self.reposts_count()),
+                format!("{}Reposts", self.reposts_count().separate_with_commas()),
                 Style::default().fg(Color::LightGreen),
             ),
             Span::raw(" "),
             Span::styled(
-                format!("{}Sats", self.zap_amount() / 1000),
+                format!("{}Sats", (self.zap_amount() / 1000).separate_with_commas()),
                 Style::default().fg(Color::LightYellow),
             ),
         ]);
