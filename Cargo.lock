@@ -2434,7 +2434,7 @@ dependencies = [
 [[package]]
 name = "tui-widget-list"
 version = "0.6.0"
-source = "git+https://github.com/akiomik/tui-widget-list.git?branch=truncate-top#12c4e25a343593c054f920ec9e79eff2509c97f7"
+source = "git+https://github.com/preiter93/tui-widget-list.git?branch=i-6/truncate-top-item#9f15df61ca18abcb64bc94f997042be0a88e4f4b"
 dependencies = [
  "ratatui",
 ]
