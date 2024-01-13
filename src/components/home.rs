@@ -14,7 +14,7 @@ use super::{Component, Frame};
 use crate::{
     action::Action,
     config::Config,
-    nostr::{Metadata, SortableEvent},
+    nostr::{nip10::ReplyTagsBuilder, Metadata, SortableEvent},
     widgets::ScrollableList,
     widgets::TextNote,
 };
@@ -31,6 +31,7 @@ pub struct Home<'a> {
     zap_receipts: HashMap<EventId, HashSet<Event>>,
     show_input: bool,
     input: TextArea<'a>,
+    reply_to: Option<Event>,
 }
 
 impl<'a> Home<'a> {
@@ -200,15 +201,30 @@ impl<'a> Component for Home<'a> {
             Action::Unselect => {
                 self.list_state.select(None);
                 self.show_input = false;
+                self.reply_to = None;
             }
             Action::NewTextNote => {
+                self.reply_to = None;
                 self.show_input = true;
+            }
+            Action::ReplyTextNote => {
+                if let Some(i) = self.selected() {
+                    let selected = self.get_note(i).unwrap();
+                    self.reply_to = Some(selected.clone());
+                    self.show_input = true;
+                }
             }
             Action::SubmitTextNote => {
                 if let (true, Some(tx)) = (self.show_input, &self.command_tx) {
                     let content = self.input.lines().join("\n");
                     if !content.is_empty() {
-                        tx.send(Action::SendTextNote(content))?;
+                        let tags = if let Some(ref reply_to) = self.reply_to {
+                            ReplyTagsBuilder::build(reply_to.clone())
+                        } else {
+                            vec![]
+                        };
+                        tx.send(Action::SendTextNote(content, tags))?;
+                        self.reply_to = None;
                         self.show_input = false;
                         self.clear_input();
                     }
@@ -246,11 +262,33 @@ impl<'a> Component for Home<'a> {
             input_area.height -= 2;
             f.render_widget(Clear, input_area);
 
-            self.input.set_block(
+            let block = if let Some(ref reply_to) = self.reply_to {
+                let name = if let Some(profile) = self.profiles.get(&reply_to.pubkey) {
+                    match (
+                        profile.display_name.clone(),
+                        profile.name.clone(),
+                        reply_to.pubkey.to_bech32(),
+                    ) {
+                        (Some(display_name), _, _) if !display_name.is_empty() => display_name,
+                        (_, Some(name), _) if !name.is_empty() => format!("@{name}"),
+                        (_, _, Ok(npub)) => npub,
+                        _ => reply_to.pubkey.to_string(),
+                    }
+                } else if let Ok(npub) = reply_to.pubkey.to_bech32() {
+                    npub.to_string()
+                } else {
+                    reply_to.pubkey.to_string()
+                };
+
                 widgets::Block::default()
                     .borders(Borders::ALL)
-                    .title("New note: Press ESC to close"),
-            );
+                    .title(format!("Replying to {name}: Press ESC to close"))
+            } else {
+                widgets::Block::default()
+                    .borders(Borders::ALL)
+                    .title("New note: Press ESC to close")
+            };
+            self.input.set_block(block);
             f.render_widget(self.input.widget(), input_area);
         }
 

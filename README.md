@@ -9,7 +9,7 @@ A TUI client for [Nostr](https://nostr.com)
 ## Current features
 
 - Timeline
-- Post, Reaction, Repost
+- Post, Reply, Reaction, Repost
 
 ## Getting Started
 
@@ -70,16 +70,17 @@ Options:
 
 ### Default Keybindings
 
-| Keybinding            | Description      |
-| --------------------- | ---------------- |
-| `k` `up`              | Scroll up        |
-| `j` `down`            | Scroll down      |
-| `q` `Ctrl-c` `Ctrl-d` | Quit             |
-| `home` `g`            | Scroll to top    |
-| `end` `Shift-g`       | Scroll to bottom |
-| `Ctrl-z`              | Suspend          |
-| `esc`                 | Unselect         |
-| `n`                   | New text note    |
-| `Ctrl-p`              | Submit text note |
-| `f`                   | Send reaction    |
-| `t`                   | Repost           |
+| Keybinding            | Description                |
+| --------------------- | -------------------------- |
+| `k` `up`              | Scroll up                  |
+| `j` `down`            | Scroll down                |
+| `q` `Ctrl-c` `Ctrl-d` | Quit                       |
+| `home` `g`            | Scroll to top              |
+| `end` `Shift-g`       | Scroll to bottom           |
+| `Ctrl-z`              | Suspend                    |
+| `esc`                 | Unselect                   |
+| `n`                   | New text note              |
+| `Ctrl-p`              | Submit text note           |
+| `r`                   | Reply to the selected note |
+| `f`                   | Send reaction              |
+| `t`                   | Repost                     |

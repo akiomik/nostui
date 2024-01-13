@@ -17,6 +17,7 @@
       "<Ctrl-c>": "Quit",            // Yet another way to quit
       "<Ctrl-z>": "Suspend",         // Suspend the application
       "<n>": "NewTextNote",          // Show the text note input form
+      "<r>": "ReplyTextNote",        // Show the text note input form to reply
       "<Ctrl-p>": "SubmitTextNote"   // Submit the text note on input form
     }
   },
