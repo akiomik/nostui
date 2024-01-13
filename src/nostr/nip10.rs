@@ -43,10 +43,9 @@ impl ReplyTagsBuilder {
             marker,
         });
 
-        if ptags
+        if !ptags
             .iter()
-            .find(|tag| matches!(tag, Tag::PublicKey { public_key, .. } if *public_key == reply_to.pubkey))
-            .is_none()
+            .any(|tag| matches!(tag, Tag::PublicKey { public_key, .. } if *public_key == reply_to.pubkey))
         {
             ptags.push(Tag::PublicKey {
                 public_key: reply_to.pubkey,
