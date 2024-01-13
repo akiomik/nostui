@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::collections::{hash_map::Entry, HashMap};
 
 use color_eyre::eyre::Result;
-use nostr_sdk::prelude::{Metadata as NostrMetadata, *};
+use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets, widgets::*};
 use sorted_vec::ReverseSortedSet;
 use tokio::sync::mpsc::UnboundedSender;
@@ -11,10 +11,11 @@ use tui_textarea::TextArea;
 use tui_widget_list::List;
 
 use super::{Component, Frame};
+use crate::text::shorten_hex;
 use crate::{
     action::Action,
     config::Config,
-    nostr::{nip10::ReplyTagsBuilder, Metadata, SortableEvent},
+    nostr::{nip10::ReplyTagsBuilder, Metadata, Profile, SortableEvent},
     widgets::ScrollableList,
     widgets::TextNote,
 };
@@ -25,7 +26,7 @@ pub struct Home<'a> {
     config: Config,
     list_state: tui_widget_list::ListState,
     notes: ReverseSortedSet<SortableEvent>,
-    profiles: HashMap<XOnlyPublicKey, NostrMetadata>,
+    profiles: HashMap<XOnlyPublicKey, Profile>,
     reactions: HashMap<EventId, HashSet<Event>>,
     reposts: HashMap<EventId, HashSet<Event>>,
     zap_receipts: HashMap<EventId, HashSet<Event>>,
@@ -58,8 +59,14 @@ impl<'a> Home<'a> {
 
     fn add_profile(&mut self, event: Event) {
         if let Ok(metadata) = Metadata::from_json(event.content.clone()) {
-            self.profiles
-                .insert(event.pubkey, NostrMetadata::from(metadata));
+            let profile = Profile::new(event.pubkey, event.created_at, metadata);
+            if let Some(existing_profile) = self.profiles.get(&event.pubkey) {
+                if existing_profile.created_at > profile.created_at {
+                    return;
+                }
+            }
+
+            self.profiles.insert(event.pubkey, profile);
         }
     }
 
@@ -264,20 +271,9 @@ impl<'a> Component for Home<'a> {
 
             let block = if let Some(ref reply_to) = self.reply_to {
                 let name = if let Some(profile) = self.profiles.get(&reply_to.pubkey) {
-                    match (
-                        profile.display_name.clone(),
-                        profile.name.clone(),
-                        reply_to.pubkey.to_bech32(),
-                    ) {
-                        (Some(display_name), _, _) if !display_name.is_empty() => display_name,
-                        (_, Some(name), _) if !name.is_empty() => format!("@{name}"),
-                        (_, _, Ok(npub)) => npub,
-                        _ => reply_to.pubkey.to_string(),
-                    }
-                } else if let Ok(npub) = reply_to.pubkey.to_bech32() {
-                    npub.to_string()
+                    profile.name()
                 } else {
-                    reply_to.pubkey.to_string()
+                    shorten_hex(&reply_to.pubkey.to_string())
                 };
 
                 widgets::Block::default()

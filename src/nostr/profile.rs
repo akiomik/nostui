@@ -3,6 +3,7 @@ use nostr_sdk::prelude::*;
 use crate::nostr::Metadata;
 use crate::text::shorten_hex;
 
+#[derive(Clone, Debug)]
 pub struct Profile {
     pub pubkey: XOnlyPublicKey,
     pub created_at: Timestamp,

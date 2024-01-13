@@ -1,17 +1,18 @@
 use std::collections::HashSet;
 
 use chrono::{DateTime, Local};
-use nostr_sdk::{Event, Metadata, Tag, ToBech32};
+use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets::*};
 use thousands::Separable;
 use tui_widget_list::Listable;
 
+use crate::nostr::Profile;
 use crate::widgets::{PublicKey, ShrinkText};
 
 #[derive(Clone, Debug)]
 pub struct TextNote {
     pub event: Event,
-    pub profile: Option<Metadata>,
+    pub profile: Option<Profile>,
     pub reactions: HashSet<Event>,
     pub reposts: HashSet<Event>,
     pub zap_receipts: HashSet<Event>,
@@ -24,7 +25,7 @@ pub struct TextNote {
 impl TextNote {
     pub fn new(
         event: Event,
-        profile: Option<Metadata>,
+        profile: Option<Profile>,
         reactions: HashSet<Event>,
         reposts: HashSet<Event>,
         zap_receipts: HashSet<Event>,
@@ -46,7 +47,7 @@ impl TextNote {
 
     pub fn display_name(&self) -> Option<String> {
         if let Some(profile) = self.profile.clone() {
-            if let Some(display_name) = profile.display_name {
+            if let Some(display_name) = profile.metadata.display_name {
                 if !display_name.is_empty() {
                     return Some(display_name);
                 }
@@ -58,7 +59,7 @@ impl TextNote {
 
     pub fn name(&self) -> Option<String> {
         if let Some(profile) = self.profile.clone() {
-            if let Some(name) = profile.name {
+            if let Some(name) = profile.metadata.name {
                 if !name.is_empty() {
                     match self.display_name() {
                         Some(display_name) if name == display_name => return None,
@@ -247,11 +248,14 @@ impl Listable for TextNote {
 
 #[cfg(test)]
 mod tests {
-    use nostr_sdk::JsonUtil;
+    use std::str::FromStr;
+
+    use nostr_sdk::{secp256k1::XOnlyPublicKey, JsonUtil};
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
+    use crate::nostr::Metadata;
 
     #[fixture]
     fn event() -> Event {
@@ -293,9 +297,20 @@ mod tests {
         area: Rect,
         padding: Padding,
     ) {
+        let profile = metadata.map(|metadata| {
+            Profile::new(
+                XOnlyPublicKey::from_str(
+                    "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
+                )
+                .unwrap(),
+                Timestamp::now(),
+                metadata,
+            )
+        });
+
         let note = TextNote::new(
             event,
-            metadata,
+            profile,
             HashSet::new(),
             HashSet::new(),
             HashSet::new(),
@@ -319,9 +334,20 @@ mod tests {
         area: Rect,
         padding: Padding,
     ) {
+        let profile = metadata.map(|metadata| {
+            Profile::new(
+                XOnlyPublicKey::from_str(
+                    "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
+                )
+                .unwrap(),
+                Timestamp::now(),
+                metadata,
+            )
+        });
+
         let note = TextNote::new(
             event,
-            metadata,
+            profile,
             HashSet::new(),
             HashSet::new(),
             HashSet::new(),

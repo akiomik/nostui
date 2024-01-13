@@ -5,12 +5,13 @@ use ratatui::{prelude::*, widgets::*};
 use crate::action::Action;
 use crate::components::Component;
 use crate::nostr::Metadata;
+use crate::nostr::Profile;
 use crate::tui::Frame;
 use crate::widgets::PublicKey;
 
 pub struct StatusBar {
     pubkey: XOnlyPublicKey,
-    metadata: Option<Metadata>,
+    profile: Option<Profile>,
     message: Option<String>,
     is_loading: bool,
 }
@@ -18,30 +19,26 @@ pub struct StatusBar {
 impl StatusBar {
     pub fn new(
         pubkey: XOnlyPublicKey,
-        metadata: Option<Metadata>,
+        profile: Option<Profile>,
         message: Option<String>,
         is_loading: bool,
     ) -> Self {
         Self {
             pubkey,
-            metadata,
+            profile,
             message,
             is_loading,
         }
     }
 
-    pub fn set_metadata(&mut self, metadata: Option<Metadata>) {
-        self.metadata = metadata;
+    pub fn set_profile(&mut self, profile: Option<Profile>) {
+        self.profile = profile;
     }
 
     pub fn name(&self) -> String {
-        self.metadata
+        self.profile
             .clone()
-            .and_then(|metadata| match (metadata.name, metadata.display_name) {
-                (Some(name), _) if !name.is_empty() => Some(format!("@{name}")),
-                (_, Some(display_name)) if !display_name.is_empty() => Some(display_name),
-                (_, _) => None,
-            })
+            .map(|profile| profile.name())
             .unwrap_or(PublicKey::new(self.pubkey).shortened())
     }
 }
@@ -54,9 +51,15 @@ impl Component for StatusBar {
 
                 match ev.kind {
                     Kind::Metadata if ev.pubkey == self.pubkey => {
-                        let maybe_metadata = Metadata::from_json(ev.content);
-                        if let Ok(metadata) = maybe_metadata {
-                            self.set_metadata(Some(metadata));
+                        if let Ok(metadata) = Metadata::from_json(ev.content.clone()) {
+                            let profile = Profile::new(ev.pubkey, ev.created_at, metadata);
+                            if let Some(existing_profile) = &self.profile {
+                                if existing_profile.created_at > profile.created_at {
+                                    // TODO
+                                }
+                            }
+
+                            self.set_profile(Some(profile));
                         }
                     }
                     _ => {}
