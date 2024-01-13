@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use nostr_sdk::{JsonUtil, Metadata as NostrMetadata};
+use nostr_sdk::prelude::{Metadata as NostrMetadata, *};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Metadata {
