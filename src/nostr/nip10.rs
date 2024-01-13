@@ -142,7 +142,7 @@ mod tests {
               ]
             }"#
         )
-        .expect("hoge")
+        .unwrap()
     }
 
     #[rstest]
