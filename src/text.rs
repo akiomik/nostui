@@ -32,6 +32,14 @@ pub fn truncate_text(s: &str, height: usize) -> String {
     }
 }
 
+pub fn shorten_hex(hex: &str) -> String {
+    let pubkey = hex.to_string();
+    let len = pubkey.len();
+    let heading = &pubkey[0..5];
+    let trail = &pubkey[(len - 5)..len];
+    format!("{}:{}", heading, trail)
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -113,5 +121,13 @@ mod tests {
         let actual = truncate_text("foo\nbar\nbaz", 0);
         let expected = "";
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_shortened() {
+        assert_eq!(
+            shorten_hex("4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25"),
+            "4d39c:aae25"
+        );
     }
 }
