@@ -1,40 +1,28 @@
 # nostui
 
+[![crates.io](https://img.shields.io/crates/v/nostui.svg)](https://crates.io/crates/nostui)
 [![CI](https://github.com/akiomik/nostui/workflows/CI/badge.svg)](https://github.com/akiomik/nostui/actions)
 
 A TUI client for [Nostr](https://nostr.com)
 
 ![screenshot](screenshot.gif)
 
-## Current features
+## Current Features
 
 - Timeline
 - Post, Reply, Reaction, Repost
 
 ## Getting Started
 
-### Requirements
+Dowonload binaries from the [release](https://github.com/akiomik/nostui/releases/latest) page.
 
-- git
-- rust
-
-### Installation
-
-1. Clone this repository and move to the directory:
+Or, install manually via `crates.io`:
 
 ```shell
-git clone https://github.com/akiomik/nostui
-cd nostui
+cargo install nostui
 ```
 
-2. Install `nostui` binary:
-
-```shell
-# Install to ~/.cargo/bin/nostui
-cargo install --path .
-```
-
-### Setup
+## Setup
 
 > [!NOTE]
 > Other extensions supported are `.json5`, `.yaml`, `.toml` and `.ini`.
