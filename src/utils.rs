@@ -11,8 +11,6 @@ use tracing_subscriber::{
 
 use crate::tui::Tui;
 
-pub static GIT_COMMIT_HASH: &str = env!("_GIT_INFO");
-
 lazy_static! {
     pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase().to_string();
     pub static ref DATA_FOLDER: Option<PathBuf> =
@@ -159,7 +157,13 @@ macro_rules! trace_dbg {
 pub fn version() -> String {
     let author = clap::crate_authors!();
 
-    let commit_hash = GIT_COMMIT_HASH;
+    let pkg_version = format!("v{}", env!("CARGO_PKG_VERSION"));
+    let commit_hash = option_env!("_GIT_INFO");
+    let version = if let Some(hash) = commit_hash {
+        format!("{pkg_version}-{hash}")
+    } else {
+        pkg_version
+    };
 
     // let current_exe_path = PathBuf::from(clap::crate_name!()).display().to_string();
     let config_dir_path = get_config_dir().display().to_string();
@@ -167,7 +171,7 @@ pub fn version() -> String {
 
     format!(
         "\
-{commit_hash}
+{version}
 
 Authors: {author}
 

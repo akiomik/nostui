@@ -34,22 +34,8 @@ fn main() {
     let git_info = git_output
         .as_ref()
         .and_then(|output| std::str::from_utf8(&output.stdout).ok().map(str::trim));
-    let cargo_pkg_version = env!("CARGO_PKG_VERSION");
-
-    // Default git_describe to cargo_pkg_version
-    let mut git_describe = String::from(cargo_pkg_version);
 
     if let Some(git_info) = git_info {
-        // If the `git_info` contains `CARGO_PKG_VERSION`, we simply use `git_info` as it is.
-        // Otherwise, prepend `CARGO_PKG_VERSION` to `git_info`.
-        if git_info.contains(cargo_pkg_version) {
-            // Remove the 'g' before the commit sha
-            let git_info = &git_info.replace('g', "");
-            git_describe = git_info.to_string();
-        } else {
-            git_describe = format!("v{}-{}", cargo_pkg_version, git_info);
-        }
+        println!("cargo:rustc-env=_GIT_INFO={}", git_info);
     }
-
-    println!("cargo:rustc-env=_GIT_INFO={}", git_describe);
 }
