@@ -1,7 +1,9 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use color_eyre::eyre::Result;
 use nostr_sdk::prelude::*;
+use nostr_sdk::database::DynNostrDatabase;
 
 pub struct Connection {
     keys: Keys,
@@ -46,5 +48,9 @@ impl Connection {
 
     pub async fn close(self) -> Result<(), nostr_sdk::client::Error> {
         self.client.shutdown().await
+    }
+
+    pub fn database(&self) -> Arc<DynNostrDatabase> {
+        self.client.database()
     }
 }
