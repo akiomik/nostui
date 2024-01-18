@@ -1,16 +1,19 @@
+use std::sync::Arc;
+
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
+use nostr_sdk::database::memory::MemoryDatabase;
+use nostr_sdk::database::DatabaseOptions;
 use nostr_sdk::prelude::*;
 use ratatui::prelude::Rect;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 
 use crate::{
     action::Action,
     components::{Component, FpsCounter, Home, StatusBar},
     config::Config,
     mode::Mode,
-    nostr::Connection,
-    nostr::ConnectionProcess,
+    repositories::EventRepository,
     tui,
 };
 
@@ -67,9 +70,18 @@ impl App {
         }
 
         let keys = Keys::from_sk_str(&self.config.privatekey.clone())?;
-        let conn = Connection::new(keys.clone(), self.config.relays.clone()).await?;
-        let (mut req_rx, event_tx, terminate_tx, conn_wrapper) = ConnectionProcess::new(conn)?;
-        conn_wrapper.run();
+        let mut opts = DatabaseOptions::new();
+        opts.events = true;
+        let cache = MemoryDatabase::new(opts);
+        let client = ClientBuilder::new(&keys).database(cache).build();
+        client.add_relays(self.config.relays.clone()).await?;
+        client.connect().await;
+        let client_ptr = Arc::new(Mutex::new(client));
+
+        let mut event_repository = EventRepository::new(client_ptr);
+        let (mut event_rx, filter_tx, stop_tx) = event_repository.run().await;
+        let filters = event_repository.timeline_filters().await?;
+        filter_tx.send(filters)?;
 
         loop {
             if let Some(e) = tui.next().await {
@@ -107,7 +119,7 @@ impl App {
                 }
             }
 
-            while let Ok(event) = req_rx.try_recv() {
+            while let Ok(event) = event_rx.try_recv() {
                 action_tx.send(Action::ReceiveEvent(event))?;
             }
 
@@ -153,14 +165,14 @@ impl App {
                     Action::SendReaction((id, pubkey)) => {
                         let event = EventBuilder::reaction(id, pubkey, "+").to_event(&keys)?;
                         log::info!("Send reaction: {event:?}");
-                        event_tx.send(event)?;
+                        event_repository.send(event).await?;
                         let note1 = id.to_bech32()?;
                         action_tx.send(Action::SystemMessage(format!("[Liked] {note1}")))?;
                     }
                     Action::SendRepost((id, pubkey)) => {
                         let event = EventBuilder::repost(id, pubkey).to_event(&keys)?;
                         log::info!("Send repost: {event:?}");
-                        event_tx.send(event)?;
+                        event_repository.send(event).await?;
                         let note1 = id.to_bech32()?;
                         action_tx.send(Action::SystemMessage(format!("[Reposted] {note1}")))?;
                     }
@@ -168,7 +180,7 @@ impl App {
                         let event = EventBuilder::text_note(content, tags.iter().cloned())
                             .to_event(&keys)?;
                         log::info!("Send text note: {event:?}");
-                        event_tx.send(event)?;
+                        event_repository.send(event).await?;
                         action_tx.send(Action::SystemMessage(format!("[Posted] {content}")))?;
                     }
                     _ => {}
@@ -188,7 +200,8 @@ impl App {
                 // tui.mouse(true);
                 tui.enter()?;
             } else if self.should_quit {
-                terminate_tx.send(())?;
+                stop_tx.send(())?;
+                // client.shutdown();
                 tui.stop()?;
                 break;
             }

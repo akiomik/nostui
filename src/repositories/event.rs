@@ -1,94 +1,101 @@
-use color_eyre::eyre::{Result, ErrReport};
-use nostr_sdk::prelude::*;
-use nostr_sdk::database::DatabaseOptions;
-use nostr_sdk::database::memory::MemoryDatabase;
+use std::sync::Arc;
+use std::time::Duration;
 
-use crate::nostr::Connection;
+use color_eyre::eyre::{ErrReport, Result};
+use nostr_sdk::prelude::*;
+use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::Mutex;
 
 pub struct EventRepository {
-    cache: MemoryDatabase,
-    conn: Connection,
-    req_rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
-    req_tx: tokio::sync::mpsc::UnboundedSender<Event>,
-    event_rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
-    event_tx: tokio::sync::mpsc::UnboundedSender<Event>,
-    terminate_rx: tokio::sync::mpsc::UnboundedReceiver<()>,
-    terminate_tx: tokio::sync::mpsc::UnboundedSender<()>,
+    client: Arc<Mutex<Client>>,
 }
 
 impl EventRepository {
-    pub fn new(conn: Connection) -> Self {
-        let mut opts = DatabaseOptions::new();
-        opts.events = true;
-        let cache = MemoryDatabase::new(opts);
+    pub fn new(client: Arc<Mutex<Client>>) -> Self {
+        Self { client }
+    }
 
-        let (req_tx, req_rx) = tokio::sync::mpsc::unbounded_channel();
-        let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
-        let (terminate_tx, terminate_rx) = tokio::sync::mpsc::unbounded_channel();
-
-        Self {
-            cache,
-            conn,
-            req_tx,
-            req_rx,
-            event_rx,
-            event_tx,
-            terminate_rx,
-            terminate_tx,
+    pub async fn find(&self, id: EventId) -> Option<Event> {
+        let client = (*self.client).lock().await;
+        if let Ok(ev) = client.database().event_by_id(id).await {
+            Some(ev)
+        } else {
+            None
         }
     }
 
-    pub fn run(mut self) {
+    pub async fn send(&self, ev: Event) -> Result<()> {
+        let client = (*self.client).lock().await;
+        client.send_event(ev).await?;
+        Ok(())
+    }
+
+    pub async fn timeline_filters(&self) -> Result<Vec<Filter>> {
+        let client = (*self.client).lock().await;
+        let followings = client.get_contact_list_public_keys(None).await?;
+        // let timeline_filter = Filter::new()
+        //     .authors(followings.clone())
+        //     .kinds([
+        //         Kind::TextNote,
+        //         Kind::Repost,
+        //         Kind::Reaction,
+        //         Kind::ZapReceipt,
+        //     ])
+        //     .since(Timestamp::now() - Duration::new(60 * 5, 0)); // 5min
+        let profile_filter = Filter::new().authors(followings).kind(Kind::Metadata);
+
+        // Ok(vec![timeline_filter, profile_filter])
+        Ok(vec![profile_filter])
+    }
+
+    pub async fn run(
+        &mut self,
+    ) -> (
+        UnboundedReceiver<Event>,
+        UnboundedSender<Vec<Filter>>,
+        UnboundedSender<()>,
+    ) {
+        // TODO: Use broadcast instead
+        let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (stop_tx, mut stop_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (filter_tx, mut filter_rx) = tokio::sync::mpsc::unbounded_channel();
+
+        let client_ptr = self.client.clone();
+
         tokio::spawn(async move {
-            let mut timeline = self.conn.subscribe_timeline().await?;
+            let client = (*client_ptr).lock().await;
+            let mut notifications = client.notifications();
 
             loop {
-                while let Ok(notification) = timeline.try_recv() {
-                    if let RelayPoolNotification::Event { event, relay_url } = notification {
-                        self.conn.database().save_event(&event).await?;
-                        self.cache.save_event(&event).await?;
-                        self.cache.event_id_seen(event.id, relay_url).await?;
-                        self.req_tx.send(event)?;
+                while let Ok(filters) = filter_rx.try_recv() {
+                    log::info!("Update filters: {:?}", filters);
+                    client.unsubscribe().await;
+                    client.subscribe(filters).await;
+                    // notifications = client.notifications();
+                }
+
+                while let Ok(ref notification) = notifications.try_recv() {
+                    // log::info!("Notification received: {:?}", notification);
+                    if let RelayPoolNotification::Event { event, .. } = notification {
+                        client.database().save_event(event).await.unwrap();
+                        event_tx.send(event.clone()).unwrap();
+                    };
+                    if let RelayPoolNotification::Message { relay_url, message } = notification {
+                        if let RelayMessage::Notice { message } = message {
+                            log::info!("A notice received from {relay_url}: {message}");
+                        };
                     };
                 }
 
-                while let Ok(event) = self.event_rx.try_recv() {
-                    self.conn.send(event).await?;
-                }
-
-                if self.terminate_rx.try_recv().is_ok() {
-                    self.conn.close().await?;
+                if stop_rx.try_recv().is_ok() {
                     break;
                 }
             }
 
-            Ok::<(), ErrReport>(())
+            // Ok::<(), ErrReport>(())
         });
-    }
 
-    pub async fn find_event(&mut self, id: EventId) -> Result<Event> {
-        if let Ok(ev) = self.cache.event_by_id(id).await {
-            return Ok(ev);
-        }
-
-        let ev = self.conn.database().event_by_id(id).await?;
-        self.cache.save_event(&ev).await?;
-        Ok(ev)
-    }
-
-    pub fn close(&self) -> Result<()> {
-        self.terminate_tx.send(())?;
-        Ok(())
-    }
-
-    pub fn send(&self, event: Event) -> Result<()> {
-        self.event_tx.send(event)?;
-        Ok(())
-    }
-
-    // TODO: subscribe arbitrary filters
-    pub fn try_recv_req(&mut self) -> Result<Event> {
-        let event = self.req_rx.try_recv()?;
-        Ok(event)
+        (event_rx, filter_tx, stop_tx)
     }
 }
