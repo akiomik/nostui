@@ -151,7 +151,7 @@ impl App {
                         log::info!("Got nostr event: {event:?}");
                     }
                     Action::SendReaction((id, pubkey)) => {
-                        let event = EventBuilder::new_reaction(id, pubkey, "+").to_event(&keys)?;
+                        let event = EventBuilder::reaction(id, pubkey, "+").to_event(&keys)?;
                         log::info!("Send reaction: {event:?}");
                         event_tx.send(event)?;
                         let note1 = id.to_bech32()?;
@@ -165,7 +165,7 @@ impl App {
                         action_tx.send(Action::SystemMessage(format!("[Reposted] {note1}")))?;
                     }
                     Action::SendTextNote(ref content, ref tags) => {
-                        let event = EventBuilder::new_text_note(content, tags.iter().cloned())
+                        let event = EventBuilder::text_note(content, tags.iter().cloned())
                             .to_event(&keys)?;
                         log::info!("Send text note: {event:?}");
                         event_tx.send(event)?;
