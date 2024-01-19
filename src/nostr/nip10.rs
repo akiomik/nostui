@@ -51,6 +51,7 @@ impl ReplyTagsBuilder {
                 public_key: reply_to.pubkey,
                 relay_url: None,
                 alias: None,
+                uppercase: false,
             });
         }
 
@@ -163,6 +164,7 @@ mod tests {
                 .unwrap(),
                 relay_url: None,
                 alias: None,
+                uppercase: false,
             },
         ];
         assert_eq!(ReplyTagsBuilder::build(root_event), expected);
@@ -194,6 +196,7 @@ mod tests {
                 .unwrap(),
                 relay_url: None,
                 alias: None,
+                uppercase: false,
             },
         ];
         assert_eq!(ReplyTagsBuilder::build(reply_event), expected);
@@ -233,6 +236,7 @@ mod tests {
                 .unwrap(),
                 relay_url: None,
                 alias: None,
+                uppercase: false,
             },
             Tag::Hashtag(String::from("nostr")),
         ];
