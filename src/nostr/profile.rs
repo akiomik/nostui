@@ -1,6 +1,5 @@
 use nostr_sdk::prelude::*;
 
-use crate::nostr::Metadata;
 use crate::text::shorten_hex;
 
 #[derive(Clone, Debug)]
