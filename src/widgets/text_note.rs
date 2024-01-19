@@ -255,7 +255,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::nostr::Metadata;
+    use crate::nostr::Profile;
 
     #[fixture]
     fn event() -> Event {

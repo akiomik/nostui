@@ -4,7 +4,6 @@ use ratatui::{prelude::*, widgets::*};
 
 use crate::action::Action;
 use crate::components::Component;
-use crate::nostr::Metadata;
 use crate::nostr::Profile;
 use crate::tui::Frame;
 use crate::widgets::PublicKey;

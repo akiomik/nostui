@@ -15,7 +15,7 @@ use crate::text::shorten_hex;
 use crate::{
     action::Action,
     config::Config,
-    nostr::{nip10::ReplyTagsBuilder, Metadata, Profile, SortableEvent},
+    nostr::{nip10::ReplyTagsBuilder, Profile, SortableEvent},
     widgets::ScrollableList,
     widgets::TextNote,
 };
