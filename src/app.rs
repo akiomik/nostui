@@ -78,6 +78,7 @@ impl App {
         client.connect().await;
         let client_ptr = Arc::new(Mutex::new(client));
 
+        // TODO: Prepare filters on other thread to improve speed
         let mut event_repository = EventRepository::new(client_ptr);
         let (mut event_rx, filter_tx, stop_tx) = event_repository.run().await;
         let filters = event_repository.timeline_filters().await?;

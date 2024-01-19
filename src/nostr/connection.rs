@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use color_eyre::eyre::Result;
-use nostr_sdk::prelude::*;
 use nostr_sdk::database::DynNostrDatabase;
+use nostr_sdk::prelude::*;
 
 pub struct Connection {
     keys: Keys,

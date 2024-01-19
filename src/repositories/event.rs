@@ -34,19 +34,19 @@ impl EventRepository {
     pub async fn timeline_filters(&self) -> Result<Vec<Filter>> {
         let client = (*self.client).lock().await;
         let followings = client.get_contact_list_public_keys(None).await?;
-        // let timeline_filter = Filter::new()
-        //     .authors(followings.clone())
-        //     .kinds([
-        //         Kind::TextNote,
-        //         Kind::Repost,
-        //         Kind::Reaction,
-        //         Kind::ZapReceipt,
-        //     ])
-        //     .since(Timestamp::now() - Duration::new(60 * 5, 0)); // 5min
+        let timeline_filter = Filter::new()
+            .authors(followings.clone())
+            .kinds([
+                Kind::TextNote,
+                Kind::Repost,
+                Kind::Reaction,
+                Kind::ZapReceipt,
+            ])
+            .since(Timestamp::now() - Duration::new(60 * 5, 0)); // 5min
+
         let profile_filter = Filter::new().authors(followings).kind(Kind::Metadata);
 
-        // Ok(vec![timeline_filter, profile_filter])
-        Ok(vec![profile_filter])
+        Ok(vec![timeline_filter, profile_filter])
     }
 
     pub async fn run(
@@ -68,32 +68,35 @@ impl EventRepository {
             let mut notifications = client.notifications();
 
             loop {
-                while let Ok(filters) = filter_rx.try_recv() {
-                    log::info!("Update filters: {:?}", filters);
-                    client.unsubscribe().await;
-                    client.subscribe(filters).await;
-                    // notifications = client.notifications();
+                while let Ok(notification) = notifications.try_recv() {
+                    match notification {
+                        RelayPoolNotification::Event { event, .. } => {
+                            // NOTE: Failed to parse Metadata
+                            // client.database().save_event(&event).await?;
+                            event_tx.send(event.clone())?;
+                        }
+                        RelayPoolNotification::RelayStatus { relay_url, status } => {
+                            log::info!("A relay status changed on {relay_url}: {status}")
+                        }
+                        RelayPoolNotification::Message {
+                            relay_url,
+                            message: RelayMessage::Notice { message },
+                        } => log::info!("A notice received from {relay_url}: {message}"),
+                        _ => {}
+                    }
                 }
 
-                while let Ok(ref notification) = notifications.try_recv() {
-                    // log::info!("Notification received: {:?}", notification);
-                    if let RelayPoolNotification::Event { event, .. } = notification {
-                        client.database().save_event(event).await.unwrap();
-                        event_tx.send(event.clone()).unwrap();
-                    };
-                    if let RelayPoolNotification::Message { relay_url, message } = notification {
-                        if let RelayMessage::Notice { message } = message {
-                            log::info!("A notice received from {relay_url}: {message}");
-                        };
-                    };
+                while let Ok(filters) = filter_rx.try_recv() {
+                    log::info!("The filters are updated");
+                    client.unsubscribe().await;
+                    client.subscribe(filters).await;
                 }
 
                 if stop_rx.try_recv().is_ok() {
                     break;
                 }
             }
-
-            // Ok::<(), ErrReport>(())
+            Ok::<(), ErrReport>(())
         });
 
         (event_rx, filter_tx, stop_tx)

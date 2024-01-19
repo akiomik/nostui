@@ -1,4 +1,4 @@
-// #![deny(warnings)]
+#![deny(warnings)]
 #![allow(dead_code)]
 
 pub mod action;
