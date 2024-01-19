@@ -71,8 +71,7 @@ impl EventRepository {
                 while let Ok(notification) = notifications.try_recv() {
                     match notification {
                         RelayPoolNotification::Event { event, .. } => {
-                            // NOTE: Failed to parse Metadata
-                            // client.database().save_event(&event).await?;
+                            client.database().save_event(&event).await?;
                             event_tx.send(event.clone())?;
                         }
                         RelayPoolNotification::RelayStatus { relay_url, status } => {

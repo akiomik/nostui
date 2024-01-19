@@ -73,7 +73,7 @@ impl App {
         let mut opts = DatabaseOptions::new();
         opts.events = true;
         let cache = MemoryDatabase::new(opts);
-        let client = ClientBuilder::new(&keys).database(cache).build();
+        let client = ClientBuilder::new().signer(&keys).database(cache).build();
         client.add_relays(self.config.relays.clone()).await?;
         client.connect().await;
         let client_ptr = Arc::new(Mutex::new(client));
