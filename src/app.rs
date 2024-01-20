@@ -48,6 +48,15 @@ impl App {
         })
     }
 
+    async fn build_nostr_client(&self, keys: &Keys) -> Result<Client> {
+        let mut opts = DatabaseOptions::new();
+        opts.events = true;
+        let cache = MemoryDatabase::new(opts);
+        let client = ClientBuilder::new().signer(keys).database(cache).build();
+        client.add_relays(self.config.relays.clone()).await?;
+        Ok(client)
+    }
+
     pub async fn run(&mut self) -> Result<()> {
         let (action_tx, mut action_rx) = mpsc::unbounded_channel();
 
@@ -70,11 +79,7 @@ impl App {
         }
 
         let keys = Keys::from_sk_str(&self.config.privatekey.clone())?;
-        let mut opts = DatabaseOptions::new();
-        opts.events = true;
-        let cache = MemoryDatabase::new(opts);
-        let client = ClientBuilder::new().signer(&keys).database(cache).build();
-        client.add_relays(self.config.relays.clone()).await?;
+        let client = self.build_nostr_client(&keys).await?;
         client.connect().await;
         let client_ptr = Arc::new(Mutex::new(client));
 
