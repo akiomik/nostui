@@ -10,7 +10,7 @@ A TUI client for [Nostr](https://nostr.com)
 ## Current Features
 
 - Timeline
-- Post, Reply, Reaction, Repost
+- Post, Reply, React, Repost
 
 ## Getting Started
 
@@ -22,6 +22,12 @@ Or, install manually via `crates.io`:
 cargo install nostui
 ```
 
+On NetBSD, a package is available from the official repositories. To install it, simply run:
+
+```shell
+pkgin install nostui
+```
+
 ## Setup
 
 > [!NOTE]
@@ -29,7 +35,7 @@ cargo install nostui
 
 1. Create a `config.json` to the following path:
 
-- Linux: `~/.config/notsui/config.json`
+- Linux: `~/.config/nostui/config.json`
 - Windows: `~\AppData\Roaming\0m1\nostui\config.json`
 - macOS: `~/Library/Application Support/io.0m1.nostui/config.json`
 
