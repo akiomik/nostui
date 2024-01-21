@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::nostr::ConnectionAction;
 
+#[derive(Clone)]
 pub struct EventRepository {
     cache: Arc<Mutex<MemoryDatabase>>,
     tx: UnboundedSender<ConnectionAction>,
