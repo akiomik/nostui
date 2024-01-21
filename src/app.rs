@@ -87,7 +87,7 @@ impl App {
         let client = self.build_nostr_client(&keys).await?;
         let conn = Connection::new(client, cache.clone());
         let (connection_tx, mut event_rx) = conn.run();
-        let event_repository = EventRepository::new(cache, connection_tx.clone());
+        let event_repository = EventRepository::new(keys, cache, connection_tx.clone());
 
         loop {
             if let Some(e) = tui.next().await {
@@ -169,24 +169,20 @@ impl App {
                         log::info!("Got nostr event: {event:?}");
                     }
                     Action::SendReaction((id, pubkey)) => {
-                        let event = EventBuilder::reaction(id, pubkey, "+").to_event(&keys)?;
-                        log::info!("Send reaction: {event:?}");
-                        event_repository.send(event)?;
+                        let ev = event_repository.send_reaction(id, pubkey)?;
+                        log::info!("Send reaction: {ev:?}");
                         let note1 = id.to_bech32()?;
                         action_tx.send(Action::SystemMessage(format!("[Liked] {note1}")))?;
                     }
                     Action::SendRepost((id, pubkey)) => {
-                        let event = EventBuilder::repost(id, pubkey).to_event(&keys)?;
-                        log::info!("Send repost: {event:?}");
-                        event_repository.send(event)?;
+                        let ev = event_repository.send_repost(id, pubkey)?;
+                        log::info!("Send repost: {ev:?}");
                         let note1 = id.to_bech32()?;
                         action_tx.send(Action::SystemMessage(format!("[Reposted] {note1}")))?;
                     }
                     Action::SendTextNote(ref content, ref tags) => {
-                        let event = EventBuilder::text_note(content, tags.iter().cloned())
-                            .to_event(&keys)?;
-                        log::info!("Send text note: {event:?}");
-                        event_repository.send(event)?;
+                        let ev = event_repository.send_text_note(content, tags.clone())?;
+                        log::info!("Send text note: {ev:?}");
                         action_tx.send(Action::SystemMessage(format!("[Posted] {content}")))?;
                     }
                     _ => {}
