@@ -13,7 +13,8 @@ use crate::{
     components::{Component, FpsCounter, Home, StatusBar},
     config::Config,
     mode::Mode,
-    repositories::EventRepository,
+    nostr::NewConnection,
+    repositories::{EventRepository, NostrAction},
     tui,
 };
 
@@ -49,12 +50,15 @@ impl App {
     }
 
     async fn build_nostr_client(&self, keys: &Keys) -> Result<Client> {
-        let mut opts = DatabaseOptions::new();
-        opts.events = true;
-        let cache = MemoryDatabase::new(opts);
-        let client = ClientBuilder::new().signer(keys).database(cache).build();
+        let client = ClientBuilder::new().signer(keys).build();
         client.add_relays(self.config.relays.clone()).await?;
         Ok(client)
+    }
+
+    fn build_cache(&self) -> MemoryDatabase {
+        let mut opts = DatabaseOptions::new();
+        opts.events = true;
+        MemoryDatabase::new(opts)
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -80,14 +84,12 @@ impl App {
 
         let keys = Keys::from_sk_str(&self.config.privatekey.clone())?;
         let client = self.build_nostr_client(&keys).await?;
-        client.connect().await;
-        let client_ptr = Arc::new(Mutex::new(client));
+        let conn = NewConnection::new(client);
+        let (nostr_action_tx, mut event_rx) = conn.run();
 
-        // TODO: Prepare filters on other thread to improve speed
-        let mut event_repository = EventRepository::new(client_ptr);
-        let (mut event_rx, filter_tx, stop_tx) = event_repository.run().await;
-        let filters = event_repository.timeline_filters().await?;
-        filter_tx.send(filters)?;
+        let cache = self.build_cache();
+        let cache_ptr = Arc::new(Mutex::new(cache));
+        let event_repository = EventRepository::new(cache_ptr, nostr_action_tx.clone());
 
         loop {
             if let Some(e) = tui.next().await {
@@ -171,14 +173,14 @@ impl App {
                     Action::SendReaction((id, pubkey)) => {
                         let event = EventBuilder::reaction(id, pubkey, "+").to_event(&keys)?;
                         log::info!("Send reaction: {event:?}");
-                        event_repository.send(event).await?;
+                        event_repository.send(event)?;
                         let note1 = id.to_bech32()?;
                         action_tx.send(Action::SystemMessage(format!("[Liked] {note1}")))?;
                     }
                     Action::SendRepost((id, pubkey)) => {
                         let event = EventBuilder::repost(id, pubkey).to_event(&keys)?;
                         log::info!("Send repost: {event:?}");
-                        event_repository.send(event).await?;
+                        event_repository.send(event)?;
                         let note1 = id.to_bech32()?;
                         action_tx.send(Action::SystemMessage(format!("[Reposted] {note1}")))?;
                     }
@@ -186,7 +188,7 @@ impl App {
                         let event = EventBuilder::text_note(content, tags.iter().cloned())
                             .to_event(&keys)?;
                         log::info!("Send text note: {event:?}");
-                        event_repository.send(event).await?;
+                        event_repository.send(event)?;
                         action_tx.send(Action::SystemMessage(format!("[Posted] {content}")))?;
                     }
                     _ => {}
@@ -206,8 +208,7 @@ impl App {
                 // tui.mouse(true);
                 tui.enter()?;
             } else if self.should_quit {
-                stop_tx.send(())?;
-                // client.shutdown();
+                nostr_action_tx.send(NostrAction::Shutdown)?;
                 tui.stop()?;
                 break;
             }
