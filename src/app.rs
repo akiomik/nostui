@@ -13,7 +13,7 @@ use crate::{
     components::{Component, FpsCounter, Home, StatusBar},
     config::Config,
     mode::Mode,
-    nostr::{ConnectionAction, NewConnection},
+    nostr::{Connection, ConnectionAction},
     repositories::EventRepository,
     tui,
 };
@@ -84,7 +84,7 @@ impl App {
 
         let keys = Keys::from_sk_str(&self.config.privatekey.clone())?;
         let client = self.build_nostr_client(&keys).await?;
-        let conn = NewConnection::new(client);
+        let conn = Connection::new(client);
         let (connection_tx, mut event_rx) = conn.run();
 
         let cache = self.build_cache();

@@ -7,17 +7,17 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::nostr::ConnectionAction;
 
-pub struct NewConnectionOpts {
+pub struct ConnectionOpts {
     event_channel_size: usize,
 }
 
-impl NewConnectionOpts {
+impl ConnectionOpts {
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl Default for NewConnectionOpts {
+impl Default for ConnectionOpts {
     fn default() -> Self {
         Self {
             event_channel_size: 1024,
@@ -25,19 +25,19 @@ impl Default for NewConnectionOpts {
     }
 }
 
-pub struct NewConnection {
+pub struct Connection {
     client: Client,
-    opts: NewConnectionOpts,
+    opts: ConnectionOpts,
 }
 
-impl NewConnection {
+impl Connection {
     #[must_use]
     pub fn new(client: Client) -> Self {
-        Self::with_opts(client, NewConnectionOpts::new())
+        Self::with_opts(client, ConnectionOpts::new())
     }
 
     #[must_use]
-    pub fn with_opts(client: Client, opts: NewConnectionOpts) -> Self {
+    pub fn with_opts(client: Client, opts: ConnectionOpts) -> Self {
         Self { client, opts }
     }
 
