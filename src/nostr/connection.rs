@@ -1,9 +1,11 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use color_eyre::eyre::{ErrReport, Result};
 use nostr_sdk::prelude::*;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::Mutex;
 
 use crate::nostr::ConnectionAction;
 
@@ -27,18 +29,27 @@ impl Default for ConnectionOpts {
 
 pub struct Connection {
     client: Client,
+    cache: Arc<Mutex<MemoryDatabase>>,
     opts: ConnectionOpts,
 }
 
 impl Connection {
     #[must_use]
-    pub fn new(client: Client) -> Self {
-        Self::with_opts(client, ConnectionOpts::new())
+    pub fn new(client: Client, cache: Arc<Mutex<MemoryDatabase>>) -> Self {
+        Self::with_opts(client, cache, ConnectionOpts::new())
     }
 
     #[must_use]
-    pub fn with_opts(client: Client, opts: ConnectionOpts) -> Self {
-        Self { client, opts }
+    pub fn with_opts(
+        client: Client,
+        cache: Arc<Mutex<MemoryDatabase>>,
+        opts: ConnectionOpts,
+    ) -> Self {
+        Self {
+            client,
+            cache,
+            opts,
+        }
     }
 
     pub async fn timeline_filters(&self) -> Result<Vec<Filter>> {
@@ -76,6 +87,8 @@ impl Connection {
                 while let Ok(notification) = notifications.try_recv() {
                     match notification {
                         RelayPoolNotification::Event { event, .. } => {
+                            let cache = self.cache.lock().await;
+                            cache.save_event(&event).await?;
                             self.client.database().save_event(&event).await?;
                             event_tx.send(event.clone())?;
                         }

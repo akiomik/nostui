@@ -55,10 +55,10 @@ impl App {
         Ok(client)
     }
 
-    fn build_cache(&self) -> MemoryDatabase {
+    fn build_cache(&self) -> Arc<Mutex<MemoryDatabase>> {
         let mut opts = DatabaseOptions::new();
         opts.events = true;
-        MemoryDatabase::new(opts)
+        Arc::new(Mutex::new(MemoryDatabase::new(opts)))
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -82,14 +82,12 @@ impl App {
             component.init(tui.size()?)?;
         }
 
+        let cache = self.build_cache();
         let keys = Keys::from_sk_str(&self.config.privatekey.clone())?;
         let client = self.build_nostr_client(&keys).await?;
-        let conn = Connection::new(client);
+        let conn = Connection::new(client, cache.clone());
         let (connection_tx, mut event_rx) = conn.run();
-
-        let cache = self.build_cache();
-        let cache_ptr = Arc::new(Mutex::new(cache));
-        let event_repository = EventRepository::new(cache_ptr, connection_tx.clone());
+        let event_repository = EventRepository::new(cache, connection_tx.clone());
 
         loop {
             if let Some(e) = tui.next().await {
