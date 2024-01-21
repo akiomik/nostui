@@ -5,7 +5,7 @@ use nostr_sdk::prelude::*;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::repositories::NostrAction;
+use crate::nostr::ConnectionAction;
 
 pub struct NewConnectionOpts {
     event_channel_size: usize,
@@ -59,7 +59,7 @@ impl NewConnection {
     }
 
     #[must_use]
-    pub fn run(self) -> (UnboundedSender<NostrAction>, Receiver<Event>) {
+    pub fn run(self) -> (UnboundedSender<ConnectionAction>, Receiver<Event>) {
         let (event_tx, event_rx) =
             tokio::sync::broadcast::channel::<Event>(self.opts.event_channel_size);
         let (action_tx, mut action_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -92,10 +92,10 @@ impl NewConnection {
 
                 while let Ok(action) = action_rx.try_recv() {
                     match action {
-                        NostrAction::SendEvent(ev) => {
+                        ConnectionAction::SendEvent(ev) => {
                             self.client.send_event(ev).await?;
                         }
-                        NostrAction::Shutdown => {
+                        ConnectionAction::Shutdown => {
                             self.client.shutdown().await?;
                             break 'main;
                         }

@@ -13,8 +13,8 @@ use crate::{
     components::{Component, FpsCounter, Home, StatusBar},
     config::Config,
     mode::Mode,
-    nostr::NewConnection,
-    repositories::{EventRepository, NostrAction},
+    nostr::{ConnectionAction, NewConnection},
+    repositories::EventRepository,
     tui,
 };
 
@@ -85,11 +85,11 @@ impl App {
         let keys = Keys::from_sk_str(&self.config.privatekey.clone())?;
         let client = self.build_nostr_client(&keys).await?;
         let conn = NewConnection::new(client);
-        let (nostr_action_tx, mut event_rx) = conn.run();
+        let (connection_tx, mut event_rx) = conn.run();
 
         let cache = self.build_cache();
         let cache_ptr = Arc::new(Mutex::new(cache));
-        let event_repository = EventRepository::new(cache_ptr, nostr_action_tx.clone());
+        let event_repository = EventRepository::new(cache_ptr, connection_tx.clone());
 
         loop {
             if let Some(e) = tui.next().await {
@@ -208,7 +208,7 @@ impl App {
                 // tui.mouse(true);
                 tui.enter()?;
             } else if self.should_quit {
-                nostr_action_tx.send(NostrAction::Shutdown)?;
+                connection_tx.send(ConnectionAction::Shutdown)?;
                 tui.stop()?;
                 break;
             }

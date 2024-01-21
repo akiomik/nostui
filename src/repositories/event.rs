@@ -6,23 +6,20 @@ use nostr_sdk::prelude::*;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Mutex;
 
-pub enum NostrAction {
-    SendEvent(Event),
-    Shutdown,
-}
+use crate::nostr::ConnectionAction;
 
 pub struct EventRepository {
     cache: Arc<Mutex<MemoryDatabase>>,
-    tx: UnboundedSender<NostrAction>,
+    tx: UnboundedSender<ConnectionAction>,
 }
 
 impl EventRepository {
-    pub fn new(cache: Arc<Mutex<MemoryDatabase>>, tx: UnboundedSender<NostrAction>) -> Self {
+    pub fn new(cache: Arc<Mutex<MemoryDatabase>>, tx: UnboundedSender<ConnectionAction>) -> Self {
         Self { cache, tx }
     }
 
     pub fn send(&self, ev: Event) -> Result<()> {
-        self.tx.send(NostrAction::SendEvent(ev))?;
+        self.tx.send(ConnectionAction::SendEvent(ev))?;
         Ok(())
     }
 
