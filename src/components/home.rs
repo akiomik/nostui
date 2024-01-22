@@ -15,7 +15,7 @@ use crate::text::shorten_hex;
 use crate::{
     action::Action,
     config::Config,
-    nostr::{nip10::ReplyTagsBuilder, Profile, SortableEvent},
+    nostr::{nip10::ReplyTagsBuilder, NostrAction, Profile, SortableEvent},
     widgets::ScrollableList,
     widgets::TextNote,
 };
@@ -192,7 +192,10 @@ impl<'a> Component for Home<'a> {
                     &self.command_tx,
                 ) {
                     let event = self.get_note(i).expect("failed to get target event");
-                    tx.send(Action::SendReaction((event.id, event.pubkey)))?;
+                    tx.send(Action::SendNostrAction(NostrAction::SendReaction(
+                        event.id,
+                        event.pubkey,
+                    )))?;
                 }
             }
             Action::Repost => {
@@ -202,7 +205,10 @@ impl<'a> Component for Home<'a> {
                     &self.command_tx,
                 ) {
                     let event = self.get_note(i).expect("failed to get target event");
-                    tx.send(Action::SendRepost((event.id, event.pubkey)))?;
+                    tx.send(Action::SendNostrAction(NostrAction::SendRepost(
+                        event.id,
+                        event.pubkey,
+                    )))?;
                 }
             }
             Action::Unselect => {
@@ -230,7 +236,9 @@ impl<'a> Component for Home<'a> {
                         } else {
                             vec![]
                         };
-                        tx.send(Action::SendTextNote(content, tags))?;
+                        tx.send(Action::SendNostrAction(NostrAction::SendTextNote(
+                            content, tags,
+                        )))?;
                         self.reply_to = None;
                         self.show_input = false;
                         self.clear_input();

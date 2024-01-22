@@ -13,7 +13,7 @@ use crate::{
     components::{Component, FpsCounter, Home, StatusBar},
     config::Config,
     mode::Mode,
-    nostr::{Connection, ConnectionAction},
+    nostr::{Connection, ConnectionAction, NostrActionHandler},
     repositories::EventRepository,
     tui,
 };
@@ -88,6 +88,7 @@ impl App {
         let conn = Connection::new(client, cache.clone());
         let (connection_tx, mut event_rx) = conn.run();
         let event_repository = EventRepository::new(keys, cache, connection_tx.clone());
+        let nostr_action_handler = NostrActionHandler::new(event_repository, action_tx.clone());
 
         loop {
             if let Some(e) = tui.next().await {
@@ -168,22 +169,8 @@ impl App {
                     Action::ReceiveEvent(ref event) => {
                         log::info!("Got nostr event: {event:?}");
                     }
-                    Action::SendReaction((id, pubkey)) => {
-                        let ev = event_repository.send_reaction(id, pubkey)?;
-                        log::info!("Send reaction: {ev:?}");
-                        let note1 = id.to_bech32()?;
-                        action_tx.send(Action::SystemMessage(format!("[Liked] {note1}")))?;
-                    }
-                    Action::SendRepost((id, pubkey)) => {
-                        let ev = event_repository.send_repost(id, pubkey)?;
-                        log::info!("Send repost: {ev:?}");
-                        let note1 = id.to_bech32()?;
-                        action_tx.send(Action::SystemMessage(format!("[Reposted] {note1}")))?;
-                    }
-                    Action::SendTextNote(ref content, ref tags) => {
-                        let ev = event_repository.send_text_note(content, tags.clone())?;
-                        log::info!("Send text note: {ev:?}");
-                        action_tx.send(Action::SystemMessage(format!("[Posted] {content}")))?;
+                    Action::SendNostrAction(ref action) => {
+                        nostr_action_handler.handle(action.clone())?;
                     }
                     _ => {}
                 }
