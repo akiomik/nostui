@@ -16,7 +16,7 @@ pub enum Action {
     Refresh,
     Error(String),
     Help,
-    ReceiveEvent(Event),
+    ReceiveNostrEvent(Event),
     ScrollUp,
     ScrollDown,
     ScrollToTop,

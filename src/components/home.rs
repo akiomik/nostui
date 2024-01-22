@@ -157,7 +157,7 @@ impl<'a> Component for Home<'a> {
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
-            Action::ReceiveEvent(ev) => match ev.kind {
+            Action::ReceiveNostrEvent(ev) => match ev.kind {
                 Kind::Metadata => self.add_profile(ev),
                 Kind::TextNote => self.add_note(ev),
                 Kind::Reaction => self.append_reaction(ev),

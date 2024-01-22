@@ -127,7 +127,7 @@ impl App {
             }
 
             while let Ok(event) = event_rx.try_recv() {
-                action_tx.send(Action::ReceiveEvent(event))?;
+                action_tx.send(Action::ReceiveNostrEvent(event))?;
             }
 
             while let Ok(action) = action_rx.try_recv() {
@@ -166,7 +166,7 @@ impl App {
                             }
                         })?;
                     }
-                    Action::ReceiveEvent(ref event) => {
+                    Action::ReceiveNostrEvent(ref event) => {
                         log::info!("Got nostr event: {event:?}");
                     }
                     Action::SendNostrAction(ref action) => {
