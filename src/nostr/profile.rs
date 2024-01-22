@@ -18,6 +18,17 @@ impl Profile {
         }
     }
 
+    // TODO: Return Result<Self> instead
+    pub fn from_event(ev: Event) -> Option<Self> {
+        if ev.kind != Kind::Metadata {
+            return None;
+        }
+
+        Metadata::from_json(&ev.content)
+            .ok()
+            .map(|metadata| Self::new(ev.pubkey, ev.created_at, metadata))
+    }
+
     pub fn name(&self) -> String {
         match (
             self.metadata.display_name.clone(),
