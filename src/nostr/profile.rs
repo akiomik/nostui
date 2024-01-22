@@ -2,7 +2,7 @@ use nostr_sdk::prelude::*;
 
 use crate::text::shorten_hex;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Profile {
     pub pubkey: XOnlyPublicKey,
     pub created_at: Timestamp,
