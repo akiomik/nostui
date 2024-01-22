@@ -28,7 +28,6 @@ pub enum Action {
     ReplyTextNote,
     SubmitTextNote,
     Key(KeyEvent),
-    MetadataUpdated(Box<Metadata>),
     SystemMessage(String),
     SendNostrAction(NostrAction),
 }
