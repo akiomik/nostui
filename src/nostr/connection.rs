@@ -1,26 +1,58 @@
+use std::sync::Arc;
 use std::time::Duration;
 
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{ErrReport, Result};
 use nostr_sdk::prelude::*;
+use tokio::sync::broadcast::Receiver;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::Mutex;
+
+use crate::nostr::ConnectionAction;
+
+pub struct ConnectionOpts {
+    event_channel_size: usize,
+}
+
+impl ConnectionOpts {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for ConnectionOpts {
+    fn default() -> Self {
+        Self {
+            event_channel_size: 1024,
+        }
+    }
+}
 
 pub struct Connection {
-    keys: Keys,
     client: Client,
+    cache: Arc<Mutex<MemoryDatabase>>,
+    opts: ConnectionOpts,
 }
 
 impl Connection {
-    pub async fn new(keys: Keys, relays: Vec<String>) -> Result<Self> {
-        let client = Client::new(&keys);
-
-        client.add_relays(relays).await?;
-        client.connect().await;
-
-        Ok(Self { keys, client })
+    #[must_use]
+    pub fn new(client: Client, cache: Arc<Mutex<MemoryDatabase>>) -> Self {
+        Self::with_opts(client, cache, ConnectionOpts::new())
     }
 
-    pub async fn subscribe_timeline(
-        &self,
-    ) -> Result<tokio::sync::broadcast::Receiver<RelayPoolNotification>> {
+    #[must_use]
+    pub fn with_opts(
+        client: Client,
+        cache: Arc<Mutex<MemoryDatabase>>,
+        opts: ConnectionOpts,
+    ) -> Self {
+        Self {
+            client,
+            cache,
+            opts,
+        }
+    }
+
+    pub async fn timeline_filters(&self) -> Result<Vec<Filter>> {
         let followings = self.client.get_contact_list_public_keys(None).await?;
         let timeline_filter = Filter::new()
             .authors(followings.clone())
@@ -31,20 +63,62 @@ impl Connection {
                 Kind::ZapReceipt,
             ])
             .since(Timestamp::now() - Duration::new(60 * 5, 0)); // 5min
-        let profile_filter = Filter::new().authors(followings).kinds([Kind::Metadata]);
-        self.client
-            .subscribe(vec![timeline_filter, profile_filter])
-            .await;
 
-        Ok(self.client.notifications())
+        let profile_filter = Filter::new().authors(followings).kind(Kind::Metadata);
+
+        Ok(vec![timeline_filter, profile_filter])
     }
 
-    pub async fn send(&mut self, event: Event) -> Result<()> {
-        self.client.send_event(event).await?;
-        Ok(())
-    }
+    #[must_use]
+    pub fn run(self) -> (UnboundedSender<ConnectionAction>, Receiver<Event>) {
+        let (event_tx, event_rx) =
+            tokio::sync::broadcast::channel::<Event>(self.opts.event_channel_size);
+        let (action_tx, mut action_rx) = tokio::sync::mpsc::unbounded_channel();
 
-    pub async fn close(self) -> Result<(), nostr_sdk::client::Error> {
-        self.client.shutdown().await
+        tokio::spawn(async move {
+            self.client.connect().await;
+            let mut notifications = self.client.notifications();
+            let filters = self.timeline_filters().await?;
+            self.client.subscribe(filters).await;
+
+            // TODO: Read cached events from self.client.database() on bootstrap
+
+            'main: loop {
+                while let Ok(notification) = notifications.try_recv() {
+                    match notification {
+                        RelayPoolNotification::Event { event, .. } => {
+                            let cache = self.cache.lock().await;
+                            cache.save_event(&event).await?;
+                            self.client.database().save_event(&event).await?;
+                            event_tx.send(event.clone())?;
+                        }
+                        RelayPoolNotification::RelayStatus { relay_url, status } => {
+                            log::info!("A relay status changed on {relay_url}: {status}")
+                        }
+                        RelayPoolNotification::Message {
+                            relay_url,
+                            message: RelayMessage::Notice { message },
+                        } => log::info!("A notice received from {relay_url}: {message}"),
+                        _ => {}
+                    }
+                }
+
+                while let Ok(action) = action_rx.try_recv() {
+                    match action {
+                        ConnectionAction::SendEvent(ev) => {
+                            self.client.send_event(ev).await?;
+                        }
+                        ConnectionAction::Shutdown => {
+                            self.client.shutdown().await?;
+                            break 'main;
+                        }
+                    }
+                }
+            }
+
+            Ok::<(), ErrReport>(())
+        });
+
+        (action_tx, event_rx)
     }
 }

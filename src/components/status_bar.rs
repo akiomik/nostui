@@ -45,7 +45,7 @@ impl StatusBar {
 impl Component for StatusBar {
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
-            Action::ReceiveEvent(ev) => {
+            Action::ReceiveNostrEvent(ev) => {
                 self.is_loading = false;
 
                 match ev.kind {

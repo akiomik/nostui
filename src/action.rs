@@ -3,6 +3,8 @@ use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
+use crate::nostr::NostrAction;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Display, Deserialize)]
 pub enum Action {
     Tick,
@@ -14,21 +16,18 @@ pub enum Action {
     Refresh,
     Error(String),
     Help,
-    ReceiveEvent(Event),
+    ReceiveNostrEvent(Event),
     ScrollUp,
     ScrollDown,
     ScrollToTop,
     ScrollToBottom,
     React,
-    SendReaction((EventId, XOnlyPublicKey)),
     Repost,
-    SendRepost((EventId, XOnlyPublicKey)),
     Unselect,
     NewTextNote,
     ReplyTextNote,
     SubmitTextNote,
-    SendTextNote(String, Vec<Tag>),
     Key(KeyEvent),
-    MetadataUpdated(Metadata),
     SystemMessage(String),
+    SendNostrAction(NostrAction),
 }

@@ -1,16 +1,20 @@
+use std::sync::Arc;
+
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
+use nostr_sdk::database::memory::MemoryDatabase;
+use nostr_sdk::database::DatabaseOptions;
 use nostr_sdk::prelude::*;
 use ratatui::prelude::Rect;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 
 use crate::{
     action::Action,
     components::{Component, FpsCounter, Home, StatusBar},
     config::Config,
     mode::Mode,
-    nostr::Connection,
-    nostr::ConnectionProcess,
+    nostr::{Connection, ConnectionAction, NostrActionHandler},
+    repositories::EventRepository,
     tui,
 };
 
@@ -45,6 +49,18 @@ impl App {
         })
     }
 
+    async fn build_nostr_client(&self, keys: &Keys) -> Result<Client> {
+        let client = ClientBuilder::new().signer(keys).build();
+        client.add_relays(self.config.relays.clone()).await?;
+        Ok(client)
+    }
+
+    fn build_cache(&self) -> Arc<Mutex<MemoryDatabase>> {
+        let mut opts = DatabaseOptions::new();
+        opts.events = true;
+        Arc::new(Mutex::new(MemoryDatabase::new(opts)))
+    }
+
     pub async fn run(&mut self) -> Result<()> {
         let (action_tx, mut action_rx) = mpsc::unbounded_channel();
 
@@ -66,10 +82,13 @@ impl App {
             component.init(tui.size()?)?;
         }
 
+        let cache = self.build_cache();
         let keys = Keys::from_sk_str(&self.config.privatekey.clone())?;
-        let conn = Connection::new(keys.clone(), self.config.relays.clone()).await?;
-        let (mut req_rx, event_tx, terminate_tx, conn_wrapper) = ConnectionProcess::new(conn)?;
-        conn_wrapper.run();
+        let client = self.build_nostr_client(&keys).await?;
+        let conn = Connection::new(client, cache.clone());
+        let (connection_tx, mut event_rx) = conn.run();
+        let event_repository = EventRepository::new(keys, cache, connection_tx.clone());
+        let nostr_action_handler = NostrActionHandler::new(event_repository, action_tx.clone());
 
         loop {
             if let Some(e) = tui.next().await {
@@ -107,8 +126,8 @@ impl App {
                 }
             }
 
-            while let Ok(event) = req_rx.try_recv() {
-                action_tx.send(Action::ReceiveEvent(event))?;
+            while let Ok(event) = event_rx.try_recv() {
+                action_tx.send(Action::ReceiveNostrEvent(event))?;
             }
 
             while let Ok(action) = action_rx.try_recv() {
@@ -147,29 +166,11 @@ impl App {
                             }
                         })?;
                     }
-                    Action::ReceiveEvent(ref event) => {
+                    Action::ReceiveNostrEvent(ref event) => {
                         log::info!("Got nostr event: {event:?}");
                     }
-                    Action::SendReaction((id, pubkey)) => {
-                        let event = EventBuilder::reaction(id, pubkey, "+").to_event(&keys)?;
-                        log::info!("Send reaction: {event:?}");
-                        event_tx.send(event)?;
-                        let note1 = id.to_bech32()?;
-                        action_tx.send(Action::SystemMessage(format!("[Liked] {note1}")))?;
-                    }
-                    Action::SendRepost((id, pubkey)) => {
-                        let event = EventBuilder::repost(id, pubkey).to_event(&keys)?;
-                        log::info!("Send repost: {event:?}");
-                        event_tx.send(event)?;
-                        let note1 = id.to_bech32()?;
-                        action_tx.send(Action::SystemMessage(format!("[Reposted] {note1}")))?;
-                    }
-                    Action::SendTextNote(ref content, ref tags) => {
-                        let event = EventBuilder::text_note(content, tags.iter().cloned())
-                            .to_event(&keys)?;
-                        log::info!("Send text note: {event:?}");
-                        event_tx.send(event)?;
-                        action_tx.send(Action::SystemMessage(format!("[Posted] {content}")))?;
+                    Action::SendNostrAction(ref action) => {
+                        nostr_action_handler.handle(action.clone())?;
                     }
                     _ => {}
                 }
@@ -188,7 +189,7 @@ impl App {
                 // tui.mouse(true);
                 tui.enter()?;
             } else if self.should_quit {
-                terminate_tx.send(())?;
+                connection_tx.send(ConnectionAction::Shutdown)?;
                 tui.stop()?;
                 break;
             }

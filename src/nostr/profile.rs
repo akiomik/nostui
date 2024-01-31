@@ -2,7 +2,7 @@ use nostr_sdk::prelude::*;
 
 use crate::text::shorten_hex;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Profile {
     pub pubkey: XOnlyPublicKey,
     pub created_at: Timestamp,
@@ -16,6 +16,17 @@ impl Profile {
             created_at,
             metadata,
         }
+    }
+
+    // TODO: Return Result<Self> instead
+    pub fn from_event(ev: Event) -> Option<Self> {
+        if ev.kind != Kind::Metadata {
+            return None;
+        }
+
+        Metadata::from_json(&ev.content)
+            .ok()
+            .map(|metadata| Self::new(ev.pubkey, ev.created_at, metadata))
     }
 
     pub fn name(&self) -> String {

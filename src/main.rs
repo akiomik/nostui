@@ -8,6 +8,7 @@ pub mod components;
 pub mod config;
 pub mod mode;
 pub mod nostr;
+pub mod repositories;
 pub mod text;
 pub mod tui;
 pub mod utils;
