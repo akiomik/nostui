@@ -29,7 +29,7 @@ json5 = "0.4.1"
 lazy_static = "1.4.0"
 libc = "0.2.148"
 log = "0.4.21"
-nostr-sdk = "0.27"
+nostr-sdk = "0.28"
 ratatui = { version = "0.26.1", features = ["serde", "macros"] }
 regex = "1.10.2"
 serde = { version = "1.0.197", features = ["derive"] }
