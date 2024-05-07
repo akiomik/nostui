@@ -27,7 +27,7 @@ futures = "0.3.28"
 human-panic = "2.0.0"
 json5 = "0.4.1"
 lazy_static = "1.4.0"
-libc = "0.2.148"
+libc = "0.2.154"
 log = "0.4.21"
 nostr-sdk = "0.27"
 ratatui = { version = "0.26.2", features = ["serde", "macros"] }
