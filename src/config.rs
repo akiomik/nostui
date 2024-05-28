@@ -91,7 +91,7 @@ impl Config {
         }
 
         if cfg.relays.is_empty() {
-            cfg.relays = default_config.relays.clone();
+            cfg.relays.clone_from(&default_config.relays);
         }
 
         Ok(cfg)
