@@ -46,7 +46,7 @@ tracing-error = "0.2.0"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter", "serde"] }
 tui-textarea = "0.4.0"
 tui-widget-list = "0.7.1"
-unicode-width = "0.1.12"
+unicode-width = "0.1.13"
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"
