@@ -9,7 +9,7 @@ use crate::tui::Frame;
 use crate::widgets::PublicKey;
 
 pub struct StatusBar {
-    pubkey: XOnlyPublicKey,
+    pubkey: nostr_sdk::PublicKey,
     profile: Option<Profile>,
     message: Option<String>,
     is_loading: bool,
@@ -17,7 +17,7 @@ pub struct StatusBar {
 
 impl StatusBar {
     pub fn new(
-        pubkey: XOnlyPublicKey,
+        pubkey: nostr_sdk::PublicKey,
         profile: Option<Profile>,
         message: Option<String>,
         is_loading: bool,

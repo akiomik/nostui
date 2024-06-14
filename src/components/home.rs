@@ -26,7 +26,7 @@ pub struct Home<'a> {
     config: Config,
     list_state: tui_widget_list::ListState,
     notes: ReverseSortedSet<SortableEvent>,
-    profiles: HashMap<XOnlyPublicKey, Profile>,
+    profiles: HashMap<PublicKey, Profile>,
     reactions: HashMap<EventId, HashSet<Event>>,
     reposts: HashMap<EventId, HashSet<Event>>,
     zap_receipts: HashMap<EventId, HashSet<Event>>,
