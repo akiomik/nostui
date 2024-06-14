@@ -150,18 +150,18 @@ impl App {
                     Action::ReceiveEvent(ref event) => {
                         log::info!("Got nostr event: {event:?}");
                     }
-                    Action::SendReaction((id, pubkey)) => {
-                        let event = EventBuilder::reaction(id, pubkey, "+").to_event(&keys)?;
+                    Action::SendReaction(ref target_event) => {
+                        let event = EventBuilder::reaction(target_event, "+").to_event(&keys)?;
                         log::info!("Send reaction: {event:?}");
                         event_tx.send(event)?;
-                        let note1 = id.to_bech32()?;
+                        let note1 = target_event.id.to_bech32()?;
                         action_tx.send(Action::SystemMessage(format!("[Liked] {note1}")))?;
                     }
-                    Action::SendRepost((id, pubkey)) => {
-                        let event = EventBuilder::repost(id, pubkey).to_event(&keys)?;
+                    Action::SendRepost(ref target_event) => {
+                        let event = EventBuilder::repost(target_event, None).to_event(&keys)?;
                         log::info!("Send repost: {event:?}");
                         event_tx.send(event)?;
-                        let note1 = id.to_bech32()?;
+                        let note1 = target_event.id.to_bech32()?;
                         action_tx.send(Action::SystemMessage(format!("[Reposted] {note1}")))?;
                     }
                     Action::SendTextNote(ref content, ref tags) => {
