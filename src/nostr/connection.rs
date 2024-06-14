@@ -33,7 +33,7 @@ impl Connection {
             .since(Timestamp::now() - Duration::new(60 * 5, 0)); // 5min
         let profile_filter = Filter::new().authors(followings).kinds([Kind::Metadata]);
         self.client
-            .subscribe(vec![timeline_filter, profile_filter])
+            .subscribe(vec![timeline_filter, profile_filter], None)
             .await;
 
         Ok(self.client.notifications())

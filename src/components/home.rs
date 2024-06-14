@@ -192,7 +192,7 @@ impl<'a> Component for Home<'a> {
                     &self.command_tx,
                 ) {
                     let event = self.get_note(i).expect("failed to get target event");
-                    tx.send(Action::SendReaction((event.id, event.pubkey)))?;
+                    tx.send(Action::SendReaction(event.clone()))?;
                 }
             }
             Action::Repost => {
@@ -202,7 +202,7 @@ impl<'a> Component for Home<'a> {
                     &self.command_tx,
                 ) {
                     let event = self.get_note(i).expect("failed to get target event");
-                    tx.send(Action::SendRepost((event.id, event.pubkey)))?;
+                    tx.send(Action::SendRepost(event.clone()))?;
                 }
             }
             Action::Unselect => {

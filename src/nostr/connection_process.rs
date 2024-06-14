@@ -43,7 +43,7 @@ impl ConnectionProcess {
             loop {
                 while let Ok(notification) = timeline.try_recv() {
                     if let RelayPoolNotification::Event { event, .. } = notification {
-                        self.req_tx.send(event)?;
+                        self.req_tx.send(*event)?;
                     };
                 }
 
