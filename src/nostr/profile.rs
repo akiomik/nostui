@@ -4,13 +4,13 @@ use crate::text::shorten_hex;
 
 #[derive(Clone, Debug)]
 pub struct Profile {
-    pub pubkey: XOnlyPublicKey,
+    pub pubkey: PublicKey,
     pub created_at: Timestamp,
     pub metadata: Metadata,
 }
 
 impl Profile {
-    pub fn new(pubkey: XOnlyPublicKey, created_at: Timestamp, metadata: Metadata) -> Self {
+    pub fn new(pubkey: PublicKey, created_at: Timestamp, metadata: Metadata) -> Self {
         Self {
             pubkey,
             created_at,

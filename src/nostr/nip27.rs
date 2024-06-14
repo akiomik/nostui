@@ -49,7 +49,7 @@ mod tests {
         "Hello, nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug!",
         vec![
             Reference::new(
-                Nip21::Pubkey(XOnlyPublicKey::from_nostr_uri("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug").unwrap()),
+                Nip21::Pubkey(PublicKey::from_nostr_uri("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug").unwrap()),
                 String::from("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug")
             )
         ])
@@ -70,11 +70,11 @@ mod tests {
         "#,
         vec![
             Reference::new(
-                Nip21::Pubkey(XOnlyPublicKey::from_nostr_uri("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug").unwrap()),
+                Nip21::Pubkey(PublicKey::from_nostr_uri("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug").unwrap()),
                 String::from("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug")
             ),
             Reference::new(
-                Nip21::Pubkey(XOnlyPublicKey::from_nostr_uri("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug").unwrap()),
+                Nip21::Pubkey(PublicKey::from_nostr_uri("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug").unwrap()),
                 String::from("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug")
             ),
             Reference::new(

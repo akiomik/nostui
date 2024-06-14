@@ -30,7 +30,7 @@ impl App {
         let home = Home::new();
         let fps = FpsCounter::default();
         let config = Config::new()?;
-        let pubkey = Keys::from_sk_str(config.privatekey.as_str())?.public_key();
+        let pubkey = Keys::parse(config.privatekey.as_str())?.public_key();
         let status_bar = StatusBar::new(pubkey, None, None, true);
         let mode = Mode::Home;
         Ok(Self {
@@ -66,7 +66,7 @@ impl App {
             component.init(tui.size()?)?;
         }
 
-        let keys = Keys::from_sk_str(&self.config.privatekey.clone())?;
+        let keys = Keys::parse(self.config.privatekey.clone())?;
         let conn = Connection::new(keys.clone(), self.config.relays.clone()).await?;
         let (mut req_rx, event_tx, terminate_tx, conn_wrapper) = ConnectionProcess::new(conn)?;
         conn_wrapper.run();

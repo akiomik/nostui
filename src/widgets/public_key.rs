@@ -1,14 +1,13 @@
-use nostr_sdk::prelude::*;
 use ratatui::prelude::*;
 
 use crate::text::shorten_hex;
 
 pub struct PublicKey {
-    key: XOnlyPublicKey,
+    key: nostr_sdk::PublicKey,
 }
 
 impl PublicKey {
-    pub fn new(key: XOnlyPublicKey) -> Self {
+    pub fn new(key: nostr_sdk::PublicKey) -> Self {
         Self { key }
     }
 
@@ -34,7 +33,7 @@ mod tests {
 
     #[rstest]
     fn test_shortened() {
-        let key = XOnlyPublicKey::from_str(
+        let key = nostr_sdk::PublicKey::from_str(
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )
         .unwrap();
