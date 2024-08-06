@@ -44,7 +44,7 @@ tokio-util = "0.7.11"
 tracing = "0.1.37"
 tracing-error = "0.2.0"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter", "serde"] }
-tui-textarea = "0.4.0"
+tui-textarea = "0.5.3"
 tui-widget-list = "0.7.1"
 unicode-width = "0.1.13"
 
