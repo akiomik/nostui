@@ -49,5 +49,5 @@ tui-widget-list = "0.7.1"
 unicode-width = "0.1.13"
 
 [dev-dependencies]
-pretty_assertions = "1.4.0"
+pretty_assertions = "1.4.1"
 rstest = "0.22.0"
