@@ -16,7 +16,7 @@ impl PublicKey {
     }
 }
 
-impl<'a> From<PublicKey> for Text<'a> {
+impl From<PublicKey> for Text<'_> {
     fn from(value: PublicKey) -> Self {
         Text::from(value.shortened())
     }

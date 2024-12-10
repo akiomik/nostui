@@ -35,7 +35,7 @@ pub struct Home<'a> {
     reply_to: Option<Event>,
 }
 
-impl<'a> Home<'a> {
+impl Home<'_> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -144,7 +144,7 @@ impl<'a> Home<'a> {
     }
 }
 
-impl<'a> Component for Home<'a> {
+impl Component for Home<'_> {
     fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.command_tx = Some(tx);
         Ok(())
@@ -292,7 +292,7 @@ impl<'a> Component for Home<'a> {
     }
 }
 
-impl<'a> ScrollableList<Event> for Home<'a> {
+impl ScrollableList<Event> for Home<'_> {
     fn select(&mut self, index: Option<usize>) {
         self.list_state.select(index);
     }
