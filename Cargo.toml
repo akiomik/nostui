@@ -39,7 +39,7 @@ sorted-vec = "0.8.6"
 strip-ansi-escapes = "0.2.0"
 strum = { version = "0.27.1", features = ["derive"] }
 thousands = "0.2.0"
-tokio = { version = "1.44.2", features = ["full"] }
+tokio = { version = "1.46.1", features = ["full"] }
 tokio-util = "0.7.12"
 tracing = "0.1.37"
 tracing-error = "0.2.1"
