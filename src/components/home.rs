@@ -1,8 +1,8 @@
 use std::cmp::Reverse;
-use std::collections::HashSet;
 use std::collections::{hash_map::Entry, HashMap};
 
 use color_eyre::eyre::Result;
+use nostr_sdk::nostr::{Alphabet, SingleLetterTag, TagKind, TagStandard};
 use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets, widgets::*};
 use sorted_vec::ReverseSortedSet;
@@ -27,9 +27,9 @@ pub struct Home<'a> {
     list_state: tui_widget_list::ListState,
     notes: ReverseSortedSet<SortableEvent>,
     profiles: HashMap<PublicKey, Profile>,
-    reactions: HashMap<EventId, HashSet<Event>>,
-    reposts: HashMap<EventId, HashSet<Event>>,
-    zap_receipts: HashMap<EventId, HashSet<Event>>,
+    reactions: HashMap<EventId, Vec<Event>>,
+    reposts: HashMap<EventId, Vec<Event>>,
+    zap_receipts: HashMap<EventId, Vec<Event>>,
     show_input: bool,
     input: TextArea<'a>,
     reply_to: Option<Event>,
@@ -43,7 +43,9 @@ impl Home<'_> {
     fn find_last_event_tag(&self, ev: &Event) -> Option<Tag> {
         ev.tags
             .iter()
-            .filter(|tag| matches!(tag, Tag::Event { .. }))
+            .filter(|tag| {
+                tag.kind() == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::E))
+            })
             .next_back()
             .cloned()
     }
@@ -72,13 +74,18 @@ impl Home<'_> {
 
     fn append_reaction(&mut self, reaction: Event) {
         // reactions grouped by event_id
-        if let Some(Tag::Event { event_id, .. }) = self.find_last_event_tag(&reaction) {
-            match self.reactions.entry(event_id) {
-                Entry::Vacant(e) => {
-                    e.insert(HashSet::from([reaction]));
-                }
-                Entry::Occupied(mut e) => {
-                    e.get_mut().insert(reaction);
+        if let Some(tag) = self.find_last_event_tag(&reaction) {
+            if let Some(TagStandard::Event { event_id, .. }) = tag.as_standardized() {
+                match self.reactions.entry(*event_id) {
+                    Entry::Vacant(e) => {
+                        e.insert(vec![reaction]);
+                    }
+                    Entry::Occupied(mut e) => {
+                        let vec = e.get_mut();
+                        if !vec.iter().any(|r| r.id == reaction.id) {
+                            vec.push(reaction);
+                        }
+                    }
                 }
             }
         }
@@ -86,36 +93,46 @@ impl Home<'_> {
 
     fn append_repost(&mut self, repost: Event) {
         // reposts grouped by event_id
-        if let Some(Tag::Event { event_id, .. }) = self.find_last_event_tag(&repost) {
-            match self.reposts.entry(event_id) {
-                Entry::Vacant(e) => {
-                    e.insert(HashSet::from([repost]));
+        if let Some(tag) = self.find_last_event_tag(&repost) {
+            if let Some(TagStandard::Event { event_id, .. }) = tag.as_standardized() {
+                match self.reposts.entry(*event_id) {
+                    Entry::Vacant(e) => {
+                        e.insert(vec![repost]);
+                    }
+                    Entry::Occupied(mut e) => {
+                        let vec = e.get_mut();
+                        if !vec.iter().any(|r| r.id == repost.id) {
+                            vec.push(repost);
+                        }
+                    }
                 }
-                Entry::Occupied(mut e) => {
-                    e.get_mut().insert(repost);
-                }
-            };
-        };
+            }
+        }
     }
 
     fn append_zap_receipt(&mut self, zap_receipt: Event) {
         // zap receipts grouped by event_id
-        if let Some(Tag::Event { event_id, .. }) = self.find_last_event_tag(&zap_receipt) {
-            match self.zap_receipts.entry(event_id) {
-                Entry::Vacant(e) => {
-                    e.insert(HashSet::from([zap_receipt]));
-                }
-                Entry::Occupied(mut e) => {
-                    e.get_mut().insert(zap_receipt);
+        if let Some(tag) = self.find_last_event_tag(&zap_receipt) {
+            if let Some(TagStandard::Event { event_id, .. }) = tag.as_standardized() {
+                match self.zap_receipts.entry(*event_id) {
+                    Entry::Vacant(e) => {
+                        e.insert(vec![zap_receipt]);
+                    }
+                    Entry::Occupied(mut e) => {
+                        let vec = e.get_mut();
+                        if !vec.iter().any(|z| z.id == zap_receipt.id) {
+                            vec.push(zap_receipt);
+                        }
+                    }
                 }
             }
         }
     }
 
     fn text_note(&self, event: Event, area: Rect, padding: Padding) -> TextNote {
-        let default_reactions = HashSet::new();
-        let default_reposts = HashSet::new();
-        let default_zap_receipts = HashSet::new();
+        let default_reactions = Vec::new();
+        let default_reposts = Vec::new();
+        let default_zap_receipts = Vec::new();
         let profile = self.profiles.get(&event.pubkey);
         let reactions = self.reactions.get(&event.id).unwrap_or(&default_reactions);
         let reposts = self.reposts.get(&event.id).unwrap_or(&default_reposts);

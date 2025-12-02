@@ -1,8 +1,7 @@
-use std::collections::HashSet;
-
 use crate::nostr::Profile;
 use crate::widgets::{PublicKey, ShrinkText};
 use chrono::{DateTime, Local};
+use nostr_sdk::nostr::{Alphabet, SingleLetterTag, TagKind, TagStandard};
 use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets::*};
 use thousands::Separable;
@@ -11,9 +10,9 @@ use thousands::Separable;
 pub struct TextNote {
     pub event: Event,
     pub profile: Option<Profile>,
-    pub reactions: HashSet<Event>,
-    pub reposts: HashSet<Event>,
-    pub zap_receipts: HashSet<Event>,
+    pub reactions: Vec<Event>,
+    pub reposts: Vec<Event>,
+    pub zap_receipts: Vec<Event>,
     pub area: Rect,
     pub padding: Padding, // Only use to calc width/height
     pub highlight: bool,
@@ -24,9 +23,9 @@ impl TextNote {
     pub fn new(
         event: Event,
         profile: Option<Profile>,
-        reactions: HashSet<Event>,
-        reposts: HashSet<Event>,
-        zap_receipts: HashSet<Event>,
+        reactions: Vec<Event>,
+        reposts: Vec<Event>,
+        zap_receipts: Vec<Event>,
         area: Rect,
         padding: Padding,
     ) -> Self {
@@ -71,7 +70,7 @@ impl TextNote {
     }
 
     pub fn created_at(&self) -> String {
-        DateTime::from_timestamp(self.event.created_at.as_i64(), 0)
+        DateTime::from_timestamp(self.event.created_at.as_u64() as i64, 0)
             .expect("Invalid created_at")
             .with_timezone(&Local)
             .format("%T")
@@ -89,7 +88,9 @@ impl TextNote {
     fn find_amount(&self, ev: &Event) -> Option<Tag> {
         ev.tags
             .iter()
-            .filter(|tag| matches!(tag, Tag::Amount { .. }))
+            .filter(|tag| {
+                tag.kind() == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::A))
+            })
             .next_back()
             .cloned()
     }
@@ -98,15 +99,21 @@ impl TextNote {
         self.event
             .tags
             .iter()
-            .filter(|tag| matches!(tag, Tag::Event { .. }))
+            .filter(|tag| {
+                tag.kind() == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::E))
+            })
             .next_back()
             .cloned()
     }
 
     pub fn zap_amount(&self) -> u64 {
         self.zap_receipts.iter().fold(0, |acc, ev| {
-            if let Some(Tag::Amount { millisats, .. }) = self.find_amount(ev) {
-                acc + millisats
+            if let Some(tag) = self.find_amount(ev) {
+                if let Some(TagStandard::Amount { millisats, .. }) = tag.as_standardized() {
+                    acc + millisats
+                } else {
+                    acc
+                }
             } else {
                 acc
             }
@@ -150,12 +157,14 @@ impl Widget for TextNote {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut text = Text::default();
 
-        if let Some(Tag::Event { event_id, .. }) = self.find_reply_tag() {
-            if let Ok(note1) = event_id.to_bech32() {
-                text.extend(Text::styled(
-                    format!("Reply to {}", note1),
-                    Style::default().fg(Color::Cyan),
-                ));
+        if let Some(tag) = self.find_reply_tag() {
+            if let Some(TagStandard::Event { event_id, .. }) = tag.as_standardized() {
+                if let Ok(note1) = event_id.to_bech32() {
+                    text.extend(Text::styled(
+                        format!("Reply to {}", note1),
+                        Style::default().fg(Color::Cyan),
+                    ));
+                }
             }
         }
 
@@ -302,9 +311,9 @@ mod tests {
         let note = TextNote::new(
             event,
             profile,
-            HashSet::new(),
-            HashSet::new(),
-            HashSet::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
             area,
             padding,
         );
@@ -339,9 +348,9 @@ mod tests {
         let note = TextNote::new(
             event,
             profile,
-            HashSet::new(),
-            HashSet::new(),
-            HashSet::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
             area,
             padding,
         );
@@ -353,9 +362,9 @@ mod tests {
         let note = TextNote::new(
             event,
             None,
-            HashSet::new(),
-            HashSet::new(),
-            HashSet::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
             Rect::new(0, 0, 0, 0),
             Padding::new(0, 0, 0, 0),
         );
