@@ -8,8 +8,7 @@ use ratatui::{prelude::*, widgets, widgets::*};
 use sorted_vec::ReverseSortedSet;
 use tokio::sync::mpsc::UnboundedSender;
 use tui_textarea::TextArea;
-#[allow(deprecated)]
-use tui_widget_list::List;
+use tui_widget_list::{ListBuilder, ListView};
 
 use super::{Component, Frame};
 use crate::text::shorten_hex;
@@ -246,14 +245,24 @@ impl Component for Home<'_> {
 
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         let padding = Padding::new(1, 1, 1, 3);
-        let items: Vec<TextNote> = self
-            .notes
-            .iter()
-            .map(|ev| self.text_note(ev.0.event.clone(), area, padding))
-            .collect();
 
-        #[allow(deprecated)]
-        let list = List::new(items)
+        // Pre-generate all TextNote items with proper heights
+        let mut items: Vec<(TextNote, u16)> = Vec::new();
+        for ev in &self.notes {
+            let text_note = self.text_note(ev.0.event.clone(), area, padding);
+            let height = text_note.calculate_height();
+            items.push((text_note, height));
+        }
+
+        let item_count = items.len();
+
+        let builder = ListBuilder::new(move |context| {
+            let mut item = items[context.index].clone();
+            item.0.highlight = context.is_selected;
+            (item.0, item.1)
+        });
+
+        let list = ListView::new(builder, item_count)
             .block(widgets::Block::default().title("Timeline").padding(padding))
             .style(Style::default().fg(Color::White));
 
