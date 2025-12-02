@@ -1,3 +1,4 @@
+use nostr_sdk::nostr::{Alphabet, SingleLetterTag, TagKind, TagStandard};
 use nostr_sdk::prelude::*;
 
 pub struct ReplyTagsBuilder {}
@@ -9,22 +10,31 @@ impl ReplyTagsBuilder {
             .iter()
             .fold((vec![], vec![], vec![]), |mut acc, tag| {
                 match tag {
-                    Tag::Event {
-                        event_id,
-                        relay_url,
-                        marker,
-                    } => {
-                        if let Some(Marker::Reply) = marker {
-                            acc.0.push(Tag::Event {
-                                event_id: *event_id,
-                                relay_url: relay_url.clone(),
-                                marker: None,
-                            })
-                        } else {
-                            acc.0.push(tag.clone())
+                    tag if tag.kind()
+                        == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::E)) =>
+                    {
+                        if let Some(TagStandard::Event {
+                            event_id,
+                            relay_url,
+                            marker,
+                        }) = tag.as_standardized()
+                        {
+                            if let Some(Marker::Reply) = marker {
+                                acc.0.push(Tag::from(TagStandard::Event {
+                                    event_id: *event_id,
+                                    relay_url: relay_url.clone(),
+                                    marker: None,
+                                }))
+                            } else {
+                                acc.0.push(tag.clone())
+                            }
                         }
                     }
-                    Tag::PublicKey { .. } => acc.1.push(tag.clone()),
+                    tag if tag.kind()
+                        == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::P)) =>
+                    {
+                        acc.1.push(tag.clone())
+                    }
                     _ => acc.2.push(tag.clone()),
                 }
 
@@ -37,22 +47,29 @@ impl ReplyTagsBuilder {
             Some(Marker::Reply)
         };
 
-        etags.push(Tag::Event {
+        etags.push(Tag::from(TagStandard::Event {
             event_id: reply_to.id,
             relay_url: None,
             marker,
-        });
+        }));
 
-        if !ptags
-            .iter()
-            .any(|tag| matches!(tag, Tag::PublicKey { public_key, .. } if *public_key == reply_to.pubkey))
-        {
-            ptags.push(Tag::PublicKey {
+        if !ptags.iter().any(|tag| {
+            if tag.kind() == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::P)) {
+                if let Some(TagStandard::PublicKey { public_key, .. }) = tag.as_standardized() {
+                    *public_key == reply_to.pubkey
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }) {
+            ptags.push(Tag::from(TagStandard::PublicKey {
                 public_key: reply_to.pubkey,
                 relay_url: None,
                 alias: None,
                 uppercase: false,
-            });
+            }));
         }
 
         [etags, ptags, rest_tags].concat()
@@ -149,15 +166,15 @@ mod tests {
     #[rstest]
     fn test_reply_tags_builder_build_root(root_event: Event) {
         let expected = vec![
-            Tag::Event {
+            Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
                     "03aafbdec84e4cbbbe3cd1811d45f16a0b55214b0b72097851c3618f73638cf0",
                 )
                 .unwrap(),
                 relay_url: None,
                 marker: Some(Marker::Root),
-            },
-            Tag::PublicKey {
+            }),
+            Tag::from(TagStandard::PublicKey {
                 public_key: PublicKey::from_str(
                     "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
                 )
@@ -165,7 +182,7 @@ mod tests {
                 relay_url: None,
                 alias: None,
                 uppercase: false,
-            },
+            }),
         ];
         assert_eq!(ReplyTagsBuilder::build(root_event), expected);
     }
@@ -173,23 +190,23 @@ mod tests {
     #[rstest]
     fn test_reply_tags_builder_build_reply(reply_event: Event) {
         let expected = vec![
-            Tag::Event {
+            Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
                     "03aafbdec84e4cbbbe3cd1811d45f16a0b55214b0b72097851c3618f73638cf0",
                 )
                 .unwrap(),
                 relay_url: None,
                 marker: Some(Marker::Root),
-            },
-            Tag::Event {
+            }),
+            Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
                     "d444f485b5d401ee64564e4cc2bca7d9a50ad5ec628191470c009490ed1d43c3",
                 )
                 .unwrap(),
                 relay_url: None,
                 marker: Some(Marker::Reply),
-            },
-            Tag::PublicKey {
+            }),
+            Tag::from(TagStandard::PublicKey {
                 public_key: PublicKey::from_str(
                     "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
                 )
@@ -197,7 +214,7 @@ mod tests {
                 relay_url: None,
                 alias: None,
                 uppercase: false,
-            },
+            }),
         ];
         assert_eq!(ReplyTagsBuilder::build(reply_event), expected);
     }
@@ -205,31 +222,31 @@ mod tests {
     #[rstest]
     fn test_reply_tags_builder_build_tag(tag_event: Event) {
         let expected = vec![
-            Tag::Event {
+            Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
                     "03aafbdec84e4cbbbe3cd1811d45f16a0b55214b0b72097851c3618f73638cf0",
                 )
                 .unwrap(),
                 relay_url: None,
                 marker: Some(Marker::Root),
-            },
-            Tag::Event {
+            }),
+            Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
                     "d444f485b5d401ee64564e4cc2bca7d9a50ad5ec628191470c009490ed1d43c3",
                 )
                 .unwrap(),
                 relay_url: None,
                 marker: None,
-            },
-            Tag::Event {
+            }),
+            Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
                     "5d6468d901f4b933b3b71c1ad9761226121de929ba3351a28973a3ba1cab05f2",
                 )
                 .unwrap(),
                 relay_url: None,
                 marker: Some(Marker::Reply),
-            },
-            Tag::PublicKey {
+            }),
+            Tag::from(TagStandard::PublicKey {
                 public_key: PublicKey::from_str(
                     "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
                 )
@@ -237,8 +254,8 @@ mod tests {
                 relay_url: None,
                 alias: None,
                 uppercase: false,
-            },
-            Tag::Hashtag(String::from("nostr")),
+            }),
+            Tag::hashtag(String::from("nostr")),
         ];
         assert_eq!(ReplyTagsBuilder::build(tag_event), expected);
     }
