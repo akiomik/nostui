@@ -4,7 +4,8 @@ use chrono::{DateTime, Local};
 use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets::*};
 use thousands::Separable;
-use tui_widget_list::Listable;
+#[allow(deprecated)]
+use tui_widget_list::{ListableWidget, ScrollAxis};
 
 use crate::nostr::Profile;
 use crate::widgets::{PublicKey, ShrinkText};
@@ -220,8 +221,9 @@ impl Widget for TextNote {
     }
 }
 
-impl Listable for TextNote {
-    fn height(&self) -> usize {
+#[allow(deprecated)]
+impl ListableWidget for TextNote {
+    fn size(&self, _axis: &ScrollAxis) -> usize {
         let content: Text = ShrinkText::new(
             self.event.content.clone(),
             self.content_width() as usize,

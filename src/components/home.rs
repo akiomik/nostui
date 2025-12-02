@@ -53,7 +53,7 @@ impl Home<'_> {
         self.notes.find_or_insert(note);
 
         // Keep selected position
-        let selection = self.list_state.selected().map(|i| i + 1);
+        let selection = self.list_state.selected.map(|i| i + 1);
         self.list_state.select(selection);
     }
 
@@ -186,21 +186,17 @@ impl Component for Home<'_> {
                 }
             }
             Action::React => {
-                if let (false, Some(i), Some(tx)) = (
-                    self.show_input,
-                    self.list_state.selected(),
-                    &self.command_tx,
-                ) {
+                if let (false, Some(i), Some(tx)) =
+                    (self.show_input, self.list_state.selected, &self.command_tx)
+                {
                     let event = self.get_note(i).expect("failed to get target event");
                     tx.send(Action::SendReaction(event.clone()))?;
                 }
             }
             Action::Repost => {
-                if let (false, Some(i), Some(tx)) = (
-                    self.show_input,
-                    self.list_state.selected(),
-                    &self.command_tx,
-                ) {
+                if let (false, Some(i), Some(tx)) =
+                    (self.show_input, self.list_state.selected, &self.command_tx)
+                {
                     let event = self.get_note(i).expect("failed to get target event");
                     tx.send(Action::SendRepost(event.clone()))?;
                 }
@@ -257,8 +253,7 @@ impl Component for Home<'_> {
 
         let list = List::new(items)
             .block(widgets::Block::default().title("Timeline").padding(padding))
-            .style(Style::default().fg(Color::White))
-            .truncate(true);
+            .style(Style::default().fg(Color::White));
 
         f.render_stateful_widget(list, area, &mut self.list_state);
 
@@ -285,7 +280,7 @@ impl Component for Home<'_> {
                     .title("New note: Press ESC to close")
             };
             self.input.set_block(block);
-            f.render_widget(self.input.widget(), input_area);
+            f.render_widget(&self.input, input_area);
         }
 
         Ok(())
@@ -298,7 +293,7 @@ impl ScrollableList<Event> for Home<'_> {
     }
 
     fn selected(&self) -> Option<usize> {
-        self.list_state.selected()
+        self.list_state.selected
     }
 
     fn len(&self) -> usize {
