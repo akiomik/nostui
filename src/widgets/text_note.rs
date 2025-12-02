@@ -4,6 +4,8 @@ use chrono::{DateTime, Local};
 use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets::*};
 use thousands::Separable;
+// Note: Using deprecated PreRender for now, new API requires significant refactoring
+#[allow(deprecated)]
 use tui_widget_list::{PreRender, PreRenderContext};
 
 use crate::nostr::Profile;
@@ -220,7 +222,9 @@ impl Widget for TextNote {
     }
 }
 
+#[allow(deprecated)]
 impl PreRender for TextNote {
+    #[allow(deprecated)]
     fn pre_render(&mut self, context: &PreRenderContext) -> u16 {
         // Apply highlighting based on selection state
         self.highlight = context.is_selected;

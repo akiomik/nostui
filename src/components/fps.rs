@@ -86,7 +86,7 @@ impl Component for FpsCounter {
             "{:.2} ticks per sec (app) {:.2} frames per sec (render)",
             self.app_fps, self.render_fps
         );
-        let block = Block::default().title(block::Title::from(s.dim()).alignment(Alignment::Right));
+        let block = Block::default().title_top(Line::from(s.dim()).right_aligned());
         f.render_widget(block, rect);
         Ok(())
     }
