@@ -92,7 +92,7 @@ impl TextNote {
         ev.tags
             .iter()
             .filter(|tag| matches!(tag, Tag::Amount { .. }))
-            .last()
+            .next_back()
             .cloned()
     }
 
@@ -101,7 +101,7 @@ impl TextNote {
             .tags
             .iter()
             .filter(|tag| matches!(tag, Tag::Event { .. }))
-            .last()
+            .next_back()
             .cloned()
     }
 
