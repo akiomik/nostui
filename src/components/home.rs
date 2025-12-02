@@ -44,7 +44,7 @@ impl Home<'_> {
         ev.tags
             .iter()
             .filter(|tag| matches!(tag, Tag::Event { .. }))
-            .last()
+            .next_back()
             .cloned()
     }
 
