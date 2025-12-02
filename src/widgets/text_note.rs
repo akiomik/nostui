@@ -1,15 +1,11 @@
 use std::collections::HashSet;
 
+use crate::nostr::Profile;
+use crate::widgets::{PublicKey, ShrinkText};
 use chrono::{DateTime, Local};
 use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets::*};
 use thousands::Separable;
-// Note: Using deprecated PreRender for now, new API requires significant refactoring
-#[allow(deprecated)]
-use tui_widget_list::{PreRender, PreRenderContext};
-
-use crate::nostr::Profile;
-use crate::widgets::{PublicKey, ShrinkText};
 
 #[derive(Clone, Debug)]
 pub struct TextNote {
@@ -129,6 +125,25 @@ impl TextNote {
             .height
             .saturating_sub(self.padding.top + self.padding.bottom + 5)
     }
+
+    pub fn calculate_height(&self) -> u16 {
+        let content: Text = ShrinkText::new(
+            self.event.content.clone(),
+            self.content_width() as usize,
+            self.content_height() as usize,
+        )
+        .into();
+
+        let height = if self.find_reply_tag().is_some() {
+            // NOTE: 5 = annotation + name + created_at + stats + separator
+            5 + content.height()
+        } else {
+            // NOTE: 4 = name + created_at + stats + separator
+            4 + content.height()
+        };
+
+        height as u16
+    }
 }
 
 impl Widget for TextNote {
@@ -219,32 +234,6 @@ impl Widget for TextNote {
         }
 
         Paragraph::new(text).render(area, buf);
-    }
-}
-
-#[allow(deprecated)]
-impl PreRender for TextNote {
-    #[allow(deprecated)]
-    fn pre_render(&mut self, context: &PreRenderContext) -> u16 {
-        // Apply highlighting based on selection state
-        self.highlight = context.is_selected;
-
-        let content: Text = ShrinkText::new(
-            self.event.content.clone(),
-            self.content_width() as usize,
-            self.content_height() as usize,
-        )
-        .into();
-
-        let height = if self.find_reply_tag().is_some() {
-            // NOTE: 5 = annotation + name + created_at + stats + separator
-            5 + content.height()
-        } else {
-            // NOTE: 4 = name + created_at + stats + separator
-            4 + content.height()
-        };
-
-        height as u16
     }
 }
 
