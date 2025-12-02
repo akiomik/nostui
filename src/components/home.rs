@@ -8,6 +8,7 @@ use ratatui::{prelude::*, widgets, widgets::*};
 use sorted_vec::ReverseSortedSet;
 use tokio::sync::mpsc::UnboundedSender;
 use tui_textarea::TextArea;
+#[allow(deprecated)]
 use tui_widget_list::List;
 
 use super::{Component, Frame};
@@ -235,7 +236,7 @@ impl Component for Home<'_> {
             }
             Action::Key(key) => {
                 if self.show_input {
-                    self.input.input(key);
+                    self.input.input(crossterm::event::Event::Key(key));
                 }
             }
             _ => {}
@@ -251,6 +252,7 @@ impl Component for Home<'_> {
             .map(|ev| self.text_note(ev.0.event.clone(), area, padding))
             .collect();
 
+        #[allow(deprecated)]
         let list = List::new(items)
             .block(widgets::Block::default().title("Timeline").padding(padding))
             .style(Style::default().fg(Color::White));
@@ -258,7 +260,7 @@ impl Component for Home<'_> {
         f.render_stateful_widget(list, area, &mut self.list_state);
 
         if self.show_input {
-            let mut input_area = f.size();
+            let mut input_area = f.area();
             input_area.height /= 2;
             input_area.y = input_area.height;
             input_area.height -= 2;
