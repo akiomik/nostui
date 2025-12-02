@@ -4,8 +4,7 @@ use chrono::{DateTime, Local};
 use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets::*};
 use thousands::Separable;
-#[allow(deprecated)]
-use tui_widget_list::{ListableWidget, ScrollAxis};
+use tui_widget_list::{PreRender, PreRenderContext};
 
 use crate::nostr::Profile;
 use crate::widgets::{PublicKey, ShrinkText};
@@ -221,9 +220,11 @@ impl Widget for TextNote {
     }
 }
 
-#[allow(deprecated)]
-impl ListableWidget for TextNote {
-    fn size(&self, _axis: &ScrollAxis) -> usize {
+impl PreRender for TextNote {
+    fn pre_render(&mut self, context: &PreRenderContext) -> u16 {
+        // Apply highlighting based on selection state
+        self.highlight = context.is_selected;
+
         let content: Text = ShrinkText::new(
             self.event.content.clone(),
             self.content_width() as usize,
@@ -231,20 +232,15 @@ impl ListableWidget for TextNote {
         )
         .into();
 
-        if self.find_reply_tag().is_some() {
+        let height = if self.find_reply_tag().is_some() {
             // NOTE: 5 = annotation + name + created_at + stats + separator
-            return 5 + content.height();
-        }
+            5 + content.height()
+        } else {
+            // NOTE: 4 = name + created_at + stats + separator
+            4 + content.height()
+        };
 
-        // NOTE: 4 = name + created_at + stats + separator
-        4 + content.height()
-    }
-
-    fn highlight(self) -> Self {
-        Self {
-            highlight: true,
-            ..self
-        }
+        height as u16
     }
 }
 
