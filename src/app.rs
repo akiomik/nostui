@@ -152,14 +152,16 @@ impl App {
                         log::info!("Got nostr event: {event:?}");
                     }
                     Action::SendReaction(ref target_event) => {
-                        let event = EventBuilder::reaction(target_event, "+").to_event(&keys)?;
+                        let event =
+                            EventBuilder::reaction(target_event, "+").sign_with_keys(&keys)?;
                         log::info!("Send reaction: {event:?}");
                         event_tx.send(event)?;
                         let note1 = target_event.id.to_bech32()?;
                         action_tx.send(Action::SystemMessage(format!("[Liked] {note1}")))?;
                     }
                     Action::SendRepost(ref target_event) => {
-                        let event = EventBuilder::repost(target_event, None).to_event(&keys)?;
+                        let event =
+                            EventBuilder::repost(target_event, None).sign_with_keys(&keys)?;
                         log::info!("Send repost: {event:?}");
                         event_tx.send(event)?;
                         let note1 = target_event.id.to_bech32()?;
@@ -167,7 +169,7 @@ impl App {
                     }
                     Action::SendTextNote(ref content, ref tags) => {
                         let event = EventBuilder::text_note(content, tags.iter().cloned())
-                            .to_event(&keys)?;
+                            .sign_with_keys(&keys)?;
                         log::info!("Send text note: {event:?}");
                         event_tx.send(event)?;
                         action_tx.send(Action::SystemMessage(format!("[Posted] {content}")))?;
