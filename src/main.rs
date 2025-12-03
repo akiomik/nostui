@@ -1,25 +1,12 @@
 #![deny(warnings)]
 #![allow(dead_code)]
 
-pub mod action;
-pub mod app;
-pub mod cli;
-pub mod collections;
-pub mod components;
-pub mod config;
-pub mod mode;
-pub mod nostr;
-pub mod text;
-pub mod tui;
-pub mod utils;
-pub mod widgets;
-
 use clap::Parser;
-use cli::Cli;
 use color_eyre::eyre::Result;
 
-use crate::{
+use nostui::{
     app::App,
+    cli::Cli,
     utils::{initialize_logging, initialize_panic_handler},
 };
 
