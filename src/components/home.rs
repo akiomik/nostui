@@ -1,5 +1,7 @@
 use std::cmp::Reverse;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashMap;
+
+use crate::collections::EventSet;
 
 use color_eyre::eyre::Result;
 use nostr_sdk::nostr::{Alphabet, SingleLetterTag, TagKind, TagStandard};
@@ -27,9 +29,9 @@ pub struct Home<'a> {
     list_state: tui_widget_list::ListState,
     notes: ReverseSortedSet<SortableEvent>,
     profiles: HashMap<PublicKey, Profile>,
-    reactions: HashMap<EventId, Vec<Event>>,
-    reposts: HashMap<EventId, Vec<Event>>,
-    zap_receipts: HashMap<EventId, Vec<Event>>,
+    reactions: HashMap<EventId, EventSet>,
+    reposts: HashMap<EventId, EventSet>,
+    zap_receipts: HashMap<EventId, EventSet>,
     show_input: bool,
     input: TextArea<'a>,
     reply_to: Option<Event>,
@@ -76,17 +78,10 @@ impl Home<'_> {
         // reactions grouped by event_id
         if let Some(tag) = self.find_last_event_tag(&reaction) {
             if let Some(TagStandard::Event { event_id, .. }) = tag.as_standardized() {
-                match self.reactions.entry(*event_id) {
-                    Entry::Vacant(e) => {
-                        e.insert(vec![reaction]);
-                    }
-                    Entry::Occupied(mut e) => {
-                        let vec = e.get_mut();
-                        if !vec.iter().any(|r| r.id == reaction.id) {
-                            vec.push(reaction);
-                        }
-                    }
-                }
+                self.reactions
+                    .entry(*event_id)
+                    .or_default()
+                    .insert(reaction);
             }
         }
     }
@@ -95,17 +90,7 @@ impl Home<'_> {
         // reposts grouped by event_id
         if let Some(tag) = self.find_last_event_tag(&repost) {
             if let Some(TagStandard::Event { event_id, .. }) = tag.as_standardized() {
-                match self.reposts.entry(*event_id) {
-                    Entry::Vacant(e) => {
-                        e.insert(vec![repost]);
-                    }
-                    Entry::Occupied(mut e) => {
-                        let vec = e.get_mut();
-                        if !vec.iter().any(|r| r.id == repost.id) {
-                            vec.push(repost);
-                        }
-                    }
-                }
+                self.reposts.entry(*event_id).or_default().insert(repost);
             }
         }
     }
@@ -114,25 +99,18 @@ impl Home<'_> {
         // zap receipts grouped by event_id
         if let Some(tag) = self.find_last_event_tag(&zap_receipt) {
             if let Some(TagStandard::Event { event_id, .. }) = tag.as_standardized() {
-                match self.zap_receipts.entry(*event_id) {
-                    Entry::Vacant(e) => {
-                        e.insert(vec![zap_receipt]);
-                    }
-                    Entry::Occupied(mut e) => {
-                        let vec = e.get_mut();
-                        if !vec.iter().any(|z| z.id == zap_receipt.id) {
-                            vec.push(zap_receipt);
-                        }
-                    }
-                }
+                self.zap_receipts
+                    .entry(*event_id)
+                    .or_default()
+                    .insert(zap_receipt);
             }
         }
     }
 
     fn text_note(&self, event: Event, area: Rect, padding: Padding) -> TextNote {
-        let default_reactions = Vec::new();
-        let default_reposts = Vec::new();
-        let default_zap_receipts = Vec::new();
+        let default_reactions = EventSet::new();
+        let default_reposts = EventSet::new();
+        let default_zap_receipts = EventSet::new();
         let profile = self.profiles.get(&event.pubkey);
         let reactions = self.reactions.get(&event.id).unwrap_or(&default_reactions);
         let reposts = self.reposts.get(&event.id).unwrap_or(&default_reposts);

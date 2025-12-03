@@ -1,3 +1,4 @@
+use crate::collections::EventSet;
 use crate::nostr::Profile;
 use crate::widgets::{PublicKey, ShrinkText};
 use chrono::{DateTime, Local};
@@ -10,9 +11,9 @@ use thousands::Separable;
 pub struct TextNote {
     pub event: Event,
     pub profile: Option<Profile>,
-    pub reactions: Vec<Event>,
-    pub reposts: Vec<Event>,
-    pub zap_receipts: Vec<Event>,
+    pub reactions: EventSet,
+    pub reposts: EventSet,
+    pub zap_receipts: EventSet,
     pub area: Rect,
     pub padding: Padding, // Only use to calc width/height
     pub highlight: bool,
@@ -23,9 +24,9 @@ impl TextNote {
     pub fn new(
         event: Event,
         profile: Option<Profile>,
-        reactions: Vec<Event>,
-        reposts: Vec<Event>,
-        zap_receipts: Vec<Event>,
+        reactions: EventSet,
+        reposts: EventSet,
+        zap_receipts: EventSet,
         area: Rect,
         padding: Padding,
     ) -> Self {
@@ -311,9 +312,9 @@ mod tests {
         let note = TextNote::new(
             event,
             profile,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
             area,
             padding,
         );
@@ -348,9 +349,9 @@ mod tests {
         let note = TextNote::new(
             event,
             profile,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
             area,
             padding,
         );
@@ -362,9 +363,9 @@ mod tests {
         let note = TextNote::new(
             event,
             None,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
             Rect::new(0, 0, 0, 0),
             Padding::new(0, 0, 0, 0),
         );
