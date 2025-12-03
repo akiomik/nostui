@@ -67,7 +67,7 @@ impl App {
             component.init(Rect::new(0, 0, size.width, size.height))?;
         }
 
-        let keys = Keys::parse(self.config.privatekey.clone())?;
+        let keys = Keys::parse(&self.config.privatekey)?;
         let conn = Connection::new(keys.clone(), self.config.relays.clone()).await?;
         let (mut req_rx, event_tx, terminate_tx, conn_wrapper) = ConnectionProcess::new(conn)?;
         conn_wrapper.run();

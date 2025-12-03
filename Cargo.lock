@@ -126,9 +126,9 @@ dependencies = [
 
 [[package]]
 name = "async-utility"
-version = "0.2.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a349201d80b4aa18d17a34a182bdd7f8ddf845e9e57d2ea130a12e10ef1e3a47"
+checksum = "a34a3b57207a7a1007832416c3e4862378c8451b4e8e093e436f48c2d3d2c151"
 dependencies = [
  "futures-util",
  "gloo-timers",
@@ -138,9 +138,9 @@ dependencies = [
 
 [[package]]
 name = "async-wsocket"
-version = "0.10.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d50cb541e6d09e119e717c64c46ed33f49be7fa592fa805d56c11d6a7ff093c"
+checksum = "34d2efbc332d581321b37a3012c942b0555483030b5cfc1325a95c386b11e27b"
 dependencies = [
  "async-utility",
  "futures",
@@ -157,12 +157,9 @@ dependencies = [
 
 [[package]]
 name = "atomic-destructor"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d919cb60ba95c87ba42777e9e246c4e8d658057299b437b7512531ce0a09a23"
-dependencies = [
- "tracing",
-]
+checksum = "ef49f5882e4b6afaac09ad239a4f8c70a24b8f2b0897edb1f706008efd109cf4"
 
 [[package]]
 name = "autocfg"
@@ -1012,9 +1009,9 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
 name = "gloo-timers"
-version = "0.2.6"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b995a66bb87bebce9a0f4a95aed01daca4872c050bfcb21653361c03bc35e5c"
+checksum = "bbb143cf96099802033e0d4f4963b19fd2e0b728bcf076cd9cf7f6634f092994"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -1482,9 +1479,9 @@ dependencies = [
 
 [[package]]
 name = "nostr"
-version = "0.37.0"
+version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8aad4b767bbed24ac5eb4465bfb83bc1210522eb99d67cf4e547ec2ec7e47786"
+checksum = "af7c1eebe17dd785e52e1f81149c1b50fa6ec92e4ac239840934d1ffbd4f631c"
 dependencies = [
  "async-trait",
  "base64",
@@ -1508,23 +1505,20 @@ dependencies = [
 
 [[package]]
 name = "nostr-database"
-version = "0.37.0"
+version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23696338d51e45cd44e061823847f4b0d1d362eca80d5033facf9c184149f72f"
+checksum = "4c175f769291b39e399905c1e1f0dcde0ea4959642db50a9a97f47fe73fac947"
 dependencies = [
  "async-trait",
- "lru",
  "nostr",
- "thiserror 1.0.69",
  "tokio",
- "tracing",
 ]
 
 [[package]]
 name = "nostr-relay-pool"
-version = "0.37.0"
+version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15fcc6e3f0ca54d0fc779009bc5f2684cea9147be3b6aa68a7d301ea590f95f5"
+checksum = "fc0a11b3d117d729b32efffacf7566ec6845e96e836cfab32c61b818cf90f8e4"
 dependencies = [
  "async-utility",
  "async-wsocket",
@@ -1533,24 +1527,20 @@ dependencies = [
  "negentropy 0.4.3",
  "nostr",
  "nostr-database",
- "thiserror 1.0.69",
  "tokio",
- "tokio-stream",
  "tracing",
 ]
 
 [[package]]
 name = "nostr-sdk"
-version = "0.37.0"
+version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "491221fc89b1aa189a0de640127127d68b4e7c5c1d44371b04d9a6d10694b5af"
+checksum = "dce4741c6b4bcb46fe5fdf6834c64b2d8aee090264319aa4749f268e20ace111"
 dependencies = [
  "async-utility",
- "atomic-destructor",
  "nostr",
  "nostr-database",
  "nostr-relay-pool",
- "thiserror 1.0.69",
  "tokio",
  "tracing",
 ]
@@ -2757,17 +2747,6 @@ dependencies = [
  "either",
  "futures-util",
  "thiserror 1.0.69",
- "tokio",
-]
-
-[[package]]
-name = "tokio-stream"
-version = "0.1.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eca58d7bba4a75707817a2c44174253f9236b2d5fbd055602e9d5c07c139a047"
-dependencies = [
- "futures-core",
- "pin-project-lite",
  "tokio",
 ]
 
