@@ -71,7 +71,7 @@ impl TextNote {
     }
 
     pub fn created_at(&self) -> String {
-        DateTime::from_timestamp(self.event.created_at.as_u64() as i64, 0)
+        DateTime::from_timestamp(self.event.created_at.as_secs() as i64, 0)
             .expect("Invalid created_at")
             .with_timezone(&Local)
             .format("%T")
