@@ -52,7 +52,7 @@ impl Connection {
     }
 
     pub async fn send(&mut self, event: Event) -> Result<()> {
-        self.client.send_event(event).await?;
+        self.client.send_event(&event).await?;
         Ok(())
     }
 
