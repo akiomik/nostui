@@ -34,7 +34,7 @@ impl Connection {
         let profile_filter = Filter::new().authors(followings).kinds([Kind::Metadata]);
         self.client
             .subscribe(vec![timeline_filter, profile_filter], None)
-            .await;
+            .await?;
 
         Ok(self.client.notifications())
     }
