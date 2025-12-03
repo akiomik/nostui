@@ -17,6 +17,7 @@ impl ReplyTagsBuilder {
                             event_id,
                             relay_url,
                             marker,
+                            public_key: _,
                         }) = tag.as_standardized()
                         {
                             if let Some(Marker::Reply) = marker {
@@ -24,6 +25,7 @@ impl ReplyTagsBuilder {
                                     event_id: *event_id,
                                     relay_url: relay_url.clone(),
                                     marker: None,
+                                    public_key: None,
                                 }))
                             } else {
                                 acc.0.push(tag.clone())
@@ -51,6 +53,7 @@ impl ReplyTagsBuilder {
             event_id: reply_to.id,
             relay_url: None,
             marker,
+            public_key: None,
         }));
 
         if !ptags.iter().any(|tag| {
@@ -173,6 +176,7 @@ mod tests {
                 .unwrap(),
                 relay_url: None,
                 marker: Some(Marker::Root),
+                public_key: None,
             }),
             Tag::from(TagStandard::PublicKey {
                 public_key: PublicKey::from_str(
@@ -197,6 +201,7 @@ mod tests {
                 .unwrap(),
                 relay_url: None,
                 marker: Some(Marker::Root),
+                public_key: None,
             }),
             Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
@@ -205,6 +210,7 @@ mod tests {
                 .unwrap(),
                 relay_url: None,
                 marker: Some(Marker::Reply),
+                public_key: None,
             }),
             Tag::from(TagStandard::PublicKey {
                 public_key: PublicKey::from_str(
@@ -229,6 +235,7 @@ mod tests {
                 .unwrap(),
                 relay_url: None,
                 marker: Some(Marker::Root),
+                public_key: None,
             }),
             Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
@@ -237,6 +244,7 @@ mod tests {
                 .unwrap(),
                 relay_url: None,
                 marker: None,
+                public_key: None,
             }),
             Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
@@ -245,6 +253,7 @@ mod tests {
                 .unwrap(),
                 relay_url: None,
                 marker: Some(Marker::Reply),
+                public_key: None,
             }),
             Tag::from(TagStandard::PublicKey {
                 public_key: PublicKey::from_str(
