@@ -1,6 +1,6 @@
 [package]
 name = "nostui"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A TUI client for Nostr"
 keywords = ["nostr", "tui", "client", "ratatui"]
