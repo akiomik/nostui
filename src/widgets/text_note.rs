@@ -160,12 +160,11 @@ impl Widget for TextNote {
 
         if let Some(tag) = self.find_reply_tag() {
             if let Some(TagStandard::Event { event_id, .. }) = tag.as_standardized() {
-                if let Ok(note1) = event_id.to_bech32() {
-                    text.extend(Text::styled(
-                        format!("Reply to {}", note1),
-                        Style::default().fg(Color::Cyan),
-                    ));
-                }
+                let note1 = event_id.to_bech32().unwrap(); // Infallible
+                text.extend(Text::styled(
+                    format!("Reply to {}", note1),
+                    Style::default().fg(Color::Cyan),
+                ));
             }
         }
 
