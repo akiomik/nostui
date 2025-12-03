@@ -1,12 +1,7 @@
 use nostr_sdk::prelude::*;
 use std::cmp::Reverse;
 
-use crate::{
-    cmd::Cmd,
-    msg::Msg,
-    nostr::{Profile, SortableEvent},
-    state::AppState,
-};
+use crate::{cmd::Cmd, msg::Msg, nostr::SortableEvent, state::AppState};
 
 /// Elm-like update function
 /// Returns new state and list of commands from current state and message
@@ -75,8 +70,14 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             (state, vec![])
         }
 
-        // Nostr event processing
-        Msg::ReceiveEvent(event) => update_receive_event(event, state),
+        // Nostr domain events
+        Msg::AddNote(event) => update_add_note(event, state),
+
+        Msg::AddReaction(reaction) => update_add_reaction(reaction, state),
+
+        Msg::AddRepost(repost) => update_add_repost(repost, state),
+
+        Msg::AddZapReceipt(zap_receipt) => update_add_zap_receipt(zap_receipt, state),
 
         Msg::SendReaction(target_event) => {
             let cmd = Cmd::SendReaction {
@@ -207,41 +208,15 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             (state, vec![])
         }
 
-        // Error
-        Msg::Error(error) => {
+        // Error handling
+        Msg::ShowError(error) => {
             state.system.status_message = Some(format!("Error: {}", error));
             (state, vec![])
         }
-
-        // Others (not implemented yet)
-        Msg::Tick | Msg::Render | Msg::Key(_) => (state, vec![]),
     }
 }
 
-/// State update when receiving Nostr events
-fn update_receive_event(event: Event, state: AppState) -> (AppState, Vec<Cmd>) {
-    match event.kind {
-        Kind::Metadata => {
-            if let Ok(metadata) = Metadata::from_json(event.content.clone()) {
-                let profile = Profile::new(event.pubkey, event.created_at, metadata);
-                let msg = Msg::UpdateProfile(event.pubkey, profile);
-                update(msg, state)
-            } else {
-                (state, vec![])
-            }
-        }
-
-        Kind::TextNote => update_add_note(event, state),
-
-        Kind::Reaction => update_add_reaction(event, state),
-
-        Kind::Repost => update_add_repost(event, state),
-
-        Kind::ZapReceipt => update_add_zap_receipt(event, state),
-
-        _ => (state, vec![]),
-    }
-}
+// Removed: update_receive_event function - domain events are now handled directly
 
 /// Add note to timeline
 fn update_add_note(event: Event, mut state: AppState) -> (AppState, Vec<Cmd>) {
@@ -421,10 +396,10 @@ mod tests {
     }
 
     #[test]
-    fn test_update_receive_text_note() {
+    fn test_update_add_text_note() {
         let state = create_test_state();
         let event = create_test_event();
-        let (new_state, cmds) = update(Msg::ReceiveEvent(event), state);
+        let (new_state, cmds) = update(Msg::AddNote(event), state);
 
         assert_eq!(new_state.timeline.notes.len(), 1);
         assert!(cmds.is_empty());

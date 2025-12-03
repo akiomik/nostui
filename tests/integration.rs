@@ -70,7 +70,7 @@ fn test_complex_workflow() {
     let event = EventBuilder::text_note("Test post")
         .sign_with_keys(&keys)
         .unwrap();
-    runtime.send_msg(Msg::ReceiveEvent(event.clone()));
+    runtime.send_msg(Msg::AddNote(event.clone()));
 
     // 2. Send reaction
     runtime.send_msg(Msg::SendReaction(event.clone()));
@@ -117,7 +117,7 @@ fn test_error_handling_integration() {
     let mut runtime = ElmRuntime::new(initial_state);
 
     // Send error message
-    runtime.send_msg(Msg::Error("Test error".to_string()));
+    runtime.send_msg(Msg::ShowError("Test error".to_string()));
     runtime.process_all_messages();
 
     // Check if error is displayed in status message
@@ -186,7 +186,7 @@ fn test_performance_many_events() {
         let event = EventBuilder::text_note(format!("Event #{}", i))
             .sign_with_keys(&keys)
             .unwrap();
-        runtime.send_msg(Msg::ReceiveEvent(event));
+        runtime.send_msg(Msg::AddNote(event));
     }
 
     runtime.process_all_messages();

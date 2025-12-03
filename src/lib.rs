@@ -55,7 +55,9 @@
 pub mod cmd;
 pub mod elm_integration;
 pub mod msg;
+pub mod raw_msg;
 pub mod state;
+pub mod translator;
 pub mod update;
 
 // Legacy modules (for gradual migration)
@@ -76,7 +78,9 @@ pub mod widgets;
 pub use cmd::Cmd;
 pub use elm_integration::{ElmRuntime, ElmRuntimeStats};
 pub use msg::Msg;
+pub use raw_msg::RawMsg;
 pub use state::AppState;
+pub use translator::translate_raw_to_domain;
 pub use update::update;
 
 /// Result type used throughout the library
