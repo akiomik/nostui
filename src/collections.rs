@@ -194,7 +194,7 @@ mod tests {
 
         let keys = Keys::generate();
         Event::new(
-            EventId::owned(id_bytes),
+            EventId::from_byte_array(id_bytes),
             keys.public_key(),
             Timestamp::now(),
             Kind::TextNote,
@@ -268,7 +268,7 @@ mod tests {
         let mut events = EventSet::new();
 
         // 同じEventIdで異なるコンテンツのイベントを作成
-        let id = EventId::owned([1u8; 32]);
+        let id = EventId::from_byte_array([1u8; 32]);
         let keys = Keys::generate();
 
         let event1 = Event::new(
