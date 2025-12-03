@@ -10,9 +10,11 @@ pub struct Connection {
 
 impl Connection {
     pub async fn new(keys: Keys, relays: Vec<String>) -> Result<Self> {
-        let client = Client::new(&keys);
+        let client = Client::new(keys.clone());
 
-        client.add_relays(relays).await?;
+        for relay in relays {
+            client.add_relay(&relay).await?;
+        }
         client.connect().await;
 
         Ok(Self { keys, client })
