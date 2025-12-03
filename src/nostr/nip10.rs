@@ -18,6 +18,7 @@ impl ReplyTagsBuilder {
                             relay_url,
                             marker,
                             public_key: _,
+                            uppercase: _,
                         }) = tag.as_standardized()
                         {
                             if let Some(Marker::Reply) = marker {
@@ -26,6 +27,7 @@ impl ReplyTagsBuilder {
                                     relay_url: relay_url.clone(),
                                     marker: None,
                                     public_key: None,
+                                    uppercase: false,
                                 }))
                             } else {
                                 acc.0.push(tag.clone())
@@ -54,6 +56,7 @@ impl ReplyTagsBuilder {
             relay_url: None,
             marker,
             public_key: None,
+            uppercase: false,
         }));
 
         if !ptags.iter().any(|tag| {
@@ -177,6 +180,7 @@ mod tests {
                 relay_url: None,
                 marker: Some(Marker::Root),
                 public_key: None,
+                uppercase: false,
             }),
             Tag::from(TagStandard::PublicKey {
                 public_key: PublicKey::from_str(
@@ -202,6 +206,7 @@ mod tests {
                 relay_url: None,
                 marker: Some(Marker::Root),
                 public_key: None,
+                uppercase: false,
             }),
             Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
@@ -211,6 +216,7 @@ mod tests {
                 relay_url: None,
                 marker: Some(Marker::Reply),
                 public_key: None,
+                uppercase: false,
             }),
             Tag::from(TagStandard::PublicKey {
                 public_key: PublicKey::from_str(
@@ -236,6 +242,7 @@ mod tests {
                 relay_url: None,
                 marker: Some(Marker::Root),
                 public_key: None,
+                uppercase: false,
             }),
             Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
@@ -245,6 +252,7 @@ mod tests {
                 relay_url: None,
                 marker: None,
                 public_key: None,
+                uppercase: false,
             }),
             Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
@@ -254,6 +262,7 @@ mod tests {
                 relay_url: None,
                 marker: Some(Marker::Reply),
                 public_key: None,
+                uppercase: false,
             }),
             Tag::from(TagStandard::PublicKey {
                 public_key: PublicKey::from_str(

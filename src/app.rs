@@ -168,7 +168,8 @@ impl App {
                         action_tx.send(Action::SystemMessage(format!("[Reposted] {note1}")))?;
                     }
                     Action::SendTextNote(ref content, ref tags) => {
-                        let event = EventBuilder::text_note(content, tags.iter().cloned())
+                        let event = EventBuilder::text_note(content)
+                            .tags(tags.iter().cloned())
                             .sign_with_keys(&keys)?;
                         log::info!("Send text note: {event:?}");
                         event_tx.send(event)?;
