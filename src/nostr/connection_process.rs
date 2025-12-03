@@ -52,7 +52,7 @@ impl ConnectionProcess {
                 }
 
                 if self.terminate_rx.try_recv().is_ok() {
-                    self.conn.close().await?;
+                    self.conn.close().await;
                     break;
                 }
             }

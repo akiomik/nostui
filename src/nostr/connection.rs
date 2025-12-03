@@ -41,9 +41,12 @@ impl Connection {
             ])
             .since(Timestamp::now() - Duration::new(60 * 5, 0)); // 5min
         let profile_filter = Filter::new().authors(followings).kinds([Kind::Metadata]);
-        self.client
-            .subscribe(vec![timeline_filter, profile_filter], None)
-            .await?;
+
+        // Subscribe to both timeline and profile data concurrently
+        tokio::try_join!(
+            self.client.subscribe(timeline_filter, None),
+            self.client.subscribe(profile_filter, None)
+        )?;
 
         Ok(self.client.notifications())
     }
@@ -53,7 +56,7 @@ impl Connection {
         Ok(())
     }
 
-    pub async fn close(self) -> Result<(), nostr_sdk::client::Error> {
+    pub async fn close(self) {
         self.client.shutdown().await
     }
 }
