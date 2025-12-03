@@ -1,6 +1,6 @@
 use nostr_sdk::prelude::*;
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SortableEvent {
     pub event: Event,
 }
