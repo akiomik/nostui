@@ -37,6 +37,7 @@ pub enum Msg {
     SubmitNote,
     CancelInput,
     UpdateInputContent(String),
+    ProcessInputKey(crossterm::event::KeyEvent),
 
     // Status updates
     UpdateStatusMessage(String),

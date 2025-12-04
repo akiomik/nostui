@@ -11,6 +11,7 @@ use crate::{
 
 pub mod elm_fps;
 pub mod elm_home_data;
+pub mod elm_home_input;
 pub mod elm_home_list;
 pub mod elm_status_bar;
 mod fps;
