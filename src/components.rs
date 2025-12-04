@@ -10,6 +10,7 @@ use crate::{
 };
 
 pub mod elm_fps;
+pub mod elm_status_bar;
 mod fps;
 mod home;
 mod status_bar;
