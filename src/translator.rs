@@ -19,6 +19,10 @@ pub fn translate_raw_to_domain(raw: RawMsg, state: &AppState) -> Vec<Msg> {
         // Network events - translate based on event type
         RawMsg::ReceiveEvent(event) => translate_nostr_event(event),
 
+        // FPS updates
+        RawMsg::AppFpsUpdate(fps) => vec![Msg::UpdateAppFps(fps)],
+        RawMsg::RenderFpsUpdate(fps) => vec![Msg::UpdateRenderFps(fps)],
+
         // System events
         RawMsg::Error(error) => vec![Msg::ShowError(error)],
 

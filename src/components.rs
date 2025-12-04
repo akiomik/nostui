@@ -9,6 +9,7 @@ use crate::{
     tui::{Event, Frame},
 };
 
+pub mod elm_fps;
 mod fps;
 mod home;
 mod status_bar;

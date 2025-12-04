@@ -20,6 +20,10 @@ pub enum RawMsg {
     // Network events (raw Nostr events)
     ReceiveEvent(Event),
 
+    // FPS updates
+    AppFpsUpdate(f64),
+    RenderFpsUpdate(f64),
+
     // System status
     Error(String),
 }
@@ -42,6 +46,7 @@ mod tests {
         assert!(RawMsg::Render.is_frequent());
         assert!(!RawMsg::Quit.is_frequent());
         assert!(!RawMsg::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)).is_frequent());
+        assert!(!RawMsg::AppFpsUpdate(60.0).is_frequent());
     }
 
     #[test]

@@ -67,6 +67,7 @@ pub mod cli;
 pub mod collections;
 pub mod components;
 pub mod config;
+pub mod fps_service;
 pub mod mode;
 pub mod nostr;
 pub mod text;
