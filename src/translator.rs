@@ -129,40 +129,19 @@ fn translate_normal_mode_keys(key: crossterm::event::KeyEvent, state: &AppState)
             code: KeyCode::Char('r'),
             modifiers: KeyModifiers::NONE,
             ..
-        } => {
-            // Reply to selected note
-            if let Some(selected_note) = state.selected_note() {
-                vec![Msg::ShowReply(selected_note.clone())]
-            } else {
-                vec![]
-            }
-        }
+        } => translate_reply_key(state),
 
         KeyEvent {
             code: KeyCode::Char('l'),
             modifiers: KeyModifiers::NONE,
             ..
-        } => {
-            // Like/react to selected note
-            if let Some(selected_note) = state.selected_note() {
-                vec![Msg::SendReaction(selected_note.clone())]
-            } else {
-                vec![]
-            }
-        }
+        } => translate_like_key(state),
 
         KeyEvent {
             code: KeyCode::Char('t'),
             modifiers: KeyModifiers::NONE,
             ..
-        } => {
-            // Repost selected note
-            if let Some(selected_note) = state.selected_note() {
-                vec![Msg::SendRepost(selected_note.clone())]
-            } else {
-                vec![]
-            }
-        }
+        } => translate_repost_key(state),
 
         // UI toggles
         KeyEvent {
@@ -177,6 +156,123 @@ fn translate_normal_mode_keys(key: crossterm::event::KeyEvent, state: &AppState)
 
         _ => vec![], // Unknown keys are ignored
     }
+}
+
+/// Translate reply key with validation
+fn translate_reply_key(state: &AppState) -> Vec<Msg> {
+    if !can_interact_with_timeline(state) {
+        return vec![Msg::UpdateStatusMessage(
+            "Cannot reply: No note selected or input mode active".to_string(),
+        )];
+    }
+
+    if let Some(selected_note) = state.selected_note() {
+        if selected_note.pubkey == state.user.current_user_pubkey {
+            vec![Msg::UpdateStatusMessage(
+                "Cannot reply to your own note".to_string(),
+            )]
+        } else {
+            vec![
+                Msg::ShowReply(selected_note.clone()),
+                Msg::UpdateStatusMessage(format!(
+                    "Replying to {}...",
+                    get_display_name(selected_note, state)
+                )),
+            ]
+        }
+    } else {
+        vec![Msg::UpdateStatusMessage(
+            "No note selected for reply".to_string(),
+        )]
+    }
+}
+
+/// Translate like key with duplicate prevention
+fn translate_like_key(state: &AppState) -> Vec<Msg> {
+    if !can_interact_with_timeline(state) {
+        return vec![Msg::UpdateStatusMessage(
+            "Cannot react: No note selected or input mode active".to_string(),
+        )];
+    }
+
+    if let Some(selected_note) = state.selected_note() {
+        if has_user_reacted_to_note(selected_note, state) {
+            vec![Msg::UpdateStatusMessage(
+                "You have already liked this note".to_string(),
+            )]
+        } else {
+            vec![Msg::SendReaction(selected_note.clone())]
+        }
+    } else {
+        vec![Msg::UpdateStatusMessage(
+            "No note selected for reaction".to_string(),
+        )]
+    }
+}
+
+/// Translate repost key with validation
+fn translate_repost_key(state: &AppState) -> Vec<Msg> {
+    if !can_interact_with_timeline(state) {
+        return vec![Msg::UpdateStatusMessage(
+            "Cannot repost: No note selected or input mode active".to_string(),
+        )];
+    }
+
+    if let Some(selected_note) = state.selected_note() {
+        if selected_note.pubkey == state.user.current_user_pubkey {
+            vec![Msg::UpdateStatusMessage(
+                "Cannot repost your own note".to_string(),
+            )]
+        } else if has_user_reposted_note(selected_note, state) {
+            vec![Msg::UpdateStatusMessage(
+                "You have already reposted this note".to_string(),
+            )]
+        } else {
+            vec![Msg::SendRepost(selected_note.clone())]
+        }
+    } else {
+        vec![Msg::UpdateStatusMessage(
+            "No note selected for repost".to_string(),
+        )]
+    }
+}
+
+/// Helper: Check if user can interact with timeline
+fn can_interact_with_timeline(state: &AppState) -> bool {
+    !state.ui.show_input && state.timeline.selected_index.is_some() && !state.timeline_is_empty()
+}
+
+/// Helper: Check if user has already reacted to a note
+fn has_user_reacted_to_note(note: &Event, state: &AppState) -> bool {
+    state
+        .timeline
+        .reactions
+        .get(&note.id)
+        .is_some_and(|reactions| {
+            reactions
+                .iter()
+                .any(|reaction| reaction.pubkey == state.user.current_user_pubkey)
+        })
+}
+
+/// Helper: Check if user has already reposted a note
+fn has_user_reposted_note(note: &Event, state: &AppState) -> bool {
+    state.timeline.reposts.get(&note.id).is_some_and(|reposts| {
+        reposts
+            .iter()
+            .any(|repost| repost.pubkey == state.user.current_user_pubkey)
+    })
+}
+
+/// Helper: Get display name for a note's author
+fn get_display_name(note: &Event, state: &AppState) -> String {
+    state
+        .user
+        .profiles
+        .get(&note.pubkey)
+        .and_then(|profile| profile.metadata.name.as_ref())
+        .cloned()
+        .unwrap_or_else(|| note.pubkey.to_string()[0..8].to_string())
 }
 
 /// Translates Nostr events into domain events
@@ -317,7 +413,14 @@ mod tests {
         // Test reply key
         let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::ShowReply(event.clone())]);
+        assert_eq!(result.len(), 2);
+        match (&result[0], &result[1]) {
+            (Msg::ShowReply(reply_event), Msg::UpdateStatusMessage(msg)) => {
+                assert_eq!(reply_event.id, event.id);
+                assert!(msg.contains("Replying to"));
+            }
+            _ => panic!("Expected ShowReply and UpdateStatusMessage"),
+        }
     }
 
     #[test]
@@ -364,5 +467,146 @@ mod tests {
         let key = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_translate_reply_key_validation() {
+        let mut state = create_test_state();
+
+        // Cannot reply when in input mode
+        state.ui.show_input = true;
+        state.timeline.selected_index = Some(0);
+        let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
+        let result = translate_raw_to_domain(RawMsg::Key(key), &state);
+        assert_eq!(result, vec![Msg::ProcessInputKey(key)]);
+
+        // Cannot reply when no note selected
+        state.ui.show_input = false;
+        state.timeline.selected_index = None;
+        let result = translate_raw_to_domain(RawMsg::Key(key), &state);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Msg::UpdateStatusMessage(msg) => assert!(msg.contains("Cannot reply")),
+            _ => panic!("Expected status message"),
+        }
+    }
+
+    #[test]
+    fn test_translate_like_key_duplicate_prevention() {
+        let mut state = create_test_state();
+        let event = create_test_event();
+
+        // Add event to timeline and select it
+        let sortable = crate::nostr::SortableEvent::new(event.clone());
+        state
+            .timeline
+            .notes
+            .find_or_insert(std::cmp::Reverse(sortable));
+        state.timeline.selected_index = Some(0);
+
+        // First like should work
+        let key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
+        let result = translate_raw_to_domain(RawMsg::Key(key), &state);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Msg::SendReaction(_) => {}
+            _ => panic!("Expected SendReaction message"),
+        }
+
+        // Simulate user has already reacted
+        let reaction_keys = Keys::generate();
+        let reaction = EventBuilder::reaction(&event, "+")
+            .sign_with_keys(&reaction_keys)
+            .unwrap();
+        let mut reaction_with_user_key = reaction.clone();
+        reaction_with_user_key.pubkey = state.user.current_user_pubkey;
+
+        state.timeline.reactions.insert(event.id, {
+            let mut set = crate::collections::EventSet::new();
+            set.insert(reaction_with_user_key);
+            set
+        });
+
+        // Second like should be prevented
+        let result = translate_raw_to_domain(RawMsg::Key(key), &state);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Msg::UpdateStatusMessage(msg) => assert!(msg.contains("already liked")),
+            _ => panic!("Expected status message about duplicate like"),
+        }
+    }
+
+    #[test]
+    fn test_translate_repost_key_own_note_prevention() {
+        let mut state = create_test_state();
+        let event = create_test_event();
+
+        // Make the event authored by the current user
+        let mut user_event = event.clone();
+        user_event.pubkey = state.user.current_user_pubkey;
+
+        // Add user's own event to timeline and select it
+        let sortable = crate::nostr::SortableEvent::new(user_event.clone());
+        state
+            .timeline
+            .notes
+            .find_or_insert(std::cmp::Reverse(sortable));
+        state.timeline.selected_index = Some(0);
+
+        // Attempt to repost own note should be prevented
+        let key = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE);
+        let result = translate_raw_to_domain(RawMsg::Key(key), &state);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Msg::UpdateStatusMessage(msg) => assert!(msg.contains("Cannot repost your own note")),
+            _ => panic!("Expected status message about own note repost"),
+        }
+    }
+
+    #[test]
+    fn test_can_interact_with_timeline_helper() {
+        let mut state = create_test_state();
+
+        // Cannot interact when input is showing
+        state.ui.show_input = true;
+        state.timeline.selected_index = Some(0);
+        assert!(!can_interact_with_timeline(&state));
+
+        // Cannot interact when no note selected
+        state.ui.show_input = false;
+        state.timeline.selected_index = None;
+        assert!(!can_interact_with_timeline(&state));
+
+        // Cannot interact when timeline is empty (even with selection)
+        state.timeline.selected_index = Some(0);
+        assert!(!can_interact_with_timeline(&state)); // timeline is empty
+
+        // Can interact when conditions are met
+        let event = create_test_event();
+        let sortable = crate::nostr::SortableEvent::new(event);
+        state
+            .timeline
+            .notes
+            .find_or_insert(std::cmp::Reverse(sortable));
+        assert!(can_interact_with_timeline(&state));
+    }
+
+    #[test]
+    fn test_get_display_name_helper() {
+        let mut state = create_test_state();
+        let event = create_test_event();
+
+        // Without profile - should return truncated pubkey
+        let name = get_display_name(&event, &state);
+        assert_eq!(name.len(), 8);
+        assert_eq!(name, event.pubkey.to_string()[0..8]);
+
+        // With profile - should return profile name
+        let metadata = nostr_sdk::prelude::Metadata::new().name("Test User");
+        let profile = crate::nostr::Profile::new(event.pubkey, event.created_at, metadata);
+        state.user.profiles.insert(event.pubkey, profile);
+
+        let name = get_display_name(&event, &state);
+        assert_eq!(name, "Test User");
     }
 }
