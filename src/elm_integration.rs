@@ -1,29 +1,39 @@
 use std::collections::VecDeque;
 use tokio::sync::mpsc;
 
-use crate::{cmd::Cmd, msg::Msg, state::AppState, update::update};
+use crate::{
+    cmd::Cmd, msg::Msg, raw_msg::RawMsg, state::AppState, translator::translate_raw_to_domain,
+    update::update,
+};
 
 /// Integration point between Elm architecture runtime and existing app
 /// Allows testing new architecture without affecting existing code
 pub struct ElmRuntime {
     state: AppState,
     msg_queue: VecDeque<Msg>,
+    raw_msg_queue: VecDeque<RawMsg>,
     cmd_queue: VecDeque<Cmd>,
     msg_tx: Option<mpsc::UnboundedSender<Msg>>,
     msg_rx: mpsc::UnboundedReceiver<Msg>,
+    raw_msg_tx: Option<mpsc::UnboundedSender<RawMsg>>,
+    raw_msg_rx: mpsc::UnboundedReceiver<RawMsg>,
 }
 
 impl ElmRuntime {
     /// Create a new ElmRuntime
     pub fn new(initial_state: AppState) -> Self {
         let (msg_tx, msg_rx) = mpsc::unbounded_channel();
+        let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
 
         Self {
             state: initial_state,
             msg_queue: VecDeque::new(),
+            raw_msg_queue: VecDeque::new(),
             cmd_queue: VecDeque::new(),
             msg_tx: Some(msg_tx),
             msg_rx,
+            raw_msg_tx: Some(raw_msg_tx),
+            raw_msg_rx,
         }
     }
 
@@ -40,6 +50,16 @@ impl ElmRuntime {
     /// Send message directly (for testing)
     pub fn send_msg(&mut self, msg: Msg) {
         self.msg_queue.push_back(msg);
+    }
+
+    /// Send raw message (for integration with external systems)
+    pub fn send_raw_msg(&mut self, raw_msg: RawMsg) {
+        self.raw_msg_queue.push_back(raw_msg);
+    }
+
+    /// Get raw message sender
+    pub fn get_raw_sender(&self) -> Option<mpsc::UnboundedSender<RawMsg>> {
+        self.raw_msg_tx.clone()
     }
 
     /// Get pending commands
@@ -68,13 +88,29 @@ impl ElmRuntime {
     pub fn process_all_messages(&mut self) -> Vec<Cmd> {
         let mut all_commands = Vec::new();
 
-        // Process messages in internal queue
+        // First process raw messages and convert to domain messages
+        while let Some(raw_msg) = self.raw_msg_queue.pop_front() {
+            let domain_msgs = translate_raw_to_domain(raw_msg, &self.state);
+            for msg in domain_msgs {
+                self.msg_queue.push_back(msg);
+            }
+        }
+
+        // Process raw messages from external sources
+        while let Ok(raw_msg) = self.raw_msg_rx.try_recv() {
+            let domain_msgs = translate_raw_to_domain(raw_msg, &self.state);
+            for msg in domain_msgs {
+                self.msg_queue.push_back(msg);
+            }
+        }
+
+        // Process domain messages in internal queue
         while let Some(msg) = self.msg_queue.pop_front() {
             let commands = self.process_message(msg);
             all_commands.extend(commands);
         }
 
-        // Process messages from external sources
+        // Process domain messages from external sources
         while let Ok(msg) = self.msg_rx.try_recv() {
             let commands = self.process_message(msg);
             all_commands.extend(commands);
@@ -167,7 +203,7 @@ mod tests {
 
         // Add event to timeline
         let event = create_test_event();
-        runtime.process_message(Msg::ReceiveEvent(event));
+        runtime.process_message(Msg::AddNote(event));
 
         // Test scroll operations
         runtime.process_message(Msg::ScrollDown);
@@ -253,7 +289,7 @@ mod tests {
 
         // Receive text note
         let text_event = create_test_event();
-        runtime.process_message(Msg::ReceiveEvent(text_event));
+        runtime.process_message(Msg::AddNote(text_event));
         assert_eq!(runtime.state().timeline_len(), 1);
 
         // Receive metadata event
@@ -265,7 +301,9 @@ mod tests {
             .sign_with_keys(&keys)
             .unwrap();
 
-        runtime.process_message(Msg::ReceiveEvent(metadata_event));
+        let profile =
+            crate::nostr::Profile::new(keys.public_key(), metadata_event.created_at, metadata);
+        runtime.process_message(Msg::UpdateProfile(keys.public_key(), profile));
         assert!(runtime
             .state()
             .user

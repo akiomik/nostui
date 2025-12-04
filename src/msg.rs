@@ -1,23 +1,18 @@
-use crossterm::event::KeyEvent;
+// Removed: crossterm imports moved to raw_msg.rs
 use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::nostr::Profile;
 
-/// Elm-like message definitions
-/// Represents events that occur within the application, replacing Action
+/// Domain messages representing application intent and business logic
+/// These are processed by the update function and represent pure domain events
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Msg {
-    // System messages
-    Tick,
-    Render,
-    Resize(u16, u16),
+    // System operations
     Quit,
     Suspend,
     Resume,
-
-    // User input
-    Key(KeyEvent),
+    Resize(u16, u16),
 
     // Timeline operations
     ScrollUp,
@@ -26,8 +21,11 @@ pub enum Msg {
     ScrollToBottom,
     SelectNote(Option<usize>),
 
-    // Nostr events
-    ReceiveEvent(Event),
+    // Nostr domain events
+    AddNote(Event),
+    AddReaction(Event),
+    AddRepost(Event),
+    AddZapReceipt(Event),
     SendReaction(Event),
     SendRepost(Event),
     SendTextNote(String, Vec<Tag>),
@@ -40,26 +38,27 @@ pub enum Msg {
     CancelInput,
     UpdateInputContent(String),
 
-    // Status
+    // Status updates
     UpdateStatusMessage(String),
     ClearStatusMessage,
     SetLoading(bool),
 
-    // FPS updates
+    // Performance tracking
     UpdateAppFps(f64),
     UpdateRenderFps(f64),
 
-    // Profile
+    // User management
     UpdateProfile(PublicKey, Profile),
 
-    // Error
-    Error(String),
+    // Error handling
+    ShowError(String),
 }
 
 impl Msg {
     /// Helper to exclude frequent messages during debugging
+    /// Domain messages are generally not frequent (raw messages handle Tick/Render)
     pub fn is_frequent(&self) -> bool {
-        matches!(self, Msg::Tick | Msg::Render)
+        false
     }
 }
 
@@ -69,10 +68,10 @@ mod tests {
 
     #[test]
     fn test_msg_frequent_detection() {
-        assert!(Msg::Tick.is_frequent());
-        assert!(Msg::Render.is_frequent());
+        // Domain messages are not frequent
         assert!(!Msg::Quit.is_frequent());
         assert!(!Msg::ScrollUp.is_frequent());
+        assert!(!Msg::ShowNewNote.is_frequent());
     }
 
     #[test]
