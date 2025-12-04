@@ -145,23 +145,37 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
         }
 
         Msg::SubmitNote => {
-            if state.ui.show_input && !state.ui.input_content.is_empty() {
-                let content = state.ui.input_content.clone();
-                let tags = if let Some(ref _reply_to) = state.ui.reply_to {
-                    // TODO: Reply tags generation should be moved here or as a separate function
-                    vec![]
-                } else {
-                    vec![]
-                };
-
+            // Use ElmHomeInput logic for submission
+            if let Some(submit_data) =
+                crate::components::elm_home_input::ElmHomeInput::get_submit_data(&state)
+            {
                 state.ui.show_input = false;
                 state.ui.reply_to = None;
                 state.ui.input_content.clear();
 
-                (state, vec![Cmd::SendTextNote { content, tags }])
+                (
+                    state,
+                    vec![Cmd::SendTextNote {
+                        content: submit_data.content,
+                        tags: submit_data.tags,
+                    }],
+                )
             } else {
                 (state, vec![])
             }
+        }
+
+        Msg::ProcessInputKey(key_event) => {
+            if state.ui.show_input {
+                // Create a temporary ElmHomeInput to process the key
+                let mut elm_input = crate::components::elm_home_input::ElmHomeInput::new();
+
+                // Sync with current state and process key
+                if let Some(new_content) = elm_input.process_key_input(key_event) {
+                    state.ui.input_content = new_content;
+                }
+            }
+            (state, vec![])
         }
 
         // Status updates

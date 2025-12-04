@@ -67,6 +67,7 @@ fn translate_input_mode_keys(key: crossterm::event::KeyEvent) -> Vec<Msg> {
     match key {
         KeyEvent {
             code: KeyCode::Enter,
+            modifiers: KeyModifiers::NONE,
             ..
         } => vec![Msg::SubmitNote],
 
@@ -74,25 +75,9 @@ fn translate_input_mode_keys(key: crossterm::event::KeyEvent) -> Vec<Msg> {
             code: KeyCode::Esc, ..
         } => vec![Msg::CancelInput],
 
-        KeyEvent {
-            code: KeyCode::Char(_c),
-            modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
-            ..
-        } => {
-            // For character input, we need to handle this differently
-            // This will be handled by the existing input widget
-            vec![]
-        }
-
-        KeyEvent {
-            code: KeyCode::Backspace,
-            ..
-        } => {
-            // Backspace handling - delegate to input widget
-            vec![]
-        }
-
-        _ => vec![], // Other keys ignored in input mode
+        // All other keys should update input content
+        // We pass the key event to be processed by ElmHomeInput
+        _ => vec![Msg::ProcessInputKey(key)],
     }
 }
 
