@@ -53,6 +53,7 @@
 
 // Core Elm architecture modules
 pub mod cmd;
+pub mod cmd_executor;
 pub mod elm_integration;
 pub mod msg;
 pub mod raw_msg;

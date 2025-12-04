@@ -2,12 +2,11 @@ use std::collections::VecDeque;
 use tokio::sync::mpsc;
 
 use crate::{
-    cmd::Cmd, msg::Msg, raw_msg::RawMsg, state::AppState, translator::translate_raw_to_domain,
-    update::update,
+    action::Action, cmd::Cmd, cmd_executor::CmdExecutor, msg::Msg, raw_msg::RawMsg,
+    state::AppState, translator::translate_raw_to_domain, update::update,
 };
 
 /// Integration point between Elm architecture runtime and existing app
-/// Allows testing new architecture without affecting existing code
 pub struct ElmRuntime {
     state: AppState,
     msg_queue: VecDeque<Msg>,
@@ -17,6 +16,7 @@ pub struct ElmRuntime {
     msg_rx: mpsc::UnboundedReceiver<Msg>,
     raw_msg_tx: Option<mpsc::UnboundedSender<RawMsg>>,
     raw_msg_rx: mpsc::UnboundedReceiver<RawMsg>,
+    cmd_executor: Option<CmdExecutor>,
 }
 
 impl ElmRuntime {
@@ -34,7 +34,35 @@ impl ElmRuntime {
             msg_rx,
             raw_msg_tx: Some(raw_msg_tx),
             raw_msg_rx,
+            cmd_executor: None,
         }
+    }
+
+    /// Create a new ElmRuntime with command executor
+    pub fn new_with_executor(
+        initial_state: AppState,
+        action_sender: mpsc::UnboundedSender<Action>,
+    ) -> Self {
+        let (msg_tx, msg_rx) = mpsc::unbounded_channel();
+        let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
+        let executor = CmdExecutor::new(action_sender);
+
+        Self {
+            state: initial_state,
+            msg_queue: VecDeque::new(),
+            raw_msg_queue: VecDeque::new(),
+            cmd_queue: VecDeque::new(),
+            msg_tx: Some(msg_tx),
+            msg_rx,
+            raw_msg_tx: Some(raw_msg_tx),
+            raw_msg_rx,
+            cmd_executor: Some(executor),
+        }
+    }
+
+    /// Set command executor
+    pub fn set_executor(&mut self, action_sender: mpsc::UnboundedSender<Action>) {
+        self.cmd_executor = Some(CmdExecutor::new(action_sender));
     }
 
     /// Get sender for message transmission
@@ -69,6 +97,37 @@ impl ElmRuntime {
             commands.push(cmd);
         }
         commands
+    }
+
+    /// Execute all pending commands using the command executor
+    pub fn execute_pending_commands(&mut self) -> Result<Vec<String>, String> {
+        if self.cmd_executor.is_none() {
+            return Err(
+                "No command executor available. Use set_executor() to configure.".to_string(),
+            );
+        }
+
+        let commands = self.pending_commands();
+        if commands.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Now safely get the executor
+        let executor = self.cmd_executor.as_ref().unwrap();
+        executor
+            .execute_commands(&commands)
+            .map_err(|e| format!("Command execution failed: {}", e))
+    }
+
+    /// Execute a single command immediately
+    pub fn execute_command(&self, cmd: &Cmd) -> Result<(), String> {
+        if let Some(executor) = &self.cmd_executor {
+            executor
+                .execute_command(cmd)
+                .map_err(|e| format!("Command execution failed: {}", e))
+        } else {
+            Err("No command executor available. Use set_executor() to configure.".to_string())
+        }
     }
 
     /// Process a single message
@@ -119,6 +178,12 @@ impl ElmRuntime {
         all_commands
     }
 
+    /// Process all messages and execute commands in one step
+    pub fn run_update_cycle(&mut self) -> Result<Vec<String>, String> {
+        let _commands = self.process_all_messages();
+        self.execute_pending_commands()
+    }
+
     /// Get runtime statistics
     pub fn get_stats(&self) -> ElmRuntimeStats {
         ElmRuntimeStats {
@@ -128,6 +193,7 @@ impl ElmRuntime {
             profiles_count: self.state.user.profiles.len(),
             is_input_shown: self.state.ui.show_input,
             selected_note_index: self.state.timeline.selected_index,
+            has_executor: self.cmd_executor.is_some(),
         }
     }
 }
@@ -141,6 +207,7 @@ pub struct ElmRuntimeStats {
     pub profiles_count: usize,
     pub is_input_shown: bool,
     pub selected_note_index: Option<usize>,
+    pub has_executor: bool,
 }
 
 #[cfg(test)]
@@ -350,5 +417,88 @@ mod tests {
         // Getting them again returns empty
         let pending2 = runtime.pending_commands();
         assert!(pending2.is_empty());
+    }
+
+    #[test]
+    fn test_runtime_with_executor() {
+        use crate::action::Action;
+        use tokio::sync::mpsc;
+
+        let keys = Keys::generate();
+        let state = AppState::new(keys.public_key());
+        let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+        let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+
+        // Check stats show executor is available
+        let stats = runtime.get_stats();
+        assert!(stats.has_executor);
+
+        // Send a message that generates a command
+        let target_event = create_test_event();
+        runtime.send_msg(Msg::SendReaction(target_event.clone()));
+
+        // Process messages and execute commands
+        let execution_log = runtime.run_update_cycle().unwrap();
+        assert_eq!(execution_log.len(), 1);
+        assert!(execution_log[0].contains("✓ Executed: SendReaction"));
+
+        // Check that action was sent
+        let received_action = action_rx.try_recv().unwrap();
+        match received_action {
+            Action::SendReaction(received_event) => {
+                assert_eq!(received_event.id, target_event.id);
+            }
+            _ => panic!("Expected SendReaction action"),
+        }
+    }
+
+    #[test]
+    fn test_execute_command_without_executor() {
+        let runtime = create_test_runtime();
+        let cmd = Cmd::Render;
+
+        // Should fail without executor
+        let result = runtime.execute_command(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("No command executor available"));
+    }
+
+    #[test]
+    fn test_set_executor() {
+        use crate::action::Action;
+        use tokio::sync::mpsc;
+
+        let mut runtime = create_test_runtime();
+        let (action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
+
+        // Initially no executor
+        assert!(!runtime.get_stats().has_executor);
+
+        // Set executor
+        runtime.set_executor(action_tx);
+        assert!(runtime.get_stats().has_executor);
+
+        // Should now be able to execute commands
+        let cmd = Cmd::Render;
+        let result = runtime.execute_command(&cmd);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_execute_pending_commands_empty() {
+        use crate::action::Action;
+        use tokio::sync::mpsc;
+
+        let keys = Keys::generate();
+        let state = AppState::new(keys.public_key());
+        let (action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
+        let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+
+        // No pending commands
+        let result = runtime.execute_pending_commands();
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
     }
 }
