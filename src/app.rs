@@ -8,9 +8,12 @@ use crate::{
     action::Action,
     components::{Component, FpsCounter, Home, StatusBar},
     config::Config,
+    elm_integration::ElmRuntime,
     mode::Mode,
     nostr::Connection,
     nostr::ConnectionProcess,
+    nostr_service::NostrService,
+    state::AppState,
     tui,
 };
 
@@ -23,6 +26,7 @@ pub struct App {
     pub should_suspend: bool,
     pub mode: Mode,
     pub last_tick_key_events: Vec<KeyEvent>,
+    pub elm_runtime: Option<ElmRuntime>,
 }
 
 impl App {
@@ -42,6 +46,7 @@ impl App {
             config,
             mode,
             last_tick_key_events: Vec::new(),
+            elm_runtime: None,
         })
     }
 
@@ -71,6 +76,18 @@ impl App {
         let conn = Connection::new(keys.clone(), self.config.relays.clone()).await?;
         let (mut req_rx, event_tx, terminate_tx, conn_wrapper) = ConnectionProcess::new(conn)?;
         conn_wrapper.run();
+
+        // Initialize NostrService for Elm architecture
+        let conn_for_service = Connection::new(keys.clone(), self.config.relays.clone()).await?;
+        let (_nostr_event_rx, nostr_cmd_tx, nostr_terminate_tx, nostr_service) =
+            NostrService::new(conn_for_service, keys.clone(), action_tx.clone())?;
+        nostr_service.run();
+
+        // Initialize ElmRuntime with NostrCommand support
+        let initial_state = AppState::new(keys.public_key());
+        let elm_runtime =
+            ElmRuntime::new_with_nostr_executor(initial_state, action_tx.clone(), nostr_cmd_tx);
+        self.elm_runtime = Some(elm_runtime);
 
         loop {
             if let Some(e) = tui.next().await {
@@ -108,8 +125,17 @@ impl App {
                 }
             }
 
+            // Handle legacy Nostr events
             while let Ok(event) = req_rx.try_recv() {
                 action_tx.send(Action::ReceiveEvent(event))?;
+            }
+
+            // Handle ElmRuntime message processing and command execution
+            if let Some(ref mut runtime) = self.elm_runtime {
+                if let Err(e) = runtime.run_update_cycle() {
+                    log::error!("ElmRuntime error: {}", e);
+                    action_tx.send(Action::Error(format!("ElmRuntime error: {}", e)))?;
+                }
             }
 
             while let Ok(action) = action_rx.try_recv() {
@@ -152,28 +178,49 @@ impl App {
                         log::info!("Got nostr event: {event:?}");
                     }
                     Action::SendReaction(ref target_event) => {
-                        let event =
-                            EventBuilder::reaction(target_event, "+").sign_with_keys(&keys)?;
-                        log::info!("Send reaction: {event:?}");
-                        event_tx.send(event)?;
-                        let note1 = target_event.id.to_bech32()?;
-                        action_tx.send(Action::SystemMessage(format!("[Liked] {note1}")))?;
+                        // Route through ElmRuntime if available, otherwise use legacy system
+                        if let Some(ref mut runtime) = self.elm_runtime {
+                            use crate::msg::Msg;
+                            runtime.send_msg(Msg::SendReaction(target_event.clone()));
+                        } else {
+                            // Legacy fallback
+                            let event =
+                                EventBuilder::reaction(target_event, "+").sign_with_keys(&keys)?;
+                            log::info!("Send reaction: {event:?}");
+                            event_tx.send(event)?;
+                            let note1 = target_event.id.to_bech32()?;
+                            action_tx.send(Action::SystemMessage(format!("[Liked] {note1}")))?;
+                        }
                     }
                     Action::SendRepost(ref target_event) => {
-                        let event =
-                            EventBuilder::repost(target_event, None).sign_with_keys(&keys)?;
-                        log::info!("Send repost: {event:?}");
-                        event_tx.send(event)?;
-                        let note1 = target_event.id.to_bech32()?;
-                        action_tx.send(Action::SystemMessage(format!("[Reposted] {note1}")))?;
+                        // Route through ElmRuntime if available, otherwise use legacy system
+                        if let Some(ref mut runtime) = self.elm_runtime {
+                            use crate::msg::Msg;
+                            runtime.send_msg(Msg::SendRepost(target_event.clone()));
+                        } else {
+                            // Legacy fallback
+                            let event =
+                                EventBuilder::repost(target_event, None).sign_with_keys(&keys)?;
+                            log::info!("Send repost: {event:?}");
+                            event_tx.send(event)?;
+                            let note1 = target_event.id.to_bech32()?;
+                            action_tx.send(Action::SystemMessage(format!("[Reposted] {note1}")))?;
+                        }
                     }
                     Action::SendTextNote(ref content, ref tags) => {
-                        let event = EventBuilder::text_note(content)
-                            .tags(tags.iter().cloned())
-                            .sign_with_keys(&keys)?;
-                        log::info!("Send text note: {event:?}");
-                        event_tx.send(event)?;
-                        action_tx.send(Action::SystemMessage(format!("[Posted] {content}")))?;
+                        // Route through ElmRuntime if available, otherwise use legacy system
+                        if let Some(ref mut runtime) = self.elm_runtime {
+                            use crate::msg::Msg;
+                            runtime.send_msg(Msg::SubmitNote);
+                        } else {
+                            // Legacy fallback
+                            let event = EventBuilder::text_note(content)
+                                .tags(tags.iter().cloned())
+                                .sign_with_keys(&keys)?;
+                            log::info!("Send text note: {event:?}");
+                            event_tx.send(event)?;
+                            action_tx.send(Action::SystemMessage(format!("[Posted] {content}")))?;
+                        }
                     }
                     _ => {}
                 }
@@ -193,6 +240,7 @@ impl App {
                 tui.enter()?;
             } else if self.should_quit {
                 terminate_tx.send(())?;
+                let _ = nostr_terminate_tx.send(()); // Terminate NostrService
                 tui.stop()?;
                 break;
             }
