@@ -1,2 +1,7 @@
 [default.extend-words]
 ratatui = "ratatui"
+
+[files]
+extend-exclude = [
+  "tests"
+]

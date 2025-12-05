@@ -98,11 +98,17 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
         }
 
         Msg::SendTextNote(content, tags) => {
+            log::info!(
+                "update.rs: Processing Msg::SendTextNote - content: '{}', tags: {:?}",
+                content,
+                tags
+            );
             let cmd = Cmd::SendTextNote {
                 content: content.clone(),
                 tags,
             };
             state.system.status_message = Some(format!("[Posted] {}", content));
+            log::info!("update.rs: Generated Cmd::SendTextNote, returning command");
             (state, vec![cmd])
         }
 
@@ -166,14 +172,51 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
         }
 
         Msg::ProcessInputKey(key_event) => {
+            log::info!(
+                "update.rs: Processing Msg::ProcessInputKey: {:?}, show_input = {}",
+                key_event,
+                state.ui.show_input
+            );
             if state.ui.show_input {
-                // Create a temporary ElmHomeInput to process the key
-                let mut elm_input = crate::components::elm_home_input::ElmHomeInput::new();
+                // Check if this is a navigation key that shouldn't update content
+                let is_navigation_key = match key_event.code {
+                    crossterm::event::KeyCode::Left
+                    | crossterm::event::KeyCode::Right
+                    | crossterm::event::KeyCode::Up
+                    | crossterm::event::KeyCode::Down
+                    | crossterm::event::KeyCode::Home
+                    | crossterm::event::KeyCode::End
+                    | crossterm::event::KeyCode::PageUp
+                    | crossterm::event::KeyCode::PageDown => true,
+                    crossterm::event::KeyCode::Char('a' | 'e' | 'b' | 'f' | 'p' | 'n')
+                        if key_event
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                    {
+                        true
+                    }
+                    _ => false,
+                };
 
-                // Sync with current state and process key
-                if let Some(new_content) = elm_input.process_key_input(key_event) {
-                    state.ui.input_content = new_content;
+                if is_navigation_key {
+                    // For navigation keys, don't update the AppState content
+                    // Let the TextArea handle the navigation internally
+                } else {
+                    // Create a temporary ElmHomeInput and sync with current state first
+                    let mut elm_input = crate::components::elm_home_input::ElmHomeInput::new();
+
+                    // First, sync the TextArea with current state content
+                    elm_input.sync_textarea_with_state(&state);
+
+                    // Then process the key input
+                    if let Some(new_content) = elm_input.process_key_input(key_event) {
+                        state.ui.input_content = new_content;
+                    } else {
+                        log::warn!("update.rs: process_key_input returned None");
+                    }
                 }
+            } else {
+                log::warn!("update.rs: ProcessInputKey received but show_input is false");
             }
             (state, vec![])
         }

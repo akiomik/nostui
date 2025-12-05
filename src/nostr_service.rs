@@ -75,8 +75,8 @@ impl NostrService {
             // Handle received events from timeline
             while let Ok(notification) = timeline.try_recv() {
                 if let RelayPoolNotification::Event { event, .. } = notification {
-                    if let Err(e) = self.event_tx.send(*event) {
-                        log::error!("Failed to send received event: {}", e);
+                    if let Err(_e) = self.event_tx.send(*event) {
+                        // log::error!("Failed to send received event: {}", e);
                     }
                 }
             }
@@ -161,10 +161,17 @@ impl NostrService {
             }
 
             NostrCommand::SendTextNote { content, tags } => {
+                log::info!(
+                    "NostrService: Processing SendTextNote - content: '{}', tags: {:?}",
+                    content,
+                    tags
+                );
                 let event = EventBuilder::text_note(&content)
                     .tags(tags)
                     .sign_with_keys(&self.keys)?;
+                // log::debug!("NostrService: Signed event: {}", event.id);
                 self.conn.send(event).await?;
+                log::info!("NostrService: Successfully sent event to network");
 
                 let status = format!("[Posted] {}", content);
                 let _ = self.action_tx.send(Action::SystemMessage(status));

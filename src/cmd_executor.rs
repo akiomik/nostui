@@ -66,10 +66,18 @@ impl CmdExecutor {
             }
 
             Cmd::SendTextNote { content, tags } => {
+                log::info!(
+                    "CmdExecutor: Processing SendTextNote - content: '{}', tags: {:?}",
+                    content,
+                    tags
+                );
                 if let Some(nostr_sender) = &self.nostr_sender {
+                    log::info!("CmdExecutor: Routing to NostrService");
                     let nostr_cmd = NostrCommand::text_note(content.clone(), tags.clone());
                     nostr_sender.send(nostr_cmd)?;
+                    log::info!("CmdExecutor: Successfully sent NostrCommand::SendTextNote");
                 } else {
+                    log::info!("CmdExecutor: No NostrService, falling back to legacy Action");
                     // Fallback to legacy Action system
                     self.action_sender
                         .send(Action::SendTextNote(content.clone(), tags.clone()))?;

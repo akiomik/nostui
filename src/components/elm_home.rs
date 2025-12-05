@@ -1,9 +1,6 @@
 use crossterm::event::KeyEvent;
 use nostr_sdk::prelude::*;
-use ratatui::{
-    layout::{Constraint, Direction, Layout},
-    Frame,
-};
+use ratatui::Frame;
 
 use crate::{cmd::Cmd, msg::Msg, state::AppState};
 
@@ -39,24 +36,30 @@ impl<'a> ElmHome<'a> {
     }
 
     /// Render the complete home view
-    pub fn render(&self, _frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
-        // Create layout: [timeline, input_area]
-        let _chunks = if state.ui.show_input {
-            Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(0), Constraint::Length(3)])
-                .split(area)
-        } else {
-            Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(100)])
-                .split(area)
-        };
-
-        // Render timeline and input areas
-        if state.ui.show_input {
-            // Input rendering logic would go here
+    pub fn render(&mut self, frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
+        // Render timeline first (always full area for scrolling continuity like original)
+        if let Err(e) = self.list.draw(state, frame, area) {
+            log::error!("Failed to render timeline: {}", e);
         }
+
+        // Render input area as overlay if needed (like original implementation home.rs:265-270)
+        if state.ui.show_input {
+            // Calculate overlay input area exactly like original implementation
+            let mut input_area = frame.area();
+            input_area.height /= 2;
+            input_area.y = input_area.height;
+            input_area.height = input_area.height.saturating_sub(2);
+
+            if let Err(e) = self.input.draw(state, frame, input_area) {
+                log::error!("Failed to render input overlay: {}", e);
+            }
+        }
+    }
+
+    /// Process navigation key directly for cursor movement
+    /// This bypasses the normal update cycle to preserve cursor position
+    pub fn process_navigation_key(&mut self, key: crossterm::event::KeyEvent) {
+        self.input.process_navigation_key(key);
     }
 
     /// Process a key event and return resulting messages

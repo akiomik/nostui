@@ -78,6 +78,9 @@ pub mod tui;
 pub mod utils;
 pub mod widgets;
 
+#[cfg(test)]
+pub mod elm_home_test;
+
 // Re-exports for convenience
 pub use cmd::Cmd;
 pub use elm_integration::{ElmRuntime, ElmRuntimeStats};
