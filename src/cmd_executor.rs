@@ -1,65 +1,118 @@
 use color_eyre::eyre::Result;
 use tokio::sync::mpsc;
 
-use crate::{action::Action, cmd::Cmd};
+use crate::{action::Action, cmd::Cmd, nostr_command::NostrCommand};
 
-/// Command executor that bridges Elm commands to legacy Action system
+/// Command executor that bridges Elm commands to Action and NostrCommand systems
 #[derive(Clone)]
 pub struct CmdExecutor {
     action_sender: mpsc::UnboundedSender<Action>,
+    nostr_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
 }
 
 impl CmdExecutor {
-    /// Create a new command executor
+    /// Create a new command executor with Action support only
     pub fn new(action_sender: mpsc::UnboundedSender<Action>) -> Self {
-        Self { action_sender }
+        Self {
+            action_sender,
+            nostr_sender: None,
+        }
     }
 
-    /// Execute a single command by converting it to appropriate Action
+    /// Create a new command executor with both Action and NostrCommand support
+    pub fn new_with_nostr(
+        action_sender: mpsc::UnboundedSender<Action>,
+        nostr_sender: mpsc::UnboundedSender<NostrCommand>,
+    ) -> Self {
+        Self {
+            action_sender,
+            nostr_sender: Some(nostr_sender),
+        }
+    }
+
+    /// Add NostrCommand support to existing executor
+    pub fn set_nostr_sender(&mut self, nostr_sender: mpsc::UnboundedSender<NostrCommand>) {
+        self.nostr_sender = Some(nostr_sender);
+    }
+
+    /// Execute a single command by converting it to appropriate Action or NostrCommand
     pub fn execute_command(&self, cmd: &Cmd) -> Result<()> {
         match cmd {
             Cmd::None => {
                 // No-op command, nothing to execute
             }
 
+            // Nostr protocol commands - route to NostrService if available, fallback to Action
             Cmd::SendReaction { target_event } => {
-                self.action_sender
-                    .send(Action::SendReaction(target_event.clone()))?;
+                if let Some(nostr_sender) = &self.nostr_sender {
+                    let nostr_cmd = NostrCommand::like(target_event.clone());
+                    nostr_sender.send(nostr_cmd)?;
+                } else {
+                    // Fallback to legacy Action system
+                    self.action_sender
+                        .send(Action::SendReaction(target_event.clone()))?;
+                }
             }
 
             Cmd::SendRepost { target_event } => {
-                self.action_sender
-                    .send(Action::SendRepost(target_event.clone()))?;
+                if let Some(nostr_sender) = &self.nostr_sender {
+                    let nostr_cmd = NostrCommand::repost(target_event.clone(), None);
+                    nostr_sender.send(nostr_cmd)?;
+                } else {
+                    // Fallback to legacy Action system
+                    self.action_sender
+                        .send(Action::SendRepost(target_event.clone()))?;
+                }
             }
 
             Cmd::SendTextNote { content, tags } => {
-                self.action_sender
-                    .send(Action::SendTextNote(content.clone(), tags.clone()))?;
+                if let Some(nostr_sender) = &self.nostr_sender {
+                    let nostr_cmd = NostrCommand::text_note(content.clone(), tags.clone());
+                    nostr_sender.send(nostr_cmd)?;
+                } else {
+                    // Fallback to legacy Action system
+                    self.action_sender
+                        .send(Action::SendTextNote(content.clone(), tags.clone()))?;
+                }
             }
 
             Cmd::ConnectToRelays { relays } => {
-                log::info!("Command to connect to relays: {:?}", relays);
-                // TODO: Implement relay connection logic
+                if let Some(nostr_sender) = &self.nostr_sender {
+                    let nostr_cmd = NostrCommand::connect_relays(relays.clone());
+                    nostr_sender.send(nostr_cmd)?;
+                } else {
+                    log::warn!("ConnectToRelays command ignored: NostrService not available");
+                }
             }
 
             Cmd::DisconnectFromRelays => {
-                log::info!("Command to disconnect from relays");
-                // TODO: Implement relay disconnection logic
+                if let Some(nostr_sender) = &self.nostr_sender {
+                    let nostr_cmd = NostrCommand::DisconnectFromRelays;
+                    nostr_sender.send(nostr_cmd)?;
+                } else {
+                    log::warn!("DisconnectFromRelays command ignored: NostrService not available");
+                }
             }
 
             Cmd::SubscribeToTimeline => {
-                log::info!("Command to subscribe to timeline");
-                // TODO: Implement timeline subscription logic
+                if let Some(nostr_sender) = &self.nostr_sender {
+                    let nostr_cmd = NostrCommand::SubscribeToTimeline;
+                    nostr_sender.send(nostr_cmd)?;
+                } else {
+                    log::warn!("SubscribeToTimeline command ignored: NostrService not available");
+                }
             }
 
             Cmd::SaveConfig => {
                 log::info!("Command to save config");
                 // TODO: Implement config saving
+                // This remains as TODO since it's not Nostr-related
             }
 
             Cmd::LoadConfig => {
                 log::info!("Command to load config");
                 // TODO: Implement config loading
+                // This remains as TODO since it's not Nostr-related
             }
 
             Cmd::Resize { width, height } => {
@@ -122,6 +175,8 @@ impl CmdExecutor {
     pub fn get_stats(&self) -> CmdExecutorStats {
         CmdExecutorStats {
             is_action_sender_closed: self.action_sender.is_closed(),
+            has_nostr_sender: self.nostr_sender.is_some(),
+            is_nostr_sender_closed: self.nostr_sender.as_ref().map(|sender| sender.is_closed()),
         }
     }
 }
@@ -130,6 +185,8 @@ impl CmdExecutor {
 #[derive(Debug, Clone)]
 pub struct CmdExecutorStats {
     pub is_action_sender_closed: bool,
+    pub has_nostr_sender: bool,
+    pub is_nostr_sender_closed: Option<bool>,
 }
 
 /// Extension trait for Cmd to get human-readable names
@@ -323,5 +380,93 @@ mod tests {
         let stats = executor.get_stats();
 
         assert!(!stats.is_action_sender_closed);
+        assert!(!stats.has_nostr_sender);
+        assert!(stats.is_nostr_sender_closed.is_none());
+    }
+
+    #[test]
+    fn test_executor_with_nostr_sender() {
+        let (action_tx, _action_rx) = mpsc::unbounded_channel();
+        let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let executor = CmdExecutor::new_with_nostr(action_tx, nostr_tx);
+
+        let stats = executor.get_stats();
+        assert!(stats.has_nostr_sender);
+        assert_eq!(stats.is_nostr_sender_closed, Some(false));
+    }
+
+    #[test]
+    fn test_nostr_command_routing() {
+        let (action_tx, mut action_rx) = mpsc::unbounded_channel();
+        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let executor = CmdExecutor::new_with_nostr(action_tx, nostr_tx);
+
+        let target_event = create_test_event();
+        let cmd = Cmd::SendReaction {
+            target_event: target_event.clone(),
+        };
+
+        // Should route to NostrCommand, not Action
+        executor.execute_command(&cmd).unwrap();
+
+        // NostrCommand should be sent
+        let nostr_cmd = nostr_rx.try_recv().unwrap();
+        match nostr_cmd {
+            NostrCommand::SendReaction {
+                target_event: received_event,
+                content,
+            } => {
+                assert_eq!(received_event.id, target_event.id);
+                assert_eq!(content, "+");
+            }
+            _ => panic!("Expected SendReaction NostrCommand"),
+        }
+
+        // Action should NOT be sent
+        assert!(action_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn test_fallback_to_action() {
+        let (executor, mut rx) = create_test_executor(); // No NostrSender
+        let target_event = create_test_event();
+        let cmd = Cmd::SendReaction {
+            target_event: target_event.clone(),
+        };
+
+        // Should fallback to Action
+        executor.execute_command(&cmd).unwrap();
+
+        let received_action = rx.try_recv().unwrap();
+        match received_action {
+            Action::SendReaction(received_event) => {
+                assert_eq!(received_event.id, target_event.id);
+            }
+            _ => panic!("Expected SendReaction action"),
+        }
+    }
+
+    #[test]
+    fn test_nostr_only_commands() {
+        let (action_tx, mut action_rx) = mpsc::unbounded_channel();
+        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let executor = CmdExecutor::new_with_nostr(action_tx, nostr_tx);
+
+        // Test ConnectToRelays (NostrService only)
+        let cmd = Cmd::ConnectToRelays {
+            relays: vec!["wss://relay.example.com".to_string()],
+        };
+        executor.execute_command(&cmd).unwrap();
+
+        let nostr_cmd = nostr_rx.try_recv().unwrap();
+        match nostr_cmd {
+            NostrCommand::ConnectToRelays { relays } => {
+                assert_eq!(relays, vec!["wss://relay.example.com".to_string()]);
+            }
+            _ => panic!("Expected ConnectToRelays NostrCommand"),
+        }
+
+        // No Action should be sent
+        assert!(action_rx.try_recv().is_err());
     }
 }

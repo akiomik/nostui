@@ -31,4 +31,5 @@ pub enum Action {
     Key(KeyEvent),
     MetadataUpdated(Box<Metadata>),
     SystemMessage(String),
+    NostrError(String),
 }
