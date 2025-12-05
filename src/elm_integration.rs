@@ -2,8 +2,8 @@ use std::collections::VecDeque;
 use tokio::sync::mpsc;
 
 use crate::{
-    action::Action, cmd::Cmd, cmd_executor::CmdExecutor, msg::Msg, raw_msg::RawMsg,
-    state::AppState, translator::translate_raw_to_domain, update::update,
+    action::Action, cmd::Cmd, cmd_executor::CmdExecutor, msg::Msg, nostr_command::NostrCommand,
+    raw_msg::RawMsg, state::AppState, translator::translate_raw_to_domain, update::update,
 };
 
 /// Integration point between Elm architecture runtime and existing app
@@ -60,9 +60,57 @@ impl ElmRuntime {
         }
     }
 
-    /// Set command executor
+    /// Create a new ElmRuntime with both Action and NostrCommand support
+    pub fn new_with_nostr_executor(
+        initial_state: AppState,
+        action_sender: mpsc::UnboundedSender<Action>,
+        nostr_sender: mpsc::UnboundedSender<NostrCommand>,
+    ) -> Self {
+        let (msg_tx, msg_rx) = mpsc::unbounded_channel();
+        let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
+        let executor = CmdExecutor::new_with_nostr(action_sender, nostr_sender);
+
+        Self {
+            state: initial_state,
+            msg_queue: VecDeque::new(),
+            raw_msg_queue: VecDeque::new(),
+            cmd_queue: VecDeque::new(),
+            msg_tx: Some(msg_tx),
+            msg_rx,
+            raw_msg_tx: Some(raw_msg_tx),
+            raw_msg_rx,
+            cmd_executor: Some(executor),
+        }
+    }
+
+    /// Set command executor (Action only)
     pub fn set_executor(&mut self, action_sender: mpsc::UnboundedSender<Action>) {
         self.cmd_executor = Some(CmdExecutor::new(action_sender));
+    }
+
+    /// Set command executor with NostrCommand support
+    pub fn set_nostr_executor(
+        &mut self,
+        action_sender: mpsc::UnboundedSender<Action>,
+        nostr_sender: mpsc::UnboundedSender<NostrCommand>,
+    ) {
+        self.cmd_executor = Some(CmdExecutor::new_with_nostr(action_sender, nostr_sender));
+    }
+
+    /// Add NostrCommand support to existing executor
+    pub fn add_nostr_support(
+        &mut self,
+        nostr_sender: mpsc::UnboundedSender<NostrCommand>,
+    ) -> Result<(), String> {
+        if let Some(executor) = &mut self.cmd_executor {
+            executor.set_nostr_sender(nostr_sender);
+            Ok(())
+        } else {
+            Err(
+                "No executor available. Use set_executor() or set_nostr_executor() first."
+                    .to_string(),
+            )
+        }
     }
 
     /// Get sender for message transmission
@@ -186,6 +234,12 @@ impl ElmRuntime {
 
     /// Get runtime statistics
     pub fn get_stats(&self) -> ElmRuntimeStats {
+        let has_nostr_support = self
+            .cmd_executor
+            .as_ref()
+            .map(|executor| executor.get_stats().has_nostr_sender)
+            .unwrap_or(false);
+
         ElmRuntimeStats {
             queued_messages: self.msg_queue.len(),
             queued_commands: self.cmd_queue.len(),
@@ -194,6 +248,7 @@ impl ElmRuntime {
             is_input_shown: self.state.ui.show_input,
             selected_note_index: self.state.timeline.selected_index,
             has_executor: self.cmd_executor.is_some(),
+            has_nostr_support,
         }
     }
 }
@@ -208,6 +263,7 @@ pub struct ElmRuntimeStats {
     pub is_input_shown: bool,
     pub selected_note_index: Option<usize>,
     pub has_executor: bool,
+    pub has_nostr_support: bool,
 }
 
 #[cfg(test)]
@@ -429,9 +485,10 @@ mod tests {
         let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
         let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
 
-        // Check stats show executor is available
+        // Check stats show executor is available but no Nostr support
         let stats = runtime.get_stats();
         assert!(stats.has_executor);
+        assert!(!stats.has_nostr_support);
 
         // Send a message that generates a command
         let target_event = create_test_event();
@@ -450,6 +507,88 @@ mod tests {
             }
             _ => panic!("Expected SendReaction action"),
         }
+    }
+
+    #[test]
+    fn test_runtime_with_nostr_executor() {
+        use crate::action::Action;
+        use tokio::sync::mpsc;
+
+        let keys = Keys::generate();
+        let state = AppState::new(keys.public_key());
+        let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let mut runtime = ElmRuntime::new_with_nostr_executor(state, action_tx, nostr_tx);
+
+        // Check stats show both executor and Nostr support
+        let stats = runtime.get_stats();
+        assert!(stats.has_executor);
+        assert!(stats.has_nostr_support);
+
+        // Send a message that generates a command
+        let target_event = create_test_event();
+        runtime.send_msg(Msg::SendReaction(target_event.clone()));
+
+        // Process messages and execute commands
+        let execution_log = runtime.run_update_cycle().unwrap();
+        assert_eq!(execution_log.len(), 1);
+        assert!(execution_log[0].contains("✓ Executed: SendReaction"));
+
+        // Check that NostrCommand was sent (not Action)
+        let nostr_cmd = nostr_rx.try_recv().unwrap();
+        match nostr_cmd {
+            NostrCommand::SendReaction {
+                target_event: received_event,
+                content,
+            } => {
+                assert_eq!(received_event.id, target_event.id);
+                assert_eq!(content, "+");
+            }
+            _ => panic!("Expected SendReaction NostrCommand"),
+        }
+
+        // No Action should be sent when NostrCommand is available
+        assert!(action_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn test_add_nostr_support() {
+        use crate::action::Action;
+        use tokio::sync::mpsc;
+
+        let keys = Keys::generate();
+        let state = AppState::new(keys.public_key());
+        let (action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
+        let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+
+        // Initially no Nostr support
+        assert!(!runtime.get_stats().has_nostr_support);
+
+        // Add Nostr support
+        let result = runtime.add_nostr_support(nostr_tx);
+        assert!(result.is_ok());
+
+        // Now has Nostr support
+        assert!(runtime.get_stats().has_nostr_support);
+    }
+
+    #[test]
+    fn test_add_nostr_support_without_executor() {
+        use tokio::sync::mpsc;
+
+        let keys = Keys::generate();
+        let state = AppState::new(keys.public_key());
+        let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let mut runtime = ElmRuntime::new(state);
+
+        // No executor available
+        assert!(!runtime.get_stats().has_executor);
+
+        // Should fail to add Nostr support
+        let result = runtime.add_nostr_support(nostr_tx);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("No executor available"));
     }
 
     #[test]

@@ -71,6 +71,8 @@ pub mod config;
 pub mod fps_service;
 pub mod mode;
 pub mod nostr;
+pub mod nostr_command;
+pub mod nostr_service;
 pub mod text;
 pub mod tui;
 pub mod utils;
