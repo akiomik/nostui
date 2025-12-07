@@ -11,6 +11,7 @@ use crate::{
 
 pub mod elm_fps;
 pub mod elm_home;
+pub mod elm_home_adapter;
 pub mod elm_home_data;
 pub mod elm_home_input;
 pub mod elm_home_list;
@@ -133,4 +134,23 @@ pub trait Component {
     ///
     /// * `Result<()>` - An Ok result or an error.
     fn draw(&mut self, f: &mut Frame<'_>, area: Rect) -> Result<()>;
+
+    /// Check if this component is an ElmHomeAdapter
+    fn is_elm_home_adapter(&self) -> bool {
+        false
+    }
+
+    /// Get this component as ElmHomeAdapter if possible
+    fn as_elm_home_adapter(
+        &mut self,
+    ) -> Option<&mut crate::components::elm_home_adapter::ElmHomeAdapter> {
+        None
+    }
+
+    /// Get this component as ElmHomeAdapter (immutable) if possible
+    fn as_elm_home_adapter_ref(
+        &self,
+    ) -> Option<&crate::components::elm_home_adapter::ElmHomeAdapter> {
+        None
+    }
 }

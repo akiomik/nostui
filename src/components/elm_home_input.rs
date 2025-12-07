@@ -11,12 +11,20 @@ use crate::{state::AppState, text::shorten_hex, tui::Frame};
 pub struct ElmHomeInput<'a> {
     // We need to maintain a TextArea for rendering, but sync it with AppState
     textarea: TextArea<'a>,
+    // Store navigation key that should be processed directly
+    pending_navigation_key: Option<crossterm::event::KeyEvent>,
 }
 
 impl<'a> ElmHomeInput<'a> {
     pub fn new() -> Self {
+        let textarea = TextArea::default();
+
+        // Ensure proper key bindings are set for navigation
+        // TextArea should have default key bindings, but let's make sure
+
         Self {
-            textarea: TextArea::default(),
+            textarea,
+            pending_navigation_key: None,
         }
     }
 
@@ -30,12 +38,14 @@ impl<'a> ElmHomeInput<'a> {
         // Sync TextArea content with AppState
         self.sync_textarea_with_state(state);
 
-        // Calculate input area (similar to original implementation)
-        let mut input_area = area;
-        input_area.height /= 2;
-        input_area.y = input_area.height;
-        input_area.height = input_area.height.saturating_sub(2);
+        // Process any pending navigation key directly
+        if let Some(nav_key) = self.pending_navigation_key.take() {
+            self.textarea.input(crossterm::event::Event::Key(nav_key));
+        }
 
+        // Calculate input area like the original implementation (home.rs:265-270)
+        let mut input_area = area;
+        input_area.height = input_area.height.saturating_sub(2); // Add some margin like original
         f.render_widget(Clear, input_area);
 
         // Set block based on reply state
@@ -58,26 +68,28 @@ impl<'a> ElmHomeInput<'a> {
 
     /// Synchronize internal TextArea with AppState content
     /// This ensures the TextArea always reflects the current state
-    fn sync_textarea_with_state(&mut self, state: &AppState) {
+    pub fn sync_textarea_with_state(&mut self, state: &AppState) {
         let current_content = self.textarea.lines().join("\n");
 
         // Only update if content differs to avoid unnecessary operations
         if current_content != state.ui.input_content {
-            // Clear current content
+            // Clear current content and replace with state content
+            // This is necessary to keep TextArea in sync with AppState
             self.textarea.select_all();
             self.textarea.delete_str(usize::MAX);
 
             // Set new content
             if !state.ui.input_content.is_empty() {
-                // Split content into lines and insert each line
-                let lines: Vec<&str> = state.ui.input_content.lines().collect();
-                for (i, line) in lines.iter().enumerate() {
-                    if i > 0 {
-                        self.textarea.insert_newline();
-                    }
-                    self.textarea.insert_str(line);
-                }
+                self.textarea.insert_str(&state.ui.input_content);
+                log::debug!(
+                    "ElmHomeInput::sync_textarea_with_state: Inserted content, cursor now at: {:?}",
+                    self.textarea.cursor()
+                );
             }
+        } else {
+            log::debug!(
+                "ElmHomeInput::sync_textarea_with_state: Content is the same, no update needed"
+            );
         }
     }
 
@@ -95,11 +107,14 @@ impl<'a> ElmHomeInput<'a> {
     /// Process raw key input and convert to content update
     /// This is the bridge between TextArea input and Elm state management
     pub fn process_key_input(&mut self, key: crossterm::event::KeyEvent) -> Option<String> {
-        // Apply key to internal TextArea
+        // Let TextArea handle ALL key inputs (including Enter, arrows, Ctrl+A, etc.)
+        // TextArea has built-in support for navigation and editing
         self.textarea.input(crossterm::event::Event::Key(key));
 
+        let new_content = self.textarea.lines().join("\n");
+
         // Return the new content for AppState update
-        Some(self.textarea.lines().join("\n"))
+        Some(new_content)
     }
 
     /// Calculate if submit is possible
@@ -159,6 +174,12 @@ impl<'a> ElmHomeInput<'a> {
         } else {
             "Compose mode".to_string()
         }
+    }
+
+    /// Process navigation key directly (for cursor movement)
+    /// This bypasses the AppState sync to preserve cursor position
+    pub fn process_navigation_key(&mut self, key: crossterm::event::KeyEvent) {
+        self.pending_navigation_key = Some(key);
     }
 }
 
