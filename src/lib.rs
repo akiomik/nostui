@@ -16,7 +16,7 @@
 //! ## Example Usage
 //!
 //! ```rust
-//! use nostui::{state::AppState, msg::Msg, update::update};
+//! use nostui::{core::state::AppState, core::msg::Msg, core::update::update};
 //! use nostr_sdk::prelude::*;
 //!
 //! // Initialize state
@@ -39,60 +39,48 @@
 //!
 //! ## Modules
 //!
-//! - [`state`] - Application state definitions
-//! - [`msg`] - Message types for state transitions
-//! - [`update()`] - Pure update functions
-//! - [`cmd`] - Command definitions for side effects
-//! - [`elm_integration`] - Integration runtime for existing code
-//! - [`components`] - UI components
-//! - [`nostr`] - Nostr protocol implementations
-//! - [`config`] - Configuration management
+//! - [`core::state`] - Application state definitions
+//! - [`core::msg`] - Message types for state transitions
+//! - [`core::update()`] - Pure update functions
+//! - [`core::cmd`] - Command definitions for side effects
+//! - [`integration::elm_integration`] - Integration runtime for existing code
+//! - [`presentation::components`] - UI components
+//! - [`domain::nostr`] - Nostr protocol implementations
+//! - [`infrastructure::config`] - Configuration management
 
 #![deny(warnings)]
 #![allow(dead_code)]
 
 // Core Elm architecture modules
-pub mod cmd;
-pub mod cmd_executor;
-pub mod elm_integration;
-pub mod msg;
-pub mod raw_msg;
-pub mod state;
-pub mod translator;
-pub mod update;
+pub mod core;
 
-// Legacy modules (for gradual migration)
-pub mod action;
-pub mod app;
-pub mod cli;
-pub mod collections;
-pub mod components;
-pub mod config;
-pub mod fps_service;
-pub mod mode;
-pub mod nostr;
-pub mod nostr_command;
-pub mod nostr_service;
-pub mod text;
-pub mod tui;
+// Infrastructure layer
+pub mod infrastructure;
+
+// Presentation layer
+pub mod presentation;
+
+// Domain logic
+pub mod domain;
+
+// Utilities
 pub mod utils;
-pub mod widgets;
 
-#[cfg(test)]
-pub mod elm_home_test;
+// Integration and migration support
+pub mod integration;
 
 // Test helpers module (available in dev and test builds)
 #[cfg(any(test, debug_assertions))]
 pub mod test_helpers;
 
 // Re-exports for convenience
-pub use cmd::Cmd;
-pub use elm_integration::{ElmRuntime, ElmRuntimeStats};
-pub use msg::Msg;
-pub use raw_msg::RawMsg;
-pub use state::AppState;
-pub use translator::translate_raw_to_domain;
-pub use update::update;
+pub use core::cmd::Cmd;
+pub use core::msg::Msg;
+pub use core::raw_msg::RawMsg;
+pub use core::state::AppState;
+pub use core::translator::translate_raw_to_domain;
+pub use core::update::update;
+pub use integration::elm_integration::{ElmRuntime, ElmRuntimeStats};
 
 /// Result type used throughout the library
 pub type Result<T> = color_eyre::eyre::Result<T>;

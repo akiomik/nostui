@@ -1,7 +1,7 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    components::elm_status_bar::ElmStatusBar, msg::Msg, nostr::Profile, state::AppState,
-    update::update,
+    core::msg::Msg, core::state::AppState, core::update::update, domain::nostr::Profile,
+    presentation::components::elm_status_bar::ElmStatusBar,
 };
 
 /// Test StatusBar integration with Elm architecture
@@ -26,7 +26,8 @@ fn test_status_bar_display_name_flow() {
 
     // Add profile and update state
     let metadata = Metadata::new().name("Alice").display_name("Alice Smith");
-    let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
+    let profile =
+        nostui::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata);
 
     let (new_state, cmds) = update(Msg::UpdateProfile(keys.public_key(), profile), state);
     assert!(cmds.is_empty());
@@ -178,7 +179,8 @@ async fn test_status_bar_integration_full_flow() {
         .name("Integration Test User")
         .display_name("ITest User")
         .about("Testing Elm architecture");
-    let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
+    let profile =
+        nostui::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata);
     let (state, _) = update(Msg::UpdateProfile(keys.public_key(), profile), state);
 
     assert!(ElmStatusBar::has_profile_data(&state));

@@ -1,0 +1,9 @@
+//! Integration and migration support
+//!
+//! This module supports gradual migration to Elm architecture:
+//! - Elm integration runtime
+//! - Legacy code (for gradual removal)
+
+pub mod elm_home_adapter;
+pub mod elm_integration;
+pub mod legacy;

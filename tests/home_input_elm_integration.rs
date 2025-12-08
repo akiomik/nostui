@@ -1,10 +1,10 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    components::elm_home_input::{ElmHomeInput, SubmitData},
-    msg::Msg,
-    state::AppState,
+    core::msg::Msg,
+    core::state::AppState,
+    core::update::update,
+    presentation::components::elm_home_input::{ElmHomeInput, SubmitData},
     test_helpers::TextAreaTestHelper,
-    update::update,
 };
 
 /// Test Home input layer integration with Elm architecture
@@ -293,7 +293,7 @@ async fn test_complete_input_workflow() {
     assert_eq!(cmds.len(), 1);
 
     // Verify reply has tags
-    if let nostui::cmd::Cmd::SendTextNote { content, tags } = &cmds[0] {
+    if let nostui::core::cmd::Cmd::SendTextNote { content, tags } = &cmds[0] {
         assert_eq!(content, "Great point!");
         assert!(!tags.is_empty()); // Reply should have tags
     } else {

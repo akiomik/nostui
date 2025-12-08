@@ -1,8 +1,9 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
 use nostui::{
-    msg::Msg, raw_msg::RawMsg, state::AppState, test_helpers::TextAreaTestHelper,
-    translator::translate_raw_to_domain, update::update,
+    core::msg::Msg, core::raw_msg::RawMsg, core::state::AppState,
+    core::translator::translate_raw_to_domain, core::update::update,
+    test_helpers::TextAreaTestHelper,
 };
 
 /// Test Hybrid Approach behavior

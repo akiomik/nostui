@@ -1,8 +1,9 @@
 use color_eyre::eyre::Result;
 use nostr_sdk::prelude::*;
 use nostui::{
-    action::Action, cmd::Cmd, cmd_executor::CmdExecutor, elm_integration::ElmRuntime, msg::Msg,
-    raw_msg::RawMsg, state::AppState, translator::translate_raw_to_domain,
+    core::cmd::Cmd, core::cmd_executor::CmdExecutor, core::msg::Msg, core::raw_msg::RawMsg,
+    core::state::AppState, core::translator::translate_raw_to_domain,
+    integration::elm_integration::ElmRuntime, integration::legacy::action::Action,
 };
 use tokio::sync::mpsc;
 
@@ -44,7 +45,7 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
 
     // Debug: Test translator directly with updated state
     let translated_msgs =
-        nostui::translator::translate_raw_to_domain(raw_msg.clone(), runtime.state());
+        nostui::core::translator::translate_raw_to_domain(raw_msg.clone(), runtime.state());
     println!("Translated messages from 'l' key: {:?}", translated_msgs);
 
     runtime.send_raw_msg(raw_msg);
@@ -254,12 +255,9 @@ fn test_translator_integration_with_executor() -> Result<()> {
 
     // Add an event and select it
     let event = create_test_event();
-    state
-        .timeline
-        .notes
-        .find_or_insert(std::cmp::Reverse(nostui::nostr::SortableEvent::new(
-            event.clone(),
-        )));
+    state.timeline.notes.find_or_insert(std::cmp::Reverse(
+        nostui::domain::nostr::SortableEvent::new(event.clone()),
+    ));
     state.timeline.selected_index = Some(0);
 
     // Simulate key presses through translator

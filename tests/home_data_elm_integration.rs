@@ -1,7 +1,7 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    components::elm_home_data::ElmHomeData, msg::Msg, nostr::Profile, state::AppState,
-    update::update,
+    core::msg::Msg, core::state::AppState, core::update::update,
+    presentation::components::elm_home_data::ElmHomeData,
 };
 use ratatui::{prelude::*, widgets::Padding};
 
@@ -70,7 +70,8 @@ fn test_profile_management_flow() {
         .name("Alice")
         .display_name("Alice Smith")
         .about("Test user");
-    let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
+    let profile =
+        nostui::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata);
     let (new_state, cmds) = update(Msg::UpdateProfile(keys.public_key(), profile), state);
     state = new_state;
     assert!(cmds.is_empty());
@@ -81,7 +82,8 @@ fn test_profile_management_flow() {
 
     // Test with different name (should overwrite previous profile)
     let metadata2 = Metadata::new().name("Bob");
-    let profile2 = Profile::new(keys.public_key(), Timestamp::now(), metadata2);
+    let profile2 =
+        nostui::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata2);
     let (new_state, _) = update(Msg::UpdateProfile(keys.public_key(), profile2), state);
     state = new_state;
 
@@ -220,12 +222,14 @@ fn test_timeline_stats_calculation() {
 
     // Add profiles
     let metadata1 = Metadata::new().name("User1");
-    let profile1 = Profile::new(keys1.public_key(), Timestamp::now(), metadata1);
+    let profile1 =
+        nostui::domain::nostr::Profile::new(keys1.public_key(), Timestamp::now(), metadata1);
     let (new_state, _) = update(Msg::UpdateProfile(keys1.public_key(), profile1), state);
     state = new_state;
 
     let metadata2 = Metadata::new().name("User2");
-    let profile2 = Profile::new(keys2.public_key(), Timestamp::now(), metadata2);
+    let profile2 =
+        nostui::domain::nostr::Profile::new(keys2.public_key(), Timestamp::now(), metadata2);
     let (new_state, _) = update(Msg::UpdateProfile(keys2.public_key(), profile2), state);
     state = new_state;
 
@@ -259,7 +263,8 @@ fn test_text_note_creation() {
     state = new_state;
 
     let metadata = Metadata::new().name("Test User");
-    let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
+    let profile =
+        nostui::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata);
     let (new_state, _) = update(Msg::UpdateProfile(keys.public_key(), profile), state);
     state = new_state;
 
@@ -302,7 +307,8 @@ async fn test_complete_home_data_workflow() {
         .name("nostr_dev")
         .display_name("Nostr Developer")
         .about("Building the decentralized social web");
-    let profile = Profile::new(author_keys.public_key(), Timestamp::now(), metadata);
+    let profile =
+        nostui::domain::nostr::Profile::new(author_keys.public_key(), Timestamp::now(), metadata);
     let (new_state, _) = update(Msg::UpdateProfile(author_keys.public_key(), profile), state);
     state = new_state;
 

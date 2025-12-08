@@ -1,6 +1,7 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    elm_integration::ElmRuntime, msg::Msg, state::AppState, update::update, Cmd, VERSION,
+    core::msg::Msg, core::state::AppState, core::update::update,
+    integration::elm_integration::ElmRuntime, Cmd, VERSION,
 };
 
 /// Basic library flow test
