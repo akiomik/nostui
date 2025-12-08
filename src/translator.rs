@@ -54,20 +54,20 @@ fn translate_key_event(key: crossterm::event::KeyEvent, state: &AppState) -> Vec
 
     // Context-sensitive key bindings
     if state.ui.show_input {
-        translate_input_mode_keys(key)
+        translate_input_mode_keys(key, state)
     } else {
         translate_normal_mode_keys(key, state)
     }
 }
 
 /// Key bindings when input is active
-fn translate_input_mode_keys(key: crossterm::event::KeyEvent) -> Vec<Msg> {
+fn translate_input_mode_keys(key: crossterm::event::KeyEvent, _state: &AppState) -> Vec<Msg> {
     use crossterm::event::KeyEvent;
 
     match key {
         KeyEvent {
-            code: KeyCode::Enter,
-            modifiers: KeyModifiers::NONE,
+            code: KeyCode::Char('p'),
+            modifiers: KeyModifiers::CONTROL,
             ..
         } => vec![Msg::SubmitNote],
 
@@ -75,9 +75,9 @@ fn translate_input_mode_keys(key: crossterm::event::KeyEvent) -> Vec<Msg> {
             code: KeyCode::Esc, ..
         } => vec![Msg::CancelInput],
 
-        // All other keys should update input content
-        // We pass the key event to be processed by ElmHomeInput
-        _ => vec![Msg::ProcessInputKey(key)],
+        // Hybrid Approach: Delegate all other input to TextArea component
+        // All non-special keys go to TextArea for processing
+        _ => vec![Msg::ProcessTextAreaInput(key)],
     }
 }
 
@@ -381,15 +381,38 @@ mod tests {
         let mut state = create_test_state();
         state.ui.show_input = true;
 
-        // Test Enter in input mode
-        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        // Test Ctrl+P in input mode (submit)
+        let key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result, vec![Msg::SubmitNote]);
+
+        // Test plain Enter in input mode (now delegated to TextArea)
+        state.ui.input_content = "Test".to_string();
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        let result = translate_raw_to_domain(RawMsg::Key(key), &state);
+        assert_eq!(result, vec![Msg::ProcessTextAreaInput(key)]);
 
         // Test Escape in input mode
         let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result, vec![Msg::CancelInput]);
+
+        // Test character input (now delegated to TextArea)
+        state.ui.input_content = "Hello".to_string();
+        let key = KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE);
+        let result = translate_raw_to_domain(RawMsg::Key(key), &state);
+        assert_eq!(result, vec![Msg::ProcessTextAreaInput(key)]);
+
+        // Test backspace (now delegated to TextArea)
+        let key = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
+        let result = translate_raw_to_domain(RawMsg::Key(key), &state);
+        assert_eq!(result, vec![Msg::ProcessTextAreaInput(key)]);
+
+        // Test Shift+Enter (now delegated to TextArea)
+        state.ui.input_content = "Line 1".to_string();
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT);
+        let result = translate_raw_to_domain(RawMsg::Key(key), &state);
+        assert_eq!(result, vec![Msg::ProcessTextAreaInput(key)]);
     }
 
     #[test]
@@ -473,12 +496,13 @@ mod tests {
     fn test_translate_reply_key_validation() {
         let mut state = create_test_state();
 
-        // Cannot reply when in input mode
+        // Cannot reply when in input mode - 'r' should be delegated to TextArea
         state.ui.show_input = true;
+        state.ui.input_content = "Hello".to_string();
         state.timeline.selected_index = Some(0);
         let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::ProcessInputKey(key)]);
+        assert_eq!(result, vec![Msg::ProcessTextAreaInput(key)]);
 
         // Cannot reply when no note selected
         state.ui.show_input = false;

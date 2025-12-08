@@ -4,7 +4,9 @@ use nostr_sdk::prelude::*;
 use crate::{
     components::elm_home_input::{ElmHomeInput, SubmitData},
     msg::Msg,
+    raw_msg::RawMsg,
     state::AppState,
+    translator::translate_raw_to_domain,
     update::update,
 };
 
@@ -82,10 +84,16 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Press a key with modifiers
     pub fn press_key(&mut self, key: KeyEvent) -> &mut Self {
-        if let Some(content) = self.input.process_key_input(key) {
-            self.state.ui.input_content = content;
-            self.sync_state();
+        // Use the translator to convert raw key to domain messages
+        let messages = translate_raw_to_domain(RawMsg::Key(key), &self.state);
+
+        // Process each message through the update cycle
+        for msg in messages {
+            let (new_state, _cmds) = update(msg, self.state.clone());
+            self.state = new_state;
         }
+
+        self.sync_state();
         self
     }
 
@@ -258,6 +266,42 @@ impl<'a> TextAreaTestHelper<'a> {
     pub fn assert_not_empty(&self) {
         let stats = ElmHomeInput::get_input_stats(&self.state);
         assert!(!stats.is_empty, "Expected content to not be empty");
+    }
+
+    /// Assert cursor position
+    pub fn assert_cursor_position(&self, row: usize, col: usize) {
+        let cursor = &self.state.ui.cursor_position;
+        assert_eq!(
+            cursor.row, row,
+            "Expected cursor row {}, got {}",
+            row, cursor.row
+        );
+        assert_eq!(
+            cursor.col, col,
+            "Expected cursor col {}, got {}",
+            col, cursor.col
+        );
+    }
+
+    /// Assert cursor at start of document
+    pub fn assert_cursor_at_start(&self) {
+        self.assert_cursor_position(0, 0);
+    }
+
+    /// Assert no selection
+    pub fn assert_no_selection(&self) {
+        assert!(
+            self.state.ui.selection.is_none(),
+            "Expected no selection, but selection is present"
+        );
+    }
+
+    /// Assert selection exists
+    pub fn assert_has_selection(&self) {
+        assert!(
+            self.state.ui.selection.is_some(),
+            "Expected selection to exist, but none found"
+        );
     }
 
     // === Getter Methods ===

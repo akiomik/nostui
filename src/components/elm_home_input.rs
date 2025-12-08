@@ -66,12 +66,13 @@ impl<'a> ElmHomeInput<'a> {
         Ok(())
     }
 
-    /// Synchronize internal TextArea with AppState content
+    /// Synchronize internal TextArea with AppState content and cursor position
     /// This ensures the TextArea always reflects the current state
     pub fn sync_textarea_with_state(&mut self, state: &AppState) {
         let current_content = self.textarea.lines().join("\n");
+        let current_cursor = self.get_cursor_position();
 
-        // Only update if content differs to avoid unnecessary operations
+        // Update content if it differs
         if current_content != state.ui.input_content {
             // Clear current content and replace with state content
             // This is necessary to keep TextArea in sync with AppState
@@ -86,9 +87,23 @@ impl<'a> ElmHomeInput<'a> {
                     self.textarea.cursor()
                 );
             }
-        } else {
+        }
+
+        // Update cursor position if it differs
+        if current_cursor != state.ui.cursor_position {
+            self.set_cursor_position(&state.ui.cursor_position);
             log::debug!(
-                "ElmHomeInput::sync_textarea_with_state: Content is the same, no update needed"
+                "ElmHomeInput::sync_textarea_with_state: Updated cursor to {:?}",
+                state.ui.cursor_position
+            );
+        }
+
+        // Update selection if present
+        self.set_selection(&state.ui.selection);
+
+        if current_content == state.ui.input_content && current_cursor == state.ui.cursor_position {
+            log::debug!(
+                "ElmHomeInput::sync_textarea_with_state: Content and cursor are the same, no update needed"
             );
         }
     }
@@ -104,7 +119,7 @@ impl<'a> ElmHomeInput<'a> {
             .unwrap_or_else(|| shorten_hex(&reply_to.pubkey.to_string()))
     }
 
-    /// Process raw key input and convert to content update
+    /// Process raw key input and convert to content update with cursor position
     /// This is the bridge between TextArea input and Elm state management
     pub fn process_key_input(&mut self, key: crossterm::event::KeyEvent) -> Option<String> {
         // Let TextArea handle ALL key inputs (including Enter, arrows, Ctrl+A, etc.)
@@ -115,6 +130,54 @@ impl<'a> ElmHomeInput<'a> {
 
         // Return the new content for AppState update
         Some(new_content)
+    }
+
+    /// Process raw key input and return both content and cursor position
+    /// Enhanced version that provides complete state information
+    pub fn process_key_input_with_cursor(
+        &mut self,
+        key: crossterm::event::KeyEvent,
+    ) -> (
+        String,
+        crate::state::CursorPosition,
+        Option<crate::state::TextSelection>,
+    ) {
+        // Let TextArea handle the key input
+        self.textarea.input(crossterm::event::Event::Key(key));
+
+        let new_content = self.textarea.lines().join("\n");
+        let cursor_pos = self.get_cursor_position();
+        let selection = self.get_selection();
+
+        (new_content, cursor_pos, selection)
+    }
+
+    /// Get current cursor position from TextArea
+    pub fn get_cursor_position(&self) -> crate::state::CursorPosition {
+        let (row, col) = self.textarea.cursor();
+        crate::state::CursorPosition { row, col }
+    }
+
+    /// Get current selection from TextArea
+    pub fn get_selection(&self) -> Option<crate::state::TextSelection> {
+        // TextArea doesn't seem to have a direct selection API in the current version
+        // For now, return None, but this can be extended when TextArea supports it
+        None
+    }
+
+    /// Set cursor position in TextArea from AppState
+    pub fn set_cursor_position(&mut self, pos: &crate::state::CursorPosition) {
+        // TextArea's move_cursor method allows setting cursor position
+        self.textarea.move_cursor(tui_textarea::CursorMove::Jump(
+            pos.row as u16,
+            pos.col as u16,
+        ));
+    }
+
+    /// Apply selection to TextArea from AppState
+    pub fn set_selection(&mut self, _selection: &Option<crate::state::TextSelection>) {
+        // TextArea selection support would go here
+        // For now, this is a placeholder for future implementation
     }
 
     /// Calculate if submit is possible

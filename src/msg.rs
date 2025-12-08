@@ -37,7 +37,10 @@ pub enum Msg {
     SubmitNote,
     CancelInput,
     UpdateInputContent(String),
-    ProcessInputKey(crossterm::event::KeyEvent),
+    UpdateInputContentWithCursor(String, crate::state::CursorPosition),
+    UpdateCursorPosition(crate::state::CursorPosition),
+    UpdateSelection(Option<crate::state::TextSelection>),
+    ProcessTextAreaInput(crossterm::event::KeyEvent), // Hybrid: Delegate to TextArea component
 
     // Status updates
     UpdateStatusMessage(String),
