@@ -106,8 +106,10 @@ impl Component for ElmHomeAdapter {
                             self.elm_home.process_navigation_key(*key);
                             return Ok(None);
                         } else {
-                            use crate::msg::Msg;
-                            runtime.send_msg(Msg::ProcessInputKey(*key));
+                            // For non-navigation keys, let the translator handle the conversion
+                            // via the normal RawMsg::Key path. This maintains the unified key processing.
+                            use crate::raw_msg::RawMsg;
+                            runtime.send_raw_msg(RawMsg::Key(*key));
                             if let Err(e) = runtime.run_update_cycle() {
                                 log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
                                 return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));

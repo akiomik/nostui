@@ -117,6 +117,8 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             state.ui.reply_to = None;
             state.ui.show_input = true;
             state.ui.input_content.clear();
+            state.ui.cursor_position = Default::default();
+            state.ui.selection = None;
             (state, vec![])
         }
 
@@ -124,6 +126,8 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             state.ui.reply_to = Some(target_event);
             state.ui.show_input = true;
             state.ui.input_content.clear();
+            state.ui.cursor_position = Default::default();
+            state.ui.selection = None;
             (state, vec![])
         }
 
@@ -132,6 +136,8 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             if !state.ui.show_input {
                 state.ui.reply_to = None;
                 state.ui.input_content.clear();
+                state.ui.cursor_position = Default::default();
+                state.ui.selection = None;
                 state.timeline.selected_index = None;
             }
             (state, vec![])
@@ -141,12 +147,49 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             state.ui.show_input = false;
             state.ui.reply_to = None;
             state.ui.input_content.clear();
+            state.ui.cursor_position = Default::default();
+            state.ui.selection = None;
             state.timeline.selected_index = None;
             (state, vec![])
         }
 
         Msg::UpdateInputContent(content) => {
             state.ui.input_content = content;
+            (state, vec![])
+        }
+
+        Msg::UpdateInputContentWithCursor(content, cursor_pos) => {
+            state.ui.input_content = content;
+            state.ui.cursor_position = cursor_pos;
+            (state, vec![])
+        }
+
+        Msg::UpdateCursorPosition(cursor_pos) => {
+            state.ui.cursor_position = cursor_pos;
+            (state, vec![])
+        }
+
+        Msg::UpdateSelection(selection) => {
+            state.ui.selection = selection;
+            (state, vec![])
+        }
+
+        // Hybrid Approach: Delegate key processing to ElmHomeInput component
+        Msg::ProcessTextAreaInput(key) => {
+            if state.ui.show_input {
+                // Create a temporary ElmHomeInput and sync with current state
+                let mut elm_input = crate::components::elm_home_input::ElmHomeInput::new();
+                elm_input.sync_textarea_with_state(&state);
+
+                // Process the key through TextArea and get new content with cursor position
+                let (new_content, new_cursor, new_selection) =
+                    elm_input.process_key_input_with_cursor(key);
+
+                // Update all state aspects
+                state.ui.input_content = new_content;
+                state.ui.cursor_position = new_cursor;
+                state.ui.selection = new_selection;
+            }
             (state, vec![])
         }
 
@@ -158,6 +201,8 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
                 state.ui.show_input = false;
                 state.ui.reply_to = None;
                 state.ui.input_content.clear();
+                state.ui.cursor_position = Default::default();
+                state.ui.selection = None;
 
                 (
                     state,
@@ -169,56 +214,6 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             } else {
                 (state, vec![])
             }
-        }
-
-        Msg::ProcessInputKey(key_event) => {
-            log::info!(
-                "update.rs: Processing Msg::ProcessInputKey: {:?}, show_input = {}",
-                key_event,
-                state.ui.show_input
-            );
-            if state.ui.show_input {
-                // Check if this is a navigation key that shouldn't update content
-                let is_navigation_key = match key_event.code {
-                    crossterm::event::KeyCode::Left
-                    | crossterm::event::KeyCode::Right
-                    | crossterm::event::KeyCode::Up
-                    | crossterm::event::KeyCode::Down
-                    | crossterm::event::KeyCode::Home
-                    | crossterm::event::KeyCode::End
-                    | crossterm::event::KeyCode::PageUp
-                    | crossterm::event::KeyCode::PageDown => true,
-                    crossterm::event::KeyCode::Char('a' | 'e' | 'b' | 'f' | 'p' | 'n')
-                        if key_event
-                            .modifiers
-                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                    {
-                        true
-                    }
-                    _ => false,
-                };
-
-                if is_navigation_key {
-                    // For navigation keys, don't update the AppState content
-                    // Let the TextArea handle the navigation internally
-                } else {
-                    // Create a temporary ElmHomeInput and sync with current state first
-                    let mut elm_input = crate::components::elm_home_input::ElmHomeInput::new();
-
-                    // First, sync the TextArea with current state content
-                    elm_input.sync_textarea_with_state(&state);
-
-                    // Then process the key input
-                    if let Some(new_content) = elm_input.process_key_input(key_event) {
-                        state.ui.input_content = new_content;
-                    } else {
-                        log::warn!("update.rs: process_key_input returned None");
-                    }
-                }
-            } else {
-                log::warn!("update.rs: ProcessInputKey received but show_input is false");
-            }
-            (state, vec![])
         }
 
         // Status updates

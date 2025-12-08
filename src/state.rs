@@ -34,6 +34,22 @@ pub struct UiState {
     pub input_content: String,
     pub reply_to: Option<Event>,
     pub current_mode: Mode,
+    pub cursor_position: CursorPosition,
+    pub selection: Option<TextSelection>,
+}
+
+/// Cursor position in text
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct CursorPosition {
+    pub row: usize,
+    pub col: usize,
+}
+
+/// Text selection range
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TextSelection {
+    pub start: CursorPosition,
+    pub end: CursorPosition,
 }
 
 /// User-related state
