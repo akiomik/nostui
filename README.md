@@ -2,6 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/nostui.svg)](https://crates.io/crates/nostui)
 [![CI](https://github.com/akiomik/nostui/workflows/CI/badge.svg)](https://github.com/akiomik/nostui/actions)
+[![codecov](https://codecov.io/gh/akiomik/nostui/graph/badge.svg?token=76W0IZOMYM)](https://codecov.io/gh/akiomik/nostui)
 
 A TUI client for [Nostr](https://nostr.com)
 
