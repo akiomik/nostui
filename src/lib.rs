@@ -81,6 +81,10 @@ pub mod widgets;
 #[cfg(test)]
 pub mod elm_home_test;
 
+// Test helpers module (available in dev and test builds)
+#[cfg(any(test, debug_assertions))]
+pub mod test_helpers;
+
 // Re-exports for convenience
 pub use cmd::Cmd;
 pub use elm_integration::{ElmRuntime, ElmRuntimeStats};
