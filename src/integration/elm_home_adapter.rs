@@ -82,41 +82,15 @@ impl Component for ElmHomeAdapter {
                 // In input mode, only allow specific actions
                 match &action {
                     Action::Key(key) => {
-                        // Check if this is a navigation key that should be handled by TextArea directly
-                        let is_navigation_key = match key.code {
-                            crossterm::event::KeyCode::Left
-                            | crossterm::event::KeyCode::Right
-                            | crossterm::event::KeyCode::Up
-                            | crossterm::event::KeyCode::Down
-                            | crossterm::event::KeyCode::Home
-                            | crossterm::event::KeyCode::End
-                            | crossterm::event::KeyCode::PageUp
-                            | crossterm::event::KeyCode::PageDown => true,
-                            crossterm::event::KeyCode::Char('a' | 'e' | 'b' | 'f' | 'p' | 'n')
-                                if key
-                                    .modifiers
-                                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                            {
-                                true
-                            }
-                            _ => false,
-                        };
-
-                        if is_navigation_key {
-                            // For navigation keys, send directly to ElmHome's input component
-                            self.elm_home.process_navigation_key(*key);
-                            return Ok(None);
-                        } else {
-                            // For non-navigation keys, let the translator handle the conversion
-                            // via the normal RawMsg::Key path. This maintains the unified key processing.
-                            use crate::core::raw_msg::RawMsg;
-                            runtime.send_raw_msg(RawMsg::Key(*key));
-                            if let Err(e) = runtime.run_update_cycle() {
-                                log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
-                                return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));
-                            }
-                            return Ok(None);
+                        // Process all keys uniformly through pending_keys approach
+                        // This replaces the previous navigation key special handling
+                        use crate::core::raw_msg::RawMsg;
+                        runtime.send_raw_msg(RawMsg::Key(*key));
+                        if let Err(e) = runtime.run_update_cycle() {
+                            log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
+                            return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));
                         }
+                        return Ok(None);
                     }
                     Action::Unselect => {
                         // Allow Escape to close input

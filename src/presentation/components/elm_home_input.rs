@@ -4,6 +4,59 @@ use tui_textarea::TextArea;
 
 use crate::{core::state::AppState, domain::text::shorten_hex, infrastructure::tui::Frame};
 
+/// Complete state representation of a TextArea component
+/// This struct encapsulates all mutable state that needs to be
+/// preserved across TextArea recreation in the stateless approach
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextAreaState {
+    /// The complete text content
+    pub content: String,
+    /// Current cursor position within the text
+    pub cursor_position: crate::core::state::CursorPosition,
+    /// Active text selection range, if any
+    pub selection: Option<crate::core::state::TextSelection>,
+}
+
+impl TextAreaState {
+    /// Create new TextAreaState
+    pub fn new(
+        content: String,
+        cursor_position: crate::core::state::CursorPosition,
+        selection: Option<crate::core::state::TextSelection>,
+    ) -> Self {
+        Self {
+            content,
+            cursor_position,
+            selection,
+        }
+    }
+
+    /// Create TextAreaState from AppState's UI state
+    pub fn from_ui_state(ui_state: &crate::core::state::UiState) -> Self {
+        Self::new(
+            ui_state.input_content.clone(),
+            ui_state.cursor_position.clone(),
+            ui_state.selection.clone(),
+        )
+    }
+
+    /// Apply this TextAreaState to AppState's UI state
+    pub fn apply_to_ui_state(&self, ui_state: &mut crate::core::state::UiState) {
+        ui_state.input_content = self.content.clone();
+        ui_state.cursor_position = self.cursor_position.clone();
+        ui_state.selection = self.selection.clone();
+    }
+
+    /// Create empty TextAreaState
+    pub fn empty() -> Self {
+        Self::new(
+            String::new(),
+            crate::core::state::CursorPosition { row: 0, col: 0 },
+            None,
+        )
+    }
+}
+
 /// Elm-architecture compatible input component for Home timeline
 /// This component handles pure input operations: text input, reply management, submission
 /// TextArea state is managed externally in AppState
@@ -90,14 +143,14 @@ impl<'a> ElmHomeInput<'a> {
         }
 
         // Update cursor position if it differs
-        // NOTE: This is disabled due to buggy
-        // if current_cursor != state.ui.cursor_position {
-        //     self.set_cursor_position(&state.ui.cursor_position);
-        //     log::debug!(
-        //         "ElmHomeInput::sync_textarea_with_state: Updated cursor to {:?}",
-        //         state.ui.cursor_position
-        //     );
-        // }
+        // Re-enabled after pending_keys approach fixed the cursor sync issue
+        if current_cursor != state.ui.cursor_position {
+            self.set_cursor_position(&state.ui.cursor_position);
+            log::debug!(
+                "ElmHomeInput::sync_textarea_with_state: Updated cursor to {:?}",
+                state.ui.cursor_position
+            );
+        }
 
         // Update selection if present
         self.set_selection(&state.ui.selection);
@@ -133,16 +186,12 @@ impl<'a> ElmHomeInput<'a> {
         Some(new_content)
     }
 
-    /// Process raw key input and return both content and cursor position
+    /// Process raw key input and return complete TextArea state
     /// Enhanced version that provides complete state information
     pub fn process_key_input_with_cursor(
         &mut self,
         key: crossterm::event::KeyEvent,
-    ) -> (
-        String,
-        crate::core::state::CursorPosition,
-        Option<crate::core::state::TextSelection>,
-    ) {
+    ) -> TextAreaState {
         // Let TextArea handle the key input
         self.textarea.input(crossterm::event::Event::Key(key));
 
@@ -150,7 +199,7 @@ impl<'a> ElmHomeInput<'a> {
         let cursor_pos = self.get_cursor_position();
         let selection = self.get_selection();
 
-        (new_content, cursor_pos, selection)
+        TextAreaState::new(new_content, cursor_pos, selection)
     }
 
     /// Get current cursor position from TextArea
@@ -161,9 +210,7 @@ impl<'a> ElmHomeInput<'a> {
 
     /// Get current selection from TextArea
     pub fn get_selection(&self) -> Option<crate::core::state::TextSelection> {
-        // TextArea doesn't seem to have a direct selection API in the current version
-        // For now, return None, but this can be extended when TextArea supports it
-        None
+        Self::extract_selection(&self.textarea)
     }
 
     /// Set cursor position in TextArea from AppState
@@ -176,9 +223,13 @@ impl<'a> ElmHomeInput<'a> {
     }
 
     /// Apply selection to TextArea from AppState
-    pub fn set_selection(&mut self, _selection: &Option<crate::core::state::TextSelection>) {
-        // TextArea selection support would go here
-        // For now, this is a placeholder for future implementation
+    pub fn set_selection(&mut self, selection: &Option<crate::core::state::TextSelection>) {
+        if let Some(selection) = selection {
+            Self::restore_selection(&mut self.textarea, selection);
+        } else {
+            // Cancel selection if None
+            self.textarea.cancel_selection();
+        }
     }
 
     /// Calculate if submit is possible
@@ -240,10 +291,101 @@ impl<'a> ElmHomeInput<'a> {
         }
     }
 
-    /// Process navigation key directly (for cursor movement)
-    /// This bypasses the AppState sync to preserve cursor position
+    /// Process navigation key directly (legacy method, kept for compatibility)
+    /// Note: This method is now largely unused due to pending_keys approach
     pub fn process_navigation_key(&mut self, key: crossterm::event::KeyEvent) {
         self.pending_navigation_key = Some(key);
+    }
+
+    /// Process pending keys from AppState using stateless TextArea
+    /// Returns new TextAreaState without modifying the input state
+    pub fn process_pending_keys(state: &mut AppState) -> TextAreaState {
+        // Create temporary TextArea for processing
+        let mut textarea = tui_textarea::TextArea::default();
+
+        // Restore TextArea state from AppState
+        Self::restore_textarea_from_state(&mut textarea, state);
+
+        // Apply all pending keys sequentially to preserve state continuity
+        for key in state.ui.pending_input_keys.drain(..) {
+            textarea.input(crossterm::event::Event::Key(key));
+        }
+
+        // Extract final state and return (pure function)
+        let content = textarea.lines().join("\n");
+        let cursor = Self::extract_cursor_position(&textarea);
+        let selection = Self::extract_selection(&textarea);
+
+        TextAreaState::new(content, cursor, selection)
+    }
+
+    /// Restore TextArea state from AppState
+    fn restore_textarea_from_state(textarea: &mut tui_textarea::TextArea, state: &AppState) {
+        // Restore content if present
+        if !state.ui.input_content.is_empty() {
+            textarea.insert_str(&state.ui.input_content);
+        }
+
+        // Restore cursor position directly from AppState (single source of truth)
+        // AppState cursor position should always be valid as it's maintained by the update cycle
+        textarea.move_cursor(tui_textarea::CursorMove::Jump(
+            state.ui.cursor_position.row as u16,
+            state.ui.cursor_position.col as u16,
+        ));
+
+        // Restore selection range if present
+        if let Some(selection) = &state.ui.selection {
+            Self::restore_selection(textarea, selection);
+        }
+    }
+
+    /// Extract cursor position from TextArea
+    fn extract_cursor_position(
+        textarea: &tui_textarea::TextArea,
+    ) -> crate::core::state::CursorPosition {
+        let (row, col) = textarea.cursor();
+        crate::core::state::CursorPosition { row, col }
+    }
+
+    /// Extract selection from TextArea
+    fn extract_selection(
+        textarea: &tui_textarea::TextArea,
+    ) -> Option<crate::core::state::TextSelection> {
+        textarea
+            .selection_range()
+            .map(
+                |((start_row, start_col), (end_row, end_col))| crate::core::state::TextSelection {
+                    start: crate::core::state::CursorPosition {
+                        row: start_row,
+                        col: start_col,
+                    },
+                    end: crate::core::state::CursorPosition {
+                        row: end_row,
+                        col: end_col,
+                    },
+                },
+            )
+    }
+
+    /// Restore selection range to TextArea from AppState
+    fn restore_selection(
+        textarea: &mut tui_textarea::TextArea,
+        selection: &crate::core::state::TextSelection,
+    ) {
+        // First, position cursor at selection start
+        textarea.move_cursor(tui_textarea::CursorMove::Jump(
+            selection.start.row as u16,
+            selection.start.col as u16,
+        ));
+
+        // Start selection
+        textarea.start_selection();
+
+        // Move cursor to selection end
+        textarea.move_cursor(tui_textarea::CursorMove::Jump(
+            selection.end.row as u16,
+            selection.end.col as u16,
+        ));
     }
 }
 
