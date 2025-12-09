@@ -90,13 +90,14 @@ impl<'a> ElmHomeInput<'a> {
         }
 
         // Update cursor position if it differs
-        if current_cursor != state.ui.cursor_position {
-            self.set_cursor_position(&state.ui.cursor_position);
-            log::debug!(
-                "ElmHomeInput::sync_textarea_with_state: Updated cursor to {:?}",
-                state.ui.cursor_position
-            );
-        }
+        // NOTE: This is disabled due to buggy
+        // if current_cursor != state.ui.cursor_position {
+        //     self.set_cursor_position(&state.ui.cursor_position);
+        //     log::debug!(
+        //         "ElmHomeInput::sync_textarea_with_state: Updated cursor to {:?}",
+        //         state.ui.cursor_position
+        //     );
+        // }
 
         // Update selection if present
         self.set_selection(&state.ui.selection);
