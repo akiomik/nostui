@@ -192,10 +192,11 @@ impl Widget for TextNote {
             .into(),
             (Some(display_name), _) => Span::styled(display_name, display_name_style).into(),
             (_, Some(name)) => Span::styled(name, name_style).into(),
-            (_, _) => Text::styled(
+            (_, _) => Span::styled(
                 PublicKey::new(self.event.pubkey).shortened(),
                 display_name_style,
-            ),
+            )
+            .into(),
         };
         text.extend::<Text>(name_line);
 
@@ -369,5 +370,144 @@ mod tests {
             Padding::new(0, 0, 0, 0),
         );
         assert_eq!(note.created_at(), "15:42:47");
+    }
+
+    // Regression tests for hex username highlighting issue
+    // These tests ensure that hex usernames (public keys without profiles) are properly highlighted when selected
+
+    #[test]
+    fn test_hex_username_highlighting_regression() {
+        // Create event without profile (will show hex username)
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("Test note with hex username")
+            .sign_with_keys(&keys)
+            .unwrap();
+
+        let area = Rect::new(0, 0, 80, 10);
+
+        // Test non-highlighted TextNote
+        let mut text_note_normal = TextNote::new(
+            event.clone(),
+            None, // No profile - will show hex
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            area,
+            Padding::new(1, 1, 1, 1),
+        );
+        text_note_normal.highlight = false;
+
+        // Test highlighted TextNote
+        let mut text_note_highlighted = TextNote::new(
+            event.clone(),
+            None,
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            area,
+            Padding::new(1, 1, 1, 1),
+        );
+        text_note_highlighted.highlight = true;
+
+        // Verify no profile exists (will show hex)
+        assert_eq!(text_note_normal.display_name(), None);
+        assert_eq!(text_note_normal.name(), None);
+        assert_eq!(text_note_highlighted.display_name(), None);
+        assert_eq!(text_note_highlighted.name(), None);
+
+        // Render both and verify style differences
+        let mut buffer_normal = ratatui::buffer::Buffer::empty(area);
+        let mut buffer_highlighted = ratatui::buffer::Buffer::empty(area);
+
+        text_note_normal.render(area, &mut buffer_normal);
+        text_note_highlighted.render(area, &mut buffer_highlighted);
+
+        // Count style differences - there should be at least some for the username line
+        let style_differences = buffer_normal
+            .content()
+            .iter()
+            .zip(buffer_highlighted.content().iter())
+            .filter(|(cell1, cell2)| cell1.style() != cell2.style())
+            .count();
+
+        assert!(
+            style_differences > 0,
+            "Expected style differences between normal and highlighted hex username, but found none. This indicates a regression in hex username highlighting."
+        );
+
+        // Verify that the first line (username) has different styles
+        let username_line_length = 11; // "xxxxx:yyyyy" format
+        let first_line_differences = buffer_normal.content()
+            [0..username_line_length.min(area.width as usize)]
+            .iter()
+            .zip(&buffer_highlighted.content()[0..username_line_length.min(area.width as usize)])
+            .filter(|(cell1, cell2)| cell1.style() != cell2.style())
+            .count();
+
+        assert!(
+            first_line_differences > 0,
+            "Expected style differences in hex username line, but found none"
+        );
+    }
+
+    #[test]
+    fn test_named_user_highlighting_still_works() {
+        // Create event with profile (will show name)
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("Test note with named user")
+            .sign_with_keys(&keys)
+            .unwrap();
+
+        let metadata = Metadata::new().display_name("Test User").name("testuser");
+
+        let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
+
+        let area = Rect::new(0, 0, 80, 10);
+
+        // Test highlighting with named user (regression check)
+        let mut text_note_normal = TextNote::new(
+            event.clone(),
+            Some(profile.clone()),
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            area,
+            Padding::new(1, 1, 1, 1),
+        );
+        text_note_normal.highlight = false;
+
+        let mut text_note_highlighted = TextNote::new(
+            event,
+            Some(profile),
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            area,
+            Padding::new(1, 1, 1, 1),
+        );
+        text_note_highlighted.highlight = true;
+
+        // Verify profile exists (will show name)
+        assert!(text_note_normal.display_name().is_some());
+        assert!(text_note_highlighted.display_name().is_some());
+
+        // Render and verify highlighting still works for named users
+        let mut buffer_normal = ratatui::buffer::Buffer::empty(area);
+        let mut buffer_highlighted = ratatui::buffer::Buffer::empty(area);
+
+        text_note_normal.render(area, &mut buffer_normal);
+        text_note_highlighted.render(area, &mut buffer_highlighted);
+
+        let style_differences = buffer_normal
+            .content()
+            .iter()
+            .zip(buffer_highlighted.content().iter())
+            .filter(|(cell1, cell2)| cell1.style() != cell2.style())
+            .count();
+
+        assert!(
+            style_differences > 0,
+            "Expected style differences for named user highlighting, but found none. This indicates a regression."
+        );
     }
 }
