@@ -174,22 +174,18 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             (state, vec![])
         }
 
-        // Hybrid Approach: Delegate key processing to ElmHomeInput component
+        // Process TextArea input using pending_keys approach for state consistency
         Msg::ProcessTextAreaInput(key) => {
             if state.ui.show_input {
-                // Create a temporary ElmHomeInput and sync with current state
-                let mut elm_input =
-                    crate::presentation::components::elm_home_input::ElmHomeInput::new();
-                elm_input.sync_textarea_with_state(&state);
+                // Add key to pending queue
+                state.ui.pending_input_keys.push(key);
 
-                // Process the key through TextArea and get new content with cursor position
-                let (new_content, new_cursor, new_selection) =
-                    elm_input.process_key_input_with_cursor(key);
+                // Process all pending keys and extract new state
+                let textarea_state =
+                    crate::presentation::components::elm_home_input::ElmHomeInput::process_pending_keys(&mut state);
 
-                // Update all state aspects
-                state.ui.input_content = new_content;
-                state.ui.cursor_position = new_cursor;
-                state.ui.selection = new_selection;
+                // Update AppState with processed results
+                textarea_state.apply_to_ui_state(&mut state.ui);
             }
             (state, vec![])
         }

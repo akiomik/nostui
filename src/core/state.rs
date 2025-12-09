@@ -36,6 +36,7 @@ pub struct UiState {
     pub current_mode: Mode,
     pub cursor_position: CursorPosition,
     pub selection: Option<TextSelection>,
+    pub pending_input_keys: Vec<crossterm::event::KeyEvent>, // Queue for stateless TextArea processing
 }
 
 /// Cursor position in text
