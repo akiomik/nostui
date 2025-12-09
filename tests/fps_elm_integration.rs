@@ -1,7 +1,8 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    components::elm_fps::ElmFpsCounter, fps_service::FpsService, msg::Msg, raw_msg::RawMsg,
-    state::AppState, translator::translate_raw_to_domain, update::update,
+    core::msg::Msg, core::raw_msg::RawMsg, core::state::AppState,
+    core::translator::translate_raw_to_domain, core::update::update,
+    infrastructure::fps_service::FpsService, presentation::components::elm_fps::ElmFpsCounter,
 };
 use tokio::sync::mpsc;
 

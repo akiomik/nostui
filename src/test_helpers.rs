@@ -2,12 +2,12 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
 
 use crate::{
-    components::elm_home_input::{ElmHomeInput, SubmitData},
-    msg::Msg,
-    raw_msg::RawMsg,
-    state::AppState,
-    translator::translate_raw_to_domain,
-    update::update,
+    core::msg::Msg,
+    core::raw_msg::RawMsg,
+    core::state::AppState,
+    core::translator::translate_raw_to_domain,
+    core::update::update,
+    presentation::components::elm_home_input::{ElmHomeInput, SubmitData},
 };
 
 /// Test helper for TextArea and ElmHomeInput integration testing

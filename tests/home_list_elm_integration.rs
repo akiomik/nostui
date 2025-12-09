@@ -1,5 +1,8 @@
 use nostr_sdk::prelude::*;
-use nostui::{components::elm_home_list::ElmHomeList, msg::Msg, state::AppState, update::update};
+use nostui::{
+    core::msg::Msg, core::state::AppState, core::update::update,
+    presentation::components::elm_home_list::ElmHomeList,
+};
 
 /// Test Home list UI layer integration with Elm architecture
 #[test]

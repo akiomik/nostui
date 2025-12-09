@@ -2,11 +2,11 @@ use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
 use nostui::{
-    components::elm_home::{ElmHome, HomeAction},
-    msg::Msg,
-    raw_msg::RawMsg,
-    state::AppState,
-    translator::translate_raw_to_domain,
+    core::msg::Msg,
+    core::raw_msg::RawMsg,
+    core::state::AppState,
+    core::translator::translate_raw_to_domain,
+    presentation::components::elm_home::{ElmHome, HomeAction},
 };
 
 /// Integration tests for ElmHome component
@@ -35,7 +35,7 @@ fn test_elm_home_complete_workflow() -> Result<()> {
 
     // Add some timeline content
     let event = create_test_event();
-    let sortable = nostui::nostr::SortableEvent::new(event.clone());
+    let sortable = nostui::domain::nostr::SortableEvent::new(event.clone());
     state
         .timeline
         .notes
@@ -117,7 +117,7 @@ fn test_elm_home_key_processing() -> Result<()> {
 
     // Add event to timeline
     let event = create_test_event();
-    let sortable = nostui::nostr::SortableEvent::new(event.clone());
+    let sortable = nostui::domain::nostr::SortableEvent::new(event.clone());
     state
         .timeline
         .notes
@@ -152,7 +152,7 @@ fn test_elm_home_advanced_interaction_validation() -> Result<()> {
 
     // Test interaction validation with timeline
     let event = create_test_event();
-    let sortable = nostui::nostr::SortableEvent::new(event.clone());
+    let sortable = nostui::domain::nostr::SortableEvent::new(event.clone());
     state
         .timeline
         .notes
@@ -175,7 +175,7 @@ fn test_elm_home_translator_integration() -> Result<()> {
     let event = create_test_event();
 
     // Setup timeline with event
-    let sortable = nostui::nostr::SortableEvent::new(event.clone());
+    let sortable = nostui::domain::nostr::SortableEvent::new(event.clone());
     state
         .timeline
         .notes
@@ -224,7 +224,7 @@ fn test_elm_home_validation_edge_cases() -> Result<()> {
     let mut own_event = create_test_event();
     own_event.pubkey = keys.public_key(); // Make it user's own event
 
-    let sortable = nostui::nostr::SortableEvent::new(own_event.clone());
+    let sortable = nostui::domain::nostr::SortableEvent::new(own_event.clone());
     state
         .timeline
         .notes
@@ -257,7 +257,7 @@ fn test_elm_home_help_text_contextual() -> Result<()> {
 
     // With timeline but no selection
     let event = create_test_event();
-    let sortable = nostui::nostr::SortableEvent::new(event);
+    let sortable = nostui::domain::nostr::SortableEvent::new(event);
     state
         .timeline
         .notes
