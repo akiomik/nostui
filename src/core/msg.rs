@@ -3,9 +3,11 @@ use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub mod system;
+pub mod timeline;
 
 use crate::domain::nostr::Profile;
 use system::SystemMsg;
+use timeline::TimelineMsg;
 
 /// Domain messages representing application intent and business logic
 /// These are processed by the update function and represent pure domain events
@@ -14,15 +16,16 @@ pub enum Msg {
     // System operations (delegated to SystemState)
     System(SystemMsg),
 
-    // Timeline operations
+    // Timeline operations (delegated to TimelineState)
+    Timeline(TimelineMsg),
+
+    // Legacy timeline messages (to be phased out)
     ScrollUp,
     ScrollDown,
     ScrollToTop,
     ScrollToBottom,
     SelectNote(usize),
     DeselectNote,
-
-    // Nostr domain events
     AddNote(Event),
     AddReaction(Event),
     AddRepost(Event),

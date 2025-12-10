@@ -91,45 +91,7 @@ fn test_selection_state_integration_with_elm() {
     assert!(!ElmHomeList::get_selection_info(&state).has_selection);
 }
 
-#[test]
-fn test_scroll_operations_with_elm_update() {
-    let keys = Keys::generate();
-    let mut state = AppState::new(keys.public_key());
-
-    // Add test notes
-    for i in 0..10 {
-        let event = EventBuilder::text_note(format!("Note {}", i))
-            .sign_with_keys(&keys)
-            .unwrap();
-        let (new_state, _) = update(Msg::AddNote(event), state);
-        state = new_state;
-    }
-
-    // Scroll down via Elm
-    let (new_state, _) = update(Msg::ScrollDown, state);
-    state = new_state;
-    assert_eq!(state.timeline.selected_index, Some(0));
-
-    // Scroll down again
-    let (new_state, _) = update(Msg::ScrollDown, state);
-    state = new_state;
-    assert_eq!(state.timeline.selected_index, Some(1));
-
-    // Scroll up
-    let (new_state, _) = update(Msg::ScrollUp, state);
-    state = new_state;
-    assert_eq!(state.timeline.selected_index, Some(0));
-
-    // Scroll to bottom
-    let (new_state, _) = update(Msg::ScrollToBottom, state);
-    state = new_state;
-    assert_eq!(state.timeline.selected_index, Some(9));
-
-    // Scroll to top
-    let (new_state, _) = update(Msg::ScrollToTop, state);
-    state = new_state;
-    assert_eq!(state.timeline.selected_index, Some(0));
-}
+// test_scroll_operations_with_elm_update removed - basic scroll operations migrated to TimelineState unit tests in src/core/state/timeline.rs
 
 #[test]
 fn test_scrollable_conditions() {
@@ -322,39 +284,4 @@ async fn test_complete_ui_workflow() {
     assert_eq!(final_info.selected_index, Some(0));
 }
 
-#[test]
-fn test_scroll_boundary_conditions() {
-    let keys = Keys::generate();
-    let mut state = AppState::new(keys.public_key());
-
-    // Add 3 notes
-    for i in 0..3 {
-        let event = EventBuilder::text_note(format!("Note {}", i))
-            .sign_with_keys(&keys)
-            .unwrap();
-        let (new_state, _) = update(Msg::AddNote(event), state);
-        state = new_state;
-    }
-
-    // Test scrolling past boundaries
-
-    // Start at top
-    let (new_state, _) = update(Msg::ScrollToTop, state);
-    state = new_state;
-    assert_eq!(state.timeline.selected_index, Some(0));
-
-    // Try to scroll up from top
-    let (new_state, _) = update(Msg::ScrollUp, state);
-    state = new_state;
-    assert_eq!(state.timeline.selected_index, Some(0)); // Should stay at top
-
-    // Go to bottom
-    let (new_state, _) = update(Msg::ScrollToBottom, state);
-    state = new_state;
-    assert_eq!(state.timeline.selected_index, Some(2));
-
-    // Try to scroll down from bottom
-    let (new_state, _) = update(Msg::ScrollDown, state);
-    state = new_state;
-    assert_eq!(state.timeline.selected_index, Some(2)); // Should stay at bottom
-}
+// test_scroll_boundary_conditions removed - boundary handling migrated to TimelineState unit tests in src/core/state/timeline.rs

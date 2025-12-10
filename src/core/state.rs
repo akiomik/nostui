@@ -1,17 +1,15 @@
 use nostr_sdk::prelude::*;
-use sorted_vec::ReverseSortedSet;
 use std::collections::HashMap;
 
 use crate::{
-    domain::collections::EventSet,
-    domain::nostr::{Profile, SortableEvent},
-    infrastructure::config::Config,
-    integration::legacy::mode::Mode,
+    domain::nostr::Profile, infrastructure::config::Config, integration::legacy::mode::Mode,
 };
 
 pub mod system;
+pub mod timeline;
 
 pub use system::{FpsData, SystemState};
+pub use timeline::TimelineState;
 
 /// Unified application state
 #[derive(Debug, Clone, Default)]
@@ -28,16 +26,6 @@ pub struct AppState {
 pub struct ConfigState {
     /// Current configuration loaded from file
     pub config: Config,
-}
-
-/// Timeline-related state
-#[derive(Debug, Clone)]
-pub struct TimelineState {
-    pub notes: ReverseSortedSet<SortableEvent>,
-    pub reactions: HashMap<EventId, EventSet>,
-    pub reposts: HashMap<EventId, EventSet>,
-    pub zap_receipts: HashMap<EventId, EventSet>,
-    pub selected_index: Option<usize>,
 }
 
 /// UI-related state
@@ -71,18 +59,6 @@ pub struct TextSelection {
 pub struct UserState {
     pub profiles: HashMap<PublicKey, Profile>,
     pub current_user_pubkey: PublicKey,
-}
-
-impl Default for TimelineState {
-    fn default() -> Self {
-        Self {
-            notes: ReverseSortedSet::new(),
-            reactions: HashMap::new(),
-            reposts: HashMap::new(),
-            zap_receipts: HashMap::new(),
-            selected_index: None,
-        }
-    }
 }
 
 impl Default for UserState {
