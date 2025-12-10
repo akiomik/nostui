@@ -70,6 +70,12 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             (state, vec![])
         }
 
+        Msg::DeselectNote => {
+            state.timeline.selected_index = None;
+            state.system.status_message = None; // Clear status message as well
+            (state, vec![])
+        }
+
         // Nostr domain events
         Msg::AddNote(event) => update_add_note(event, state),
 
@@ -128,18 +134,6 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             state.ui.input_content.clear();
             state.ui.cursor_position = Default::default();
             state.ui.selection = None;
-            (state, vec![])
-        }
-
-        Msg::ToggleInput => {
-            state.ui.show_input = !state.ui.show_input;
-            if !state.ui.show_input {
-                state.ui.reply_to = None;
-                state.ui.input_content.clear();
-                state.ui.cursor_position = Default::default();
-                state.ui.selection = None;
-                state.timeline.selected_index = None;
-            }
             (state, vec![])
         }
 
@@ -463,6 +457,28 @@ mod tests {
         let (new_state, cmds) = update(Msg::UpdateInputContent(content.to_string()), state);
 
         assert_eq!(new_state.ui.input_content, content);
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn test_update_select_note() {
+        let state = create_test_state();
+        let (new_state, cmds) = update(Msg::SelectNote(Some(3)), state);
+
+        assert_eq!(new_state.timeline.selected_index, Some(3));
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn test_update_deselect_note() {
+        let mut state = create_test_state();
+        state.timeline.selected_index = Some(5);
+        state.system.status_message = Some("test status".to_string());
+
+        let (new_state, cmds) = update(Msg::DeselectNote, state);
+
+        assert_eq!(new_state.timeline.selected_index, None);
+        assert_eq!(new_state.system.status_message, None);
         assert!(cmds.is_empty());
     }
 }

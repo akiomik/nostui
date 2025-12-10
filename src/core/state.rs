@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use crate::{
     domain::collections::EventSet,
     domain::nostr::{Profile, SortableEvent},
+    infrastructure::config::Config,
     integration::legacy::mode::Mode,
 };
 
@@ -15,6 +16,14 @@ pub struct AppState {
     pub ui: UiState,
     pub user: UserState,
     pub system: SystemState,
+    pub config: ConfigState,
+}
+
+/// Configuration state - holds all user-configurable settings
+#[derive(Debug, Clone, Default)]
+pub struct ConfigState {
+    /// Current configuration loaded from file
+    pub config: Config,
 }
 
 /// Timeline-related state
@@ -134,6 +143,18 @@ impl AppState {
                 current_user_pubkey,
                 ..Default::default()
             },
+            ..Default::default()
+        }
+    }
+
+    /// Initialize AppState with the specified public key and config
+    pub fn new_with_config(current_user_pubkey: PublicKey, config: Config) -> Self {
+        Self {
+            user: UserState {
+                current_user_pubkey,
+                ..Default::default()
+            },
+            config: ConfigState { config },
             ..Default::default()
         }
     }

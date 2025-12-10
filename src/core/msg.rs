@@ -20,6 +20,7 @@ pub enum Msg {
     ScrollToTop,
     ScrollToBottom,
     SelectNote(Option<usize>),
+    DeselectNote,
 
     // Nostr domain events
     AddNote(Event),
@@ -31,7 +32,6 @@ pub enum Msg {
     SendTextNote(String, Vec<Tag>),
 
     // UI operations
-    ToggleInput,
     ShowNewNote,
     ShowReply(Event),
     SubmitNote,

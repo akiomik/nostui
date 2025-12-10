@@ -61,7 +61,7 @@ fn translate_key_event(key: crossterm::event::KeyEvent, state: &AppState) -> Vec
 }
 
 /// Key bindings when input is active
-fn translate_input_mode_keys(key: crossterm::event::KeyEvent, _state: &AppState) -> Vec<Msg> {
+fn translate_input_mode_keys(key: crossterm::event::KeyEvent, state: &AppState) -> Vec<Msg> {
     use crossterm::event::KeyEvent;
 
     match key {
@@ -73,7 +73,15 @@ fn translate_input_mode_keys(key: crossterm::event::KeyEvent, _state: &AppState)
 
         KeyEvent {
             code: KeyCode::Esc, ..
-        } => vec![Msg::CancelInput],
+        } => {
+            // In input mode, always cancel input
+            if state.ui.show_input {
+                vec![Msg::CancelInput]
+            } else {
+                // In normal mode, use keybinding configuration
+                translate_normal_mode_keys(key, state)
+            }
+        }
 
         // Hybrid Approach: Delegate all other input to TextArea component
         // All non-special keys go to TextArea for processing
@@ -83,78 +91,47 @@ fn translate_input_mode_keys(key: crossterm::event::KeyEvent, _state: &AppState)
 
 /// Key bindings when in normal navigation mode
 fn translate_normal_mode_keys(key: crossterm::event::KeyEvent, state: &AppState) -> Vec<Msg> {
-    use crossterm::event::KeyEvent;
+    use crate::integration::legacy::mode::Mode;
 
-    match key {
-        // Vim-style navigation
-        KeyEvent {
-            code: KeyCode::Char('j'),
-            modifiers: KeyModifiers::NONE,
-            ..
+    // Get keybindings for Home mode from config state
+    if let Some(home_keybindings) = state.config.config.keybindings.get(&Mode::Home) {
+        // Check if this single key matches any configured action
+        if let Some(action) = home_keybindings.get(&vec![key]) {
+            return translate_action_to_msg(action, state);
         }
-        | KeyEvent {
-            code: KeyCode::Down,
-            ..
-        } => vec![Msg::ScrollDown],
+    }
 
-        KeyEvent {
-            code: KeyCode::Char('k'),
-            modifiers: KeyModifiers::NONE,
-            ..
+    vec![] // No matching keybinding found
+}
+
+/// Convert Action to Msg based on current state
+fn translate_action_to_msg(
+    action: &crate::integration::legacy::action::Action,
+    state: &AppState,
+) -> Vec<Msg> {
+    use crate::integration::legacy::action::Action;
+
+    match action {
+        Action::ScrollUp => vec![Msg::ScrollUp],
+        Action::ScrollDown => vec![Msg::ScrollDown],
+        Action::ScrollToTop => vec![Msg::ScrollToTop],
+        Action::ScrollToBottom => vec![Msg::ScrollToBottom],
+        Action::NewTextNote => vec![Msg::ShowNewNote],
+        Action::ReplyTextNote => translate_reply_key(state),
+        Action::React => translate_like_key(state),
+        Action::Repost => translate_repost_key(state),
+        Action::Unselect => vec![Msg::DeselectNote],
+        Action::Quit => vec![Msg::Quit],
+        Action::Suspend => vec![Msg::Suspend],
+        Action::SubmitTextNote => {
+            // Only process submit in input mode
+            if state.ui.show_input {
+                vec![Msg::SubmitNote]
+            } else {
+                vec![]
+            }
         }
-        | KeyEvent {
-            code: KeyCode::Up, ..
-        } => vec![Msg::ScrollUp],
-
-        KeyEvent {
-            code: KeyCode::Char('g'),
-            modifiers: KeyModifiers::NONE,
-            ..
-        } => vec![Msg::ScrollToTop],
-
-        KeyEvent {
-            code: KeyCode::Char('G'),
-            modifiers: KeyModifiers::SHIFT,
-            ..
-        } => vec![Msg::ScrollToBottom],
-
-        // Post interactions
-        KeyEvent {
-            code: KeyCode::Char('n'),
-            modifiers: KeyModifiers::NONE,
-            ..
-        } => vec![Msg::ShowNewNote],
-
-        KeyEvent {
-            code: KeyCode::Char('r'),
-            modifiers: KeyModifiers::NONE,
-            ..
-        } => translate_reply_key(state),
-
-        KeyEvent {
-            code: KeyCode::Char('l'),
-            modifiers: KeyModifiers::NONE,
-            ..
-        } => translate_like_key(state),
-
-        KeyEvent {
-            code: KeyCode::Char('t'),
-            modifiers: KeyModifiers::NONE,
-            ..
-        } => translate_repost_key(state),
-
-        // UI toggles
-        KeyEvent {
-            code: KeyCode::Char('i'),
-            modifiers: KeyModifiers::NONE,
-            ..
-        } => vec![Msg::ToggleInput],
-
-        KeyEvent {
-            code: KeyCode::Esc, ..
-        } => vec![Msg::ClearStatusMessage],
-
-        _ => vec![], // Unknown keys are ignored
+        _ => vec![], // Other actions not handled in normal mode
     }
 }
 
@@ -315,7 +292,66 @@ mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     fn create_test_state() -> AppState {
-        AppState::new(Keys::generate().public_key())
+        use crate::infrastructure::config::Config;
+        use crate::integration::legacy::{action::Action, mode::Mode};
+        use crate::presentation::config::keybindings::KeyBindings;
+        use std::collections::HashMap;
+
+        // Create config with test keybindings
+        let mut config = Config::default();
+
+        // Create test keybindings that match the expected behavior
+        let mut home_bindings = HashMap::new();
+        home_bindings.insert(
+            vec![KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE)],
+            Action::ScrollDown,
+        );
+        home_bindings.insert(
+            vec![KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE)],
+            Action::ScrollUp,
+        );
+        home_bindings.insert(
+            vec![KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)],
+            Action::ScrollDown,
+        );
+        home_bindings.insert(
+            vec![KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)],
+            Action::ScrollUp,
+        );
+        home_bindings.insert(
+            vec![KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE)],
+            Action::ScrollToTop,
+        );
+        home_bindings.insert(
+            vec![KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT)],
+            Action::ScrollToBottom,
+        );
+        home_bindings.insert(
+            vec![KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE)],
+            Action::React,
+        );
+        home_bindings.insert(
+            vec![KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE)],
+            Action::ReplyTextNote,
+        );
+        home_bindings.insert(
+            vec![KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE)],
+            Action::Repost,
+        );
+        home_bindings.insert(
+            vec![KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE)],
+            Action::NewTextNote,
+        );
+        home_bindings.insert(
+            vec![KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)],
+            Action::Unselect,
+        );
+
+        let mut keybindings_map = HashMap::new();
+        keybindings_map.insert(Mode::Home, home_bindings);
+        config.keybindings = KeyBindings(keybindings_map);
+
+        AppState::new_with_config(Keys::generate().public_key(), config)
     }
 
     fn create_test_event() -> Event {
@@ -347,6 +383,11 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result, vec![Msg::ScrollDown]);
+
+        // Test Escape key in normal mode (should use keybinding configuration)
+        let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        let result = translate_raw_to_domain(RawMsg::Key(key), &state);
+        assert_eq!(result, vec![Msg::DeselectNote]);
 
         let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
