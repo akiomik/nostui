@@ -1,17 +1,21 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 use nostr_sdk::prelude::*;
 
-use crate::{core::msg::Msg, core::raw_msg::RawMsg, core::state::AppState};
+use crate::{
+    core::msg::{system::SystemMsg, Msg},
+    core::raw_msg::RawMsg,
+    core::state::AppState,
+};
 
 /// Translates raw external events into domain messages
 /// This function is pure and contains no side effects
 pub fn translate_raw_to_domain(raw: RawMsg, state: &AppState) -> Vec<Msg> {
     match raw {
         // System events - direct mapping
-        RawMsg::Quit => vec![Msg::Quit],
-        RawMsg::Suspend => vec![Msg::Suspend],
-        RawMsg::Resume => vec![Msg::Resume],
-        RawMsg::Resize(width, height) => vec![Msg::Resize(width, height)],
+        RawMsg::Quit => vec![Msg::System(SystemMsg::Quit)],
+        RawMsg::Suspend => vec![Msg::System(SystemMsg::Suspend)],
+        RawMsg::Resume => vec![Msg::System(SystemMsg::Resume)],
+        RawMsg::Resize(width, height) => vec![Msg::System(SystemMsg::Resize(width, height))],
 
         // User input - translate based on context and key bindings
         RawMsg::Key(key) => translate_key_event(key, state),
@@ -41,13 +45,13 @@ fn translate_key_event(key: crossterm::event::KeyEvent, state: &AppState) -> Vec
             code: KeyCode::Char('c'),
             modifiers: KeyModifiers::CONTROL,
             ..
-        } => return vec![Msg::Quit],
+        } => return vec![Msg::System(SystemMsg::Quit)],
 
         KeyEvent {
             code: KeyCode::Char('z'),
             modifiers: KeyModifiers::CONTROL,
             ..
-        } => return vec![Msg::Suspend],
+        } => return vec![Msg::System(SystemMsg::Suspend)],
 
         _ => {}
     }
@@ -121,8 +125,8 @@ fn translate_action_to_msg(
         Action::React => translate_like_key(state),
         Action::Repost => translate_repost_key(state),
         Action::Unselect => vec![Msg::DeselectNote],
-        Action::Quit => vec![Msg::Quit],
-        Action::Suspend => vec![Msg::Suspend],
+        Action::Quit => vec![Msg::System(SystemMsg::Quit)],
+        Action::Suspend => vec![Msg::System(SystemMsg::Suspend)],
         Action::SubmitTextNote => {
             // Only process submit in input mode
             if state.ui.show_input {
@@ -366,13 +370,13 @@ mod tests {
         let state = create_test_state();
 
         let result = translate_raw_to_domain(RawMsg::Quit, &state);
-        assert_eq!(result, vec![Msg::Quit]);
+        assert_eq!(result, vec![Msg::System(SystemMsg::Quit)]);
 
         let result = translate_raw_to_domain(RawMsg::Suspend, &state);
-        assert_eq!(result, vec![Msg::Suspend]);
+        assert_eq!(result, vec![Msg::System(SystemMsg::Suspend)]);
 
         let result = translate_raw_to_domain(RawMsg::Resize(100, 50), &state);
-        assert_eq!(result, vec![Msg::Resize(100, 50)]);
+        assert_eq!(result, vec![Msg::System(SystemMsg::Resize(100, 50))]);
     }
 
     #[test]
@@ -410,12 +414,12 @@ mod tests {
         // Test Ctrl+C
         let key = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::Quit]);
+        assert_eq!(result, vec![Msg::System(SystemMsg::Quit)]);
 
         // Test Ctrl+Z
         let key = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::Suspend]);
+        assert_eq!(result, vec![Msg::System(SystemMsg::Suspend)]);
     }
 
     #[test]

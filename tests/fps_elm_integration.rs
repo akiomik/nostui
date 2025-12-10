@@ -32,23 +32,7 @@ fn test_fps_raw_message_translation() {
     assert_eq!(domain_msgs, vec![Msg::UpdateRenderFps(120.0)]);
 }
 
-#[test]
-fn test_fps_domain_message_handling() {
-    let keys = Keys::generate();
-    let initial_state = AppState::new(keys.public_key());
-
-    // Test app FPS update
-    let (new_state, cmds) = update(Msg::UpdateAppFps(75.5), initial_state.clone());
-    assert_eq!(new_state.system.fps_data.app_fps, 75.5);
-    assert_eq!(new_state.system.fps_data.app_frames, 1);
-    assert!(cmds.is_empty());
-
-    // Test render FPS update
-    let (new_state, cmds) = update(Msg::UpdateRenderFps(144.0), initial_state);
-    assert_eq!(new_state.system.fps_data.render_fps, 144.0);
-    assert_eq!(new_state.system.fps_data.render_frames, 1);
-    assert!(cmds.is_empty());
-}
+// test_fps_domain_message_handling removed - migrated to SystemState unit tests in src/core/state/system.rs
 
 #[test]
 fn test_fps_service_basic_functionality() {

@@ -1,29 +1,22 @@
 use nostr_sdk::prelude::*;
 use std::cmp::Reverse;
 
-use crate::{core::cmd::Cmd, core::msg::Msg, core::state::AppState, domain::nostr::SortableEvent};
+use crate::{
+    core::cmd::Cmd,
+    core::msg::{system::SystemMsg, Msg},
+    core::state::AppState,
+    domain::nostr::SortableEvent,
+};
 
 /// Elm-like update function
 /// Returns new state and list of commands from current state and message
 pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
     match msg {
-        // System messages
-        Msg::Quit => {
-            state.system.should_quit = true;
-            (state, vec![])
+        // System messages (delegated to SystemState)
+        Msg::System(system_msg) => {
+            let commands = state.system.update(system_msg);
+            (state, commands)
         }
-
-        Msg::Suspend => {
-            state.system.should_suspend = true;
-            (state, vec![])
-        }
-
-        Msg::Resume => {
-            state.system.should_suspend = false;
-            (state, vec![])
-        }
-
-        Msg::Resize(width, height) => (state, vec![Cmd::Resize { width, height }]),
 
         // Timeline operations
         Msg::ScrollUp => {
@@ -209,33 +202,35 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             }
         }
 
-        // Status updates
+        // Legacy system messages (backward compatibility - to be phased out)
         Msg::UpdateStatusMessage(message) => {
-            state.system.status_message = Some(message);
-            (state, vec![])
+            let commands = state.system.update(SystemMsg::UpdateStatusMessage(message));
+            (state, commands)
         }
 
         Msg::ClearStatusMessage => {
-            state.system.status_message = None;
-            (state, vec![])
+            let commands = state.system.update(SystemMsg::ClearStatusMessage);
+            (state, commands)
         }
 
         Msg::SetLoading(loading) => {
-            state.system.is_loading = loading;
-            (state, vec![])
+            let commands = state.system.update(SystemMsg::SetLoading(loading));
+            (state, commands)
         }
 
-        // FPS updates
         Msg::UpdateAppFps(fps) => {
-            state.system.fps_data.app_fps = fps;
-            state.system.fps_data.app_frames += 1;
-            (state, vec![])
+            let commands = state.system.update(SystemMsg::UpdateAppFps(fps));
+            (state, commands)
         }
 
         Msg::UpdateRenderFps(fps) => {
-            state.system.fps_data.render_fps = fps;
-            state.system.fps_data.render_frames += 1;
-            (state, vec![])
+            let commands = state.system.update(SystemMsg::UpdateRenderFps(fps));
+            (state, commands)
+        }
+
+        Msg::ShowError(error) => {
+            let commands = state.system.update(SystemMsg::ShowError(error));
+            (state, commands)
         }
 
         // Profile updates
@@ -250,12 +245,6 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             if should_update {
                 state.user.profiles.insert(pubkey, profile);
             }
-            (state, vec![])
-        }
-
-        // Error handling
-        Msg::ShowError(error) => {
-            state.system.status_message = Some(format!("Error: {}", error));
             (state, vec![])
         }
     }
@@ -353,7 +342,10 @@ mod tests {
     #[test]
     fn test_update_quit() {
         let state = create_test_state();
-        let (new_state, cmds) = update(Msg::Quit, state);
+        let (new_state, cmds) = update(
+            Msg::System(crate::core::msg::system::SystemMsg::Quit),
+            state,
+        );
 
         assert!(new_state.system.should_quit);
         assert!(cmds.is_empty());

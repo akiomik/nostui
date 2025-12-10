@@ -212,7 +212,9 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
     // Send multiple commands
     runtime.send_msg(Msg::SendReaction(event1.clone()));
     runtime.send_msg(Msg::SendRepost(event2.clone()));
-    runtime.send_msg(Msg::Resize(100, 50));
+    runtime.send_msg(Msg::System(nostui::core::msg::system::SystemMsg::Resize(
+        100, 50,
+    )));
 
     let execution_log = runtime
         .run_update_cycle()
@@ -346,7 +348,10 @@ fn test_performance_with_many_commands() -> Result<()> {
 
     // Send many commands
     for i in 0..100 {
-        runtime.send_msg(Msg::Resize(100 + i, 50 + i));
+        runtime.send_msg(Msg::System(nostui::core::msg::system::SystemMsg::Resize(
+            100 + i,
+            50 + i,
+        )));
     }
 
     let execution_log = runtime
