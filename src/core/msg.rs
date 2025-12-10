@@ -4,10 +4,12 @@ use serde::{Deserialize, Serialize};
 
 pub mod system;
 pub mod timeline;
+pub mod user;
 
 use crate::domain::nostr::Profile;
 use system::SystemMsg;
 use timeline::TimelineMsg;
+use user::UserMsg;
 
 /// Domain messages representing application intent and business logic
 /// These are processed by the update function and represent pure domain events
@@ -18,6 +20,9 @@ pub enum Msg {
 
     // Timeline operations (delegated to TimelineState)
     Timeline(TimelineMsg),
+
+    // User operations (delegated to UserState)
+    User(UserMsg),
 
     // Legacy timeline messages (to be phased out)
     ScrollUp,
@@ -53,7 +58,7 @@ pub enum Msg {
     UpdateRenderFps(f64),
     ShowError(String),
 
-    // User management
+    // Legacy user messages (to be phased out)
     UpdateProfile(PublicKey, Profile),
 }
 

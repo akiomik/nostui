@@ -1,15 +1,14 @@
 use nostr_sdk::prelude::*;
-use std::collections::HashMap;
 
-use crate::{
-    domain::nostr::Profile, infrastructure::config::Config, integration::legacy::mode::Mode,
-};
+use crate::{infrastructure::config::Config, integration::legacy::mode::Mode};
 
 pub mod system;
 pub mod timeline;
+pub mod user;
 
 pub use system::{FpsData, SystemState};
 pub use timeline::TimelineState;
+pub use user::UserState;
 
 /// Unified application state
 #[derive(Debug, Clone, Default)]
@@ -52,24 +51,6 @@ pub struct CursorPosition {
 pub struct TextSelection {
     pub start: CursorPosition,
     pub end: CursorPosition,
-}
-
-/// User-related state
-#[derive(Debug, Clone)]
-pub struct UserState {
-    pub profiles: HashMap<PublicKey, Profile>,
-    pub current_user_pubkey: PublicKey,
-}
-
-impl Default for UserState {
-    fn default() -> Self {
-        // Temporary implementation - actual initialization needs proper public key
-        let dummy_keys = Keys::generate();
-        Self {
-            profiles: HashMap::new(),
-            current_user_pubkey: dummy_keys.public_key(),
-        }
-    }
 }
 
 impl AppState {
