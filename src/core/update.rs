@@ -2,7 +2,7 @@ use nostr_sdk::prelude::*;
 
 use crate::{
     core::cmd::Cmd,
-    core::msg::{system::SystemMsg, timeline::TimelineMsg, Msg},
+    core::msg::{system::SystemMsg, timeline::TimelineMsg, user::UserMsg, Msg},
     core::state::AppState,
 };
 
@@ -19,6 +19,12 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
         // Timeline messages (delegated to TimelineState)
         Msg::Timeline(timeline_msg) => {
             let commands = state.timeline.update(timeline_msg);
+            (state, commands)
+        }
+
+        // User messages (delegated to UserState)
+        Msg::User(user_msg) => {
+            let commands = state.user.update(user_msg);
             (state, commands)
         }
 
@@ -249,19 +255,10 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             (state, commands)
         }
 
-        // Profile updates
+        // Legacy user messages (backward compatibility - to be phased out)
         Msg::UpdateProfile(pubkey, profile) => {
-            // Update only if newer than existing profile
-            let should_update = state
-                .user
-                .profiles
-                .get(&pubkey)
-                .is_none_or(|existing| existing.created_at < profile.created_at);
-
-            if should_update {
-                state.user.profiles.insert(pubkey, profile);
-            }
-            (state, vec![])
+            let commands = state.user.update(UserMsg::UpdateProfile(pubkey, profile));
+            (state, commands)
         }
     }
 }
