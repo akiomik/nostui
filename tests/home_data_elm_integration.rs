@@ -155,19 +155,19 @@ fn test_timeline_selection_flow() {
     assert!(ElmHomeData::get_selected_note(&state).is_none());
 
     // Select first note
-    let (new_state, _) = update(Msg::SelectNote(Some(0)), state);
+    let (new_state, _) = update(Msg::SelectNote(0), state);
     state = new_state;
     let selected = ElmHomeData::get_selected_note(&state);
     assert!(selected.is_some());
     assert!(selected.unwrap().content.contains("Post #"));
 
     // Select invalid note
-    let (new_state, _) = update(Msg::SelectNote(Some(10)), state);
+    let (new_state, _) = update(Msg::SelectNote(10), state);
     state = new_state;
     assert!(ElmHomeData::get_selected_note(&state).is_none());
 
     // Deselect
-    let (new_state, _) = update(Msg::SelectNote(None), state);
+    let (new_state, _) = update(Msg::DeselectNote, state);
     state = new_state;
     assert!(ElmHomeData::get_selected_note(&state).is_none());
 }

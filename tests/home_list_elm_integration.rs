@@ -70,7 +70,7 @@ fn test_selection_state_integration_with_elm() {
     assert!(!ElmHomeList::get_selection_info(&state).has_selection);
 
     // Select first item via Elm update
-    let (new_state, _) = update(Msg::SelectNote(Some(0)), state);
+    let (new_state, _) = update(Msg::SelectNote(0), state);
     state = new_state;
     let info = ElmHomeList::get_selection_info(&state);
     assert_eq!(info.selected_index, Some(0));
@@ -79,14 +79,14 @@ fn test_selection_state_integration_with_elm() {
     assert!(!info.is_at_bottom);
 
     // Select last item
-    let (new_state, _) = update(Msg::SelectNote(Some(4)), state);
+    let (new_state, _) = update(Msg::SelectNote(4), state);
     state = new_state;
     let info = ElmHomeList::get_selection_info(&state);
     assert!(info.is_at_bottom);
     assert!(!info.is_at_top);
 
     // Deselect
-    let (new_state, _) = update(Msg::SelectNote(None), state);
+    let (new_state, _) = update(Msg::DeselectNote, state);
     state = new_state;
     assert!(!ElmHomeList::get_selection_info(&state).has_selection);
 }
@@ -206,7 +206,7 @@ fn test_out_of_bounds_selection_handling() {
     }
 
     // Try to select out of bounds index
-    let (new_state, _) = update(Msg::SelectNote(Some(10)), state);
+    let (new_state, _) = update(Msg::SelectNote(10), state);
     state = new_state;
 
     // The update function should handle out of bounds gracefully
@@ -237,7 +237,7 @@ fn test_selection_info_comprehensive() {
     state = new_state;
 
     // Select the only note
-    let (new_state, _) = update(Msg::SelectNote(Some(0)), state);
+    let (new_state, _) = update(Msg::SelectNote(0), state);
     state = new_state;
     let info = ElmHomeList::get_selection_info(&state);
     assert_eq!(info.timeline_length, 1);
@@ -255,7 +255,7 @@ fn test_selection_info_comprehensive() {
     }
 
     // Select middle
-    let (new_state, _) = update(Msg::SelectNote(Some(2)), state);
+    let (new_state, _) = update(Msg::SelectNote(2), state);
     state = new_state;
     let info = ElmHomeList::get_selection_info(&state);
     assert_eq!(info.timeline_length, 5);
