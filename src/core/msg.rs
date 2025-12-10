@@ -19,7 +19,7 @@ pub enum Msg {
     ScrollDown,
     ScrollToTop,
     ScrollToBottom,
-    SelectNote(Option<usize>),
+    SelectNote(usize),
     DeselectNote,
 
     // Nostr domain events

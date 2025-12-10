@@ -66,7 +66,7 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
         }
 
         Msg::SelectNote(index) => {
-            state.timeline.selected_index = index;
+            state.timeline.selected_index = Some(index);
             (state, vec![])
         }
 
@@ -463,7 +463,7 @@ mod tests {
     #[test]
     fn test_update_select_note() {
         let state = create_test_state();
-        let (new_state, cmds) = update(Msg::SelectNote(Some(3)), state);
+        let (new_state, cmds) = update(Msg::SelectNote(3), state);
 
         assert_eq!(new_state.timeline.selected_index, Some(3));
         assert!(cmds.is_empty());
