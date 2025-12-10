@@ -14,6 +14,54 @@ fn create_test_state() -> AppState {
     AppState::new(Keys::generate().public_key())
 }
 
+/// Create test state with proper config for keybindings tests
+fn create_test_state_with_config() -> AppState {
+    use nostui::infrastructure::config::Config;
+    use nostui::integration::legacy::{action::Action, mode::Mode};
+    use nostui::presentation::config::keybindings::KeyBindings;
+    use std::collections::HashMap;
+
+    // Create config with test keybindings
+    let mut config = Config::default();
+
+    // Create test keybindings that match expected behavior
+    let mut home_bindings = HashMap::new();
+    home_bindings.insert(
+        vec![KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE)],
+        Action::ScrollDown,
+    );
+    home_bindings.insert(
+        vec![KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE)],
+        Action::ScrollUp,
+    );
+    home_bindings.insert(
+        vec![KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE)],
+        Action::React,
+    );
+    home_bindings.insert(
+        vec![KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE)],
+        Action::ReplyTextNote,
+    );
+    home_bindings.insert(
+        vec![KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE)],
+        Action::Repost,
+    );
+    home_bindings.insert(
+        vec![KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE)],
+        Action::NewTextNote,
+    );
+    home_bindings.insert(
+        vec![KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)],
+        Action::Unselect,
+    );
+
+    let mut keybindings_map = HashMap::new();
+    keybindings_map.insert(Mode::Home, home_bindings);
+    config.keybindings = KeyBindings(keybindings_map);
+
+    AppState::new_with_config(Keys::generate().public_key(), config)
+}
+
 fn create_test_event() -> Event {
     let keys = Keys::generate();
     EventBuilder::text_note("test content")
@@ -171,7 +219,7 @@ fn test_elm_home_advanced_interaction_validation() -> Result<()> {
 
 #[test]
 fn test_elm_home_translator_integration() -> Result<()> {
-    let mut state = create_test_state();
+    let mut state = create_test_state_with_config();
     let event = create_test_event();
 
     // Setup timeline with event
@@ -215,7 +263,7 @@ fn test_elm_home_translator_integration() -> Result<()> {
 
 #[test]
 fn test_elm_home_validation_edge_cases() -> Result<()> {
-    let mut state = create_test_state();
+    let mut state = create_test_state_with_config();
 
     // Test own note repost prevention
     let keys = Keys::generate();

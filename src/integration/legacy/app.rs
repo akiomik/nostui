@@ -99,7 +99,7 @@ impl App {
         nostr_service.run();
 
         // Initialize ElmRuntime with NostrCommand support
-        let initial_state = AppState::new(keys.public_key());
+        let initial_state = AppState::new_with_config(keys.public_key(), self.config.clone());
         let elm_runtime =
             ElmRuntime::new_with_nostr_executor(initial_state, action_tx.clone(), nostr_cmd_tx);
 

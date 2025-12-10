@@ -129,6 +129,18 @@ impl Component for ElmHomeAdapter {
 
         // Handle specific actions that need special processing
         match &action {
+            Action::Unselect => {
+                // Handle Unselect in normal mode (deselect note and clear status)
+                if let Some(runtime) = &mut self.elm_runtime {
+                    use crate::core::msg::Msg;
+                    runtime.send_msg(Msg::DeselectNote);
+                    if let Err(e) = runtime.run_update_cycle() {
+                        log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
+                        return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));
+                    }
+                }
+                return Ok(None);
+            }
             // Convert React/Repost actions to Send actions with selected event
             Action::React => {
                 if let Some(runtime) = &mut self.elm_runtime {
