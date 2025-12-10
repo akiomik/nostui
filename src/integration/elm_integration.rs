@@ -316,7 +316,8 @@ mod tests {
     fn test_process_message() {
         let mut runtime = create_test_runtime();
 
-        let commands = runtime.process_message(Msg::Quit);
+        let commands =
+            runtime.process_message(Msg::System(crate::core::msg::system::SystemMsg::Quit));
         assert!(commands.is_empty());
         assert!(runtime.state().system.should_quit);
     }
