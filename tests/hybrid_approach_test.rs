@@ -19,12 +19,18 @@ fn test_hybrid_special_keys_preserved() {
     // Ctrl+P should still submit
     let ctrl_p = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
     let result = translate_raw_to_domain(RawMsg::Key(ctrl_p), &state);
-    assert_eq!(result, vec![Msg::SubmitNote]);
+    assert_eq!(
+        result,
+        vec![Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote)]
+    );
 
     // Esc should still cancel
     let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
     let result = translate_raw_to_domain(RawMsg::Key(esc), &state);
-    assert_eq!(result, vec![Msg::CancelInput]);
+    assert_eq!(
+        result,
+        vec![Msg::Ui(nostui::core::msg::ui::UiMsg::CancelInput)]
+    );
 }
 
 #[test]
