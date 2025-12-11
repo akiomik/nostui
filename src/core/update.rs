@@ -301,6 +301,32 @@ mod tests {
     }
 
     #[test]
+    fn test_ui_cancel_input_delegates_to_timeline_and_keeps_status_message() {
+        let mut state = create_test_state();
+        // Prepare UI state to be reset by CancelInput
+        state.ui.show_input = true;
+        state.ui.input_content = "typing...".into();
+        state.ui.reply_to = Some(create_test_event());
+        // Prepare timeline selection and a system status message
+        state.timeline.selected_index = Some(3);
+        state.system.status_message = Some("keep me".into());
+
+        let (new_state, cmds) = update(Msg::Ui(UiMsg::CancelInput), state);
+
+        // UiState was reset by UiState::update
+        assert!(!new_state.ui.show_input);
+        assert!(new_state.ui.reply_to.is_none());
+        assert!(new_state.ui.input_content.is_empty());
+
+        // Coordinator delegated to TimelineMsg::DeselectNote and aggregated commands (currently none)
+        assert_eq!(new_state.timeline.selected_index, None);
+        assert!(cmds.is_empty());
+
+        // Unlike Msg::DeselectNote path, status_message is not cleared here (policy difference)
+        assert_eq!(new_state.system.status_message.as_deref(), Some("keep me"));
+    }
+
+    #[test]
     fn test_update_send_reaction() {
         let state = create_test_state();
         let target_event = create_test_event();
