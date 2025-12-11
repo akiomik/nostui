@@ -2,7 +2,7 @@ use nostr_sdk::prelude::*;
 
 use crate::{
     core::cmd::Cmd,
-    core::msg::{system::SystemMsg, timeline::TimelineMsg, user::UserMsg, Msg},
+    core::msg::{system::SystemMsg, timeline::TimelineMsg, ui::UiMsg, user::UserMsg, Msg},
     core::state::AppState,
 };
 
@@ -133,96 +133,75 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             (state, vec![cmd])
         }
 
+        // New UI path (delegates to existing behavior for now)
+        Msg::Ui(ui_msg) => {
+            match ui_msg {
+                UiMsg::SubmitNote => {
+                    if let Some(submit_data) = crate::presentation::components::elm_home_input::ElmHomeInput::get_submit_data(&state) {
+                        // Reset UiState through its update to centralize behavior
+                        let mut cmds = state.ui.update(UiMsg::CancelInput);
+                        cmds.push(Cmd::SendTextNote { content: submit_data.content, tags: submit_data.tags });
+                        (
+                            state,
+                            cmds
+                        )
+                    } else {
+                        (state, vec![])
+                    }
+                }
+                UiMsg::ProcessTextAreaInput(key) => {
+                    if state.ui.show_input {
+                        state.ui.pending_input_keys.push(key);
+                        let textarea_state = crate::presentation::components::elm_home_input::ElmHomeInput::process_pending_keys(&mut state);
+                        textarea_state.apply_to_ui_state(&mut state.ui);
+                    }
+                    (state, vec![])
+                }
+                ref other => {
+                    let cancel = matches!(other, UiMsg::CancelInput);
+                    let mut cmds = state.ui.update(other.clone());
+                    if cancel {
+                        let tl_cmds = state.timeline.update(TimelineMsg::DeselectNote);
+                        cmds.extend(tl_cmds);
+                    }
+                    (state, cmds)
+                }
+            }
+        }
+
         // UI operations
-        Msg::ShowNewNote => {
-            state.ui.reply_to = None;
-            state.ui.show_input = true;
-            state.ui.input_content.clear();
-            state.ui.cursor_position = Default::default();
-            state.ui.selection = None;
-            (state, vec![])
-        }
+        Msg::ShowNewNote => update(Msg::Ui(UiMsg::ShowNewNote), state),
 
-        Msg::ShowReply(target_event) => {
-            state.ui.reply_to = Some(target_event);
-            state.ui.show_input = true;
-            state.ui.input_content.clear();
-            state.ui.cursor_position = Default::default();
-            state.ui.selection = None;
-            (state, vec![])
-        }
+        Msg::ShowReply(target_event) => update(Msg::Ui(UiMsg::ShowReply(target_event)), state),
 
-        Msg::CancelInput => {
-            state.ui.show_input = false;
-            state.ui.reply_to = None;
-            state.ui.input_content.clear();
-            state.ui.cursor_position = Default::default();
-            state.ui.selection = None;
-            state.timeline.selected_index = None;
-            (state, vec![])
-        }
+        Msg::CancelInput => update(Msg::Ui(UiMsg::CancelInput), state),
 
         Msg::UpdateInputContent(content) => {
-            state.ui.input_content = content;
-            (state, vec![])
+            update(Msg::Ui(UiMsg::UpdateInputContent(content)), state)
         }
 
-        Msg::UpdateInputContentWithCursor(content, cursor_pos) => {
-            state.ui.input_content = content;
-            state.ui.cursor_position = cursor_pos;
-            (state, vec![])
-        }
+        Msg::UpdateInputContentWithCursor(content, cursor_pos) => update(
+            Msg::Ui(UiMsg::UpdateInputContentWithCursor(
+                content,
+                cursor_pos.into(),
+            )),
+            state,
+        ),
 
-        Msg::UpdateCursorPosition(cursor_pos) => {
-            state.ui.cursor_position = cursor_pos;
-            (state, vec![])
-        }
+        Msg::UpdateCursorPosition(cursor_pos) => update(
+            Msg::Ui(UiMsg::UpdateCursorPosition(cursor_pos.into())),
+            state,
+        ),
 
-        Msg::UpdateSelection(selection) => {
-            state.ui.selection = selection;
-            (state, vec![])
-        }
+        Msg::UpdateSelection(selection) => update(
+            Msg::Ui(UiMsg::UpdateSelection(selection.map(Into::into))),
+            state,
+        ),
 
         // Process TextArea input using pending_keys approach for state consistency
-        Msg::ProcessTextAreaInput(key) => {
-            if state.ui.show_input {
-                // Add key to pending queue
-                state.ui.pending_input_keys.push(key);
+        Msg::ProcessTextAreaInput(key) => update(Msg::Ui(UiMsg::ProcessTextAreaInput(key)), state),
 
-                // Process all pending keys and extract new state
-                let textarea_state =
-                    crate::presentation::components::elm_home_input::ElmHomeInput::process_pending_keys(&mut state);
-
-                // Update AppState with processed results
-                textarea_state.apply_to_ui_state(&mut state.ui);
-            }
-            (state, vec![])
-        }
-
-        Msg::SubmitNote => {
-            // Use ElmHomeInput logic for submission
-            if let Some(submit_data) =
-                crate::presentation::components::elm_home_input::ElmHomeInput::get_submit_data(
-                    &state,
-                )
-            {
-                state.ui.show_input = false;
-                state.ui.reply_to = None;
-                state.ui.input_content.clear();
-                state.ui.cursor_position = Default::default();
-                state.ui.selection = None;
-
-                (
-                    state,
-                    vec![Cmd::SendTextNote {
-                        content: submit_data.content,
-                        tags: submit_data.tags,
-                    }],
-                )
-            } else {
-                (state, vec![])
-            }
-        }
+        Msg::SubmitNote => update(Msg::Ui(UiMsg::SubmitNote), state),
 
         // Legacy system messages (backward compatibility - to be phased out)
         Msg::UpdateStatusMessage(message) => {
