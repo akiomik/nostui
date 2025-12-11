@@ -169,40 +169,6 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             }
         }
 
-        // UI operations
-        Msg::ShowNewNote => update(Msg::Ui(UiMsg::ShowNewNote), state),
-
-        Msg::ShowReply(target_event) => update(Msg::Ui(UiMsg::ShowReply(target_event)), state),
-
-        Msg::CancelInput => update(Msg::Ui(UiMsg::CancelInput), state),
-
-        Msg::UpdateInputContent(content) => {
-            update(Msg::Ui(UiMsg::UpdateInputContent(content)), state)
-        }
-
-        Msg::UpdateInputContentWithCursor(content, cursor_pos) => update(
-            Msg::Ui(UiMsg::UpdateInputContentWithCursor(
-                content,
-                cursor_pos.into(),
-            )),
-            state,
-        ),
-
-        Msg::UpdateCursorPosition(cursor_pos) => update(
-            Msg::Ui(UiMsg::UpdateCursorPosition(cursor_pos.into())),
-            state,
-        ),
-
-        Msg::UpdateSelection(selection) => update(
-            Msg::Ui(UiMsg::UpdateSelection(selection.map(Into::into))),
-            state,
-        ),
-
-        // Process TextArea input using pending_keys approach for state consistency
-        Msg::ProcessTextAreaInput(key) => update(Msg::Ui(UiMsg::ProcessTextAreaInput(key)), state),
-
-        Msg::SubmitNote => update(Msg::Ui(UiMsg::SubmitNote), state),
-
         // Legacy system messages (backward compatibility - to be phased out)
         Msg::UpdateStatusMessage(message) => {
             let commands = state.system.update(SystemMsg::UpdateStatusMessage(message));
@@ -299,7 +265,7 @@ mod tests {
     #[test]
     fn test_update_show_new_note() {
         let state = create_test_state();
-        let (new_state, cmds) = update(Msg::ShowNewNote, state);
+        let (new_state, cmds) = update(Msg::Ui(UiMsg::ShowNewNote), state);
 
         assert!(new_state.ui.show_input);
         assert!(new_state.ui.reply_to.is_none());
@@ -311,7 +277,7 @@ mod tests {
     fn test_update_show_reply() {
         let state = create_test_state();
         let target_event = create_test_event();
-        let (new_state, cmds) = update(Msg::ShowReply(target_event.clone()), state);
+        let (new_state, cmds) = update(Msg::Ui(UiMsg::ShowReply(target_event.clone())), state);
 
         assert!(new_state.ui.show_input);
         assert_eq!(new_state.ui.reply_to, Some(target_event));
@@ -326,7 +292,7 @@ mod tests {
         state.ui.input_content = "test".to_string();
         state.ui.reply_to = Some(create_test_event());
 
-        let (new_state, cmds) = update(Msg::CancelInput, state);
+        let (new_state, cmds) = update(Msg::Ui(UiMsg::CancelInput), state);
 
         assert!(!new_state.ui.show_input);
         assert!(new_state.ui.reply_to.is_none());
@@ -366,7 +332,10 @@ mod tests {
     fn test_update_input_content() {
         let state = create_test_state();
         let content = "Hello, world!";
-        let (new_state, cmds) = update(Msg::UpdateInputContent(content.to_string()), state);
+        let (new_state, cmds) = update(
+            Msg::Ui(UiMsg::UpdateInputContent(content.to_string())),
+            state,
+        );
 
         assert_eq!(new_state.ui.input_content, content);
         assert!(cmds.is_empty());

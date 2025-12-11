@@ -11,17 +11,25 @@ fn test_library_basic_flow() {
     let initial_state = AppState::new(keys.public_key());
 
     // Test basic message processing
-    let (state, cmds) = update(Msg::ShowNewNote, initial_state);
+    let (state, cmds) = update(
+        Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote),
+        initial_state,
+    );
     assert!(state.ui.show_input);
     assert!(cmds.is_empty());
 
     // Test input handling
-    let (state, cmds) = update(Msg::UpdateInputContent("Hello".to_string()), state);
+    let (state, cmds) = update(
+        Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
+            "Hello".to_string(),
+        )),
+        state,
+    );
     assert_eq!(state.ui.input_content, "Hello");
     assert!(cmds.is_empty());
 
     // Test submission
-    let (state, cmds) = update(Msg::SubmitNote, state);
+    let (state, cmds) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote), state);
     assert!(!state.ui.show_input);
     assert_eq!(cmds.len(), 1);
 
@@ -41,7 +49,7 @@ fn test_elm_runtime_integration() {
     let mut runtime = ElmRuntime::new(initial_state);
 
     // Test runtime message processing
-    runtime.send_msg(Msg::ShowNewNote);
+    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote));
     let commands = runtime.process_all_messages();
 
     assert!(runtime.state().ui.show_input);
@@ -77,9 +85,11 @@ fn test_complex_workflow() {
     runtime.send_msg(Msg::SendReaction(event.clone()));
 
     // 3. Start reply
-    runtime.send_msg(Msg::ShowReply(event));
-    runtime.send_msg(Msg::UpdateInputContent("Nice post!".to_string()));
-    runtime.send_msg(Msg::SubmitNote);
+    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(event)));
+    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
+        "Nice post!".to_string(),
+    )));
+    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote));
 
     // Process all messages
     let commands = runtime.process_all_messages();
@@ -143,11 +153,17 @@ async fn test_async_message_handling() {
     // Send messages asynchronously
     let handle = tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        sender.send(Msg::ShowNewNote).unwrap();
         sender
-            .send(Msg::UpdateInputContent("Async message".to_string()))
+            .send(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote))
             .unwrap();
-        sender.send(Msg::SubmitNote).unwrap();
+        sender
+            .send(Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
+                "Async message".to_string(),
+            )))
+            .unwrap();
+        sender
+            .send(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote))
+            .unwrap();
     });
 
     // Wait for task completion

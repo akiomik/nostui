@@ -137,15 +137,15 @@ fn test_text_note_submission_workflow() -> Result<()> {
 
     // Simulate text note submission workflow
     // Start new note
-    runtime.send_msg(Msg::ShowNewNote);
+    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote));
 
     // Add content
-    runtime.send_msg(Msg::UpdateInputContent(
+    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
         "Hello, Nostr from Elm!".to_string(),
-    ));
+    )));
 
     // Submit note
-    runtime.send_msg(Msg::SubmitNote);
+    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote));
 
     // Process and execute commands
     let execution_log = runtime
@@ -177,9 +177,13 @@ fn test_reply_workflow_with_tags() -> Result<()> {
     let target_event = create_test_event();
 
     // Start reply
-    runtime.send_msg(Msg::ShowReply(target_event.clone()));
-    runtime.send_msg(Msg::UpdateInputContent("Great point!".to_string()));
-    runtime.send_msg(Msg::SubmitNote);
+    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(
+        target_event.clone(),
+    )));
+    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
+        "Great point!".to_string(),
+    )));
+    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote));
 
     let execution_log = runtime
         .run_update_cycle()

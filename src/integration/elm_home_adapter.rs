@@ -1,3 +1,4 @@
+use crate::core::msg::ui::UiMsg;
 use color_eyre::eyre::Result;
 use ratatui::{prelude::Rect, Frame};
 use tokio::sync::mpsc;
@@ -95,7 +96,7 @@ impl Component for ElmHomeAdapter {
                     Action::Unselect => {
                         // Allow Escape to close input
                         use crate::core::msg::Msg;
-                        runtime.send_msg(Msg::CancelInput);
+                        runtime.send_msg(Msg::Ui(UiMsg::CancelInput));
                         if let Err(e) = runtime.run_update_cycle() {
                             log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
                             return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));
@@ -105,7 +106,7 @@ impl Component for ElmHomeAdapter {
                     Action::SubmitTextNote => {
                         log::info!("ElmHomeAdapter: Submitting text note");
                         use crate::core::msg::Msg;
-                        runtime.send_msg(Msg::SubmitNote);
+                        runtime.send_msg(Msg::Ui(UiMsg::SubmitNote));
                         if let Err(e) = runtime.run_update_cycle() {
                             log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
                             return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));
@@ -200,7 +201,7 @@ impl Component for ElmHomeAdapter {
             Action::NewTextNote => {
                 if let Some(runtime) = &mut self.elm_runtime {
                     use crate::core::msg::Msg;
-                    runtime.send_msg(Msg::ShowNewNote);
+                    runtime.send_msg(Msg::Ui(UiMsg::ShowNewNote));
                     if let Err(e) = runtime.run_update_cycle() {
                         log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
                         return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));
@@ -213,7 +214,7 @@ impl Component for ElmHomeAdapter {
                     let state = runtime.state();
                     if let Some(selected_event) = state.selected_note() {
                         use crate::core::msg::Msg;
-                        runtime.send_msg(Msg::ShowReply(selected_event.clone()));
+                        runtime.send_msg(Msg::Ui(UiMsg::ShowReply(selected_event.clone())));
                         if let Err(e) = runtime.run_update_cycle() {
                             log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
                             return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));
@@ -227,7 +228,7 @@ impl Component for ElmHomeAdapter {
             Action::SubmitTextNote => {
                 if let Some(runtime) = &mut self.elm_runtime {
                     use crate::core::msg::Msg;
-                    runtime.send_msg(Msg::SubmitNote);
+                    runtime.send_msg(Msg::Ui(UiMsg::SubmitNote));
                     if let Err(e) = runtime.run_update_cycle() {
                         log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
                         return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));

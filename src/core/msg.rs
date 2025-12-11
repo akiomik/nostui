@@ -44,17 +44,6 @@ pub enum Msg {
     SendRepost(Event),
     SendTextNote(String, Vec<Tag>),
 
-    // UI operations
-    ShowNewNote,
-    ShowReply(Event),
-    SubmitNote,
-    CancelInput,
-    UpdateInputContent(String),
-    UpdateInputContentWithCursor(String, crate::core::state::CursorPosition),
-    UpdateCursorPosition(crate::core::state::CursorPosition),
-    UpdateSelection(Option<crate::core::state::TextSelection>),
-    ProcessTextAreaInput(crossterm::event::KeyEvent), // Hybrid: Delegate to TextArea component
-
     // Legacy system messages (to be phased out)
     UpdateStatusMessage(String),
     ClearStatusMessage,
@@ -84,7 +73,8 @@ mod tests {
         // Domain messages are not frequent
         assert!(!Msg::System(SystemMsg::Quit).is_frequent());
         assert!(!Msg::ScrollUp.is_frequent());
-        assert!(!Msg::ShowNewNote.is_frequent());
+        use crate::core::msg::ui::UiMsg;
+        assert!(!Msg::Ui(UiMsg::ShowNewNote).is_frequent());
     }
 
     #[test]
