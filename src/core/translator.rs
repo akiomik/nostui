@@ -89,7 +89,7 @@ fn translate_input_mode_keys(key: crossterm::event::KeyEvent, state: &AppState) 
 
         // Hybrid Approach: Delegate all other input to TextArea component
         // All non-special keys go to TextArea for processing
-        _ => vec![Msg::ProcessTextAreaInput(key)],
+        _ => vec![Msg::Ui(UiMsg::ProcessTextAreaInput(key))],
     }
 }
 
@@ -436,7 +436,7 @@ mod tests {
         state.ui.input_content = "Test".to_string();
         let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::ProcessTextAreaInput(key)]);
+        assert_eq!(result, vec![Msg::Ui(UiMsg::ProcessTextAreaInput(key))]);
 
         // Test Escape in input mode
         let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
@@ -447,18 +447,18 @@ mod tests {
         state.ui.input_content = "Hello".to_string();
         let key = KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::ProcessTextAreaInput(key)]);
+        assert_eq!(result, vec![Msg::Ui(UiMsg::ProcessTextAreaInput(key))]);
 
         // Test backspace (now delegated to TextArea)
         let key = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::ProcessTextAreaInput(key)]);
+        assert_eq!(result, vec![Msg::Ui(UiMsg::ProcessTextAreaInput(key))]);
 
         // Test Shift+Enter (now delegated to TextArea)
         state.ui.input_content = "Line 1".to_string();
         let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::ProcessTextAreaInput(key)]);
+        assert_eq!(result, vec![Msg::Ui(UiMsg::ProcessTextAreaInput(key))]);
     }
 
     #[test]
@@ -548,7 +548,7 @@ mod tests {
         state.timeline.selected_index = Some(0);
         let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::ProcessTextAreaInput(key)]);
+        assert_eq!(result, vec![Msg::Ui(UiMsg::ProcessTextAreaInput(key))]);
 
         // Cannot reply when no note selected
         state.ui.show_input = false;

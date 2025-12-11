@@ -191,12 +191,12 @@ fn test_timeline_interaction_conditions() {
     assert!(ElmHomeData::can_interact_with_timeline(&state));
 
     // Show input - cannot interact
-    let (new_state, _) = update(Msg::ShowNewNote, state);
+    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote), state);
     state = new_state;
     assert!(!ElmHomeData::can_interact_with_timeline(&state));
 
     // Hide input - can interact again
-    let (new_state, _) = update(Msg::CancelInput, state);
+    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::CancelInput), state);
     state = new_state;
     assert!(ElmHomeData::can_interact_with_timeline(&state));
 }

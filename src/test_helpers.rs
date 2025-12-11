@@ -1,3 +1,4 @@
+use crate::core::msg::ui::UiMsg;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
 
@@ -137,17 +138,17 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Show new note input via message
     pub fn show_new_note(&mut self) -> &mut Self {
-        self.send_message(Msg::ShowNewNote)
+        self.send_message(Msg::Ui(UiMsg::ShowNewNote))
     }
 
     /// Cancel input via message
     pub fn cancel_input(&mut self) -> &mut Self {
-        self.send_message(Msg::CancelInput)
+        self.send_message(Msg::Ui(UiMsg::CancelInput))
     }
 
     /// Submit input via message
     pub fn submit_input(&mut self) -> &mut Self {
-        self.send_message(Msg::SubmitNote)
+        self.send_message(Msg::Ui(UiMsg::SubmitNote))
     }
 
     // === Assertion Methods ===

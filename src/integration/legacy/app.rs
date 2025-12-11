@@ -1,3 +1,4 @@
+use crate::core::msg::ui::UiMsg;
 use color_eyre::eyre::Result;
 use crossterm::event::KeyEvent;
 use nostr_sdk::prelude::*;
@@ -355,7 +356,7 @@ impl App {
                         } else if let Some(ref mut runtime) = self.elm_runtime {
                             log::info!("App.rs: Using ElmRuntime - sending SubmitNote message");
                             use crate::core::msg::Msg;
-                            runtime.send_msg(Msg::SubmitNote);
+                            runtime.send_msg(Msg::Ui(UiMsg::SubmitNote));
                         } else {
                             log::info!("App.rs: Using legacy system");
                             // Legacy fallback

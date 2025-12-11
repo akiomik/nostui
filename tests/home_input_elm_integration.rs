@@ -44,7 +44,10 @@ fn test_reply_mode_activation() {
         .unwrap();
 
     // Show reply
-    let (new_state, cmds) = update(Msg::ShowReply(test_event), state);
+    let (new_state, cmds) = update(
+        Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(test_event)),
+        state,
+    );
     state = new_state;
     assert!(cmds.is_empty());
     assert!(ElmHomeInput::is_input_active(&state));
@@ -108,12 +111,17 @@ fn test_submission_with_reply_tags() {
         .unwrap();
 
     // Start reply
-    let (new_state, _) = update(Msg::ShowReply(original_event), state);
+    let (new_state, _) = update(
+        Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(original_event)),
+        state,
+    );
     state = new_state;
 
     // Add content
     let (new_state, _) = update(
-        Msg::UpdateInputContent("This is a reply".to_string()),
+        Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
+            "This is a reply".to_string(),
+        )),
         state,
     );
     state = new_state;
@@ -212,7 +220,10 @@ fn test_mode_transitions() {
         .sign_with_keys(&keys)
         .unwrap();
 
-    let (new_state, _) = update(Msg::ShowReply(test_event), state);
+    let (new_state, _) = update(
+        Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(test_event)),
+        state,
+    );
     state = new_state;
     assert_eq!(
         ElmHomeInput::get_input_mode_description(&state),
@@ -220,7 +231,7 @@ fn test_mode_transitions() {
     );
 
     // Reply → Navigation
-    let (new_state, _) = update(Msg::CancelInput, state);
+    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::CancelInput), state);
     state = new_state;
     assert_eq!(
         ElmHomeInput::get_input_mode_description(&state),
@@ -276,7 +287,10 @@ async fn test_complete_input_workflow() {
         .unwrap();
     let mut state = helper.state().clone();
 
-    let (new_state, _) = update(Msg::ShowReply(original_post), state);
+    let (new_state, _) = update(
+        Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(original_post)),
+        state,
+    );
     state = new_state;
     assert_eq!(
         ElmHomeInput::get_input_mode_description(&state),
@@ -284,11 +298,16 @@ async fn test_complete_input_workflow() {
     );
 
     // 6. Type reply
-    let (new_state, _) = update(Msg::UpdateInputContent("Great point!".to_string()), state);
+    let (new_state, _) = update(
+        Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
+            "Great point!".to_string(),
+        )),
+        state,
+    );
     state = new_state;
 
     // 7. Submit reply
-    let (new_state, cmds) = update(Msg::SubmitNote, state);
+    let (new_state, cmds) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote), state);
     state = new_state;
     assert_eq!(cmds.len(), 1);
 

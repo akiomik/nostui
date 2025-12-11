@@ -110,12 +110,12 @@ fn test_scrollable_conditions() {
     assert!(ElmHomeList::is_scrollable(&state));
 
     // Show input - not scrollable even with notes
-    let (new_state, _) = update(Msg::ShowNewNote, state);
+    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote), state);
     state = new_state;
     assert!(!ElmHomeList::is_scrollable(&state));
 
     // Hide input - scrollable again
-    let (new_state, _) = update(Msg::CancelInput, state);
+    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::CancelInput), state);
     state = new_state;
     assert!(ElmHomeList::is_scrollable(&state));
 }
@@ -140,7 +140,7 @@ fn test_scroll_with_input_shown() {
     assert_eq!(state.timeline.selected_index, Some(0));
 
     // Show input
-    let (new_state, _) = update(Msg::ShowNewNote, state);
+    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote), state);
     state = new_state;
 
     // Try to scroll while input is shown - should not change selection
@@ -261,7 +261,7 @@ async fn test_complete_ui_workflow() {
     assert_eq!(info.selected_index, Some(9));
 
     // 6. Show input (disables scrolling)
-    let (new_state, _) = update(Msg::ShowNewNote, state);
+    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote), state);
     state = new_state;
     assert!(!ElmHomeList::is_scrollable(&state));
 
@@ -272,7 +272,7 @@ async fn test_complete_ui_workflow() {
     assert_eq!(state.timeline.selected_index, old_selection);
 
     // 8. Cancel input (re-enables scrolling)
-    let (new_state, _) = update(Msg::CancelInput, state);
+    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::CancelInput), state);
     state = new_state;
     assert!(ElmHomeList::is_scrollable(&state));
 

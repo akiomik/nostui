@@ -270,6 +270,7 @@ pub struct ElmRuntimeStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::msg::ui::UiMsg;
     use nostr_sdk::prelude::*;
 
     fn create_test_runtime() -> ElmRuntime {
@@ -300,7 +301,7 @@ mod tests {
     fn test_send_message() {
         let mut runtime = create_test_runtime();
 
-        runtime.send_msg(Msg::ShowNewNote);
+        runtime.send_msg(Msg::Ui(UiMsg::ShowNewNote));
         let stats = runtime.get_stats();
         assert_eq!(stats.queued_messages, 1);
 
@@ -364,17 +365,17 @@ mod tests {
         let mut runtime = create_test_runtime();
 
         // Start new post
-        runtime.process_message(Msg::ShowNewNote);
+        runtime.process_message(Msg::Ui(UiMsg::ShowNewNote));
         assert!(runtime.state().ui.show_input);
         assert!(runtime.state().ui.reply_to.is_none());
 
         // Update input content
         let content = "Hello, Nostr!";
-        runtime.process_message(Msg::UpdateInputContent(content.to_string()));
+        runtime.process_message(Msg::Ui(UiMsg::UpdateInputContent(content.to_string())));
         assert_eq!(runtime.state().ui.input_content, content);
 
         // Submit post
-        let commands = runtime.process_message(Msg::SubmitNote);
+        let commands = runtime.process_message(Msg::Ui(UiMsg::SubmitNote));
         assert_eq!(commands.len(), 1);
 
         match &commands[0] {
@@ -398,12 +399,12 @@ mod tests {
         let target_event = create_test_event();
 
         // Start reply
-        runtime.process_message(Msg::ShowReply(target_event.clone()));
+        runtime.process_message(Msg::Ui(UiMsg::ShowReply(target_event.clone())));
         assert!(runtime.state().ui.show_input);
         assert_eq!(runtime.state().ui.reply_to, Some(target_event));
 
         // Cancel input
-        runtime.process_message(Msg::CancelInput);
+        runtime.process_message(Msg::Ui(UiMsg::CancelInput));
         assert!(!runtime.state().ui.show_input);
         assert!(runtime.state().ui.reply_to.is_none());
     }
@@ -445,9 +446,9 @@ mod tests {
         let sender = runtime.get_sender().unwrap();
 
         // Send messages from external source
-        sender.send(Msg::ShowNewNote).unwrap();
+        sender.send(Msg::Ui(UiMsg::ShowNewNote)).unwrap();
         sender
-            .send(Msg::UpdateInputContent("test".to_string()))
+            .send(Msg::Ui(UiMsg::UpdateInputContent("test".to_string())))
             .unwrap();
 
         // Not processed yet
