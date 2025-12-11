@@ -4,6 +4,7 @@ use crate::{infrastructure::config::Config, integration::legacy::mode::Mode};
 
 pub mod system;
 pub mod timeline;
+pub mod ui;
 pub mod user;
 
 pub use system::{FpsData, SystemState};
@@ -37,6 +38,24 @@ pub struct UiState {
     pub cursor_position: CursorPosition,
     pub selection: Option<TextSelection>,
     pub pending_input_keys: Vec<crossterm::event::KeyEvent>, // Queue for stateless TextArea processing
+}
+
+impl UiState {
+    pub fn is_input_shown(&self) -> bool {
+        self.show_input
+    }
+    pub fn is_reply(&self) -> bool {
+        self.reply_to.is_some()
+    }
+    pub fn reply_target(&self) -> Option<&Event> {
+        self.reply_to.as_ref()
+    }
+    pub fn input_length(&self) -> usize {
+        self.input_content.len()
+    }
+    pub fn has_input_content(&self) -> bool {
+        !self.input_content.is_empty()
+    }
 }
 
 /// Cursor position in text

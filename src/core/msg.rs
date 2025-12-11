@@ -4,11 +4,13 @@ use serde::{Deserialize, Serialize};
 
 pub mod system;
 pub mod timeline;
+pub mod ui;
 pub mod user;
 
 use crate::domain::nostr::Profile;
 use system::SystemMsg;
 use timeline::TimelineMsg;
+use ui::UiMsg;
 use user::UserMsg;
 
 /// Domain messages representing application intent and business logic
@@ -23,6 +25,9 @@ pub enum Msg {
 
     // User operations (delegated to UserState)
     User(UserMsg),
+
+    // UI operations (new path)
+    Ui(UiMsg),
 
     // Legacy timeline messages (to be phased out)
     ScrollUp,
