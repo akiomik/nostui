@@ -1,8 +1,12 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    core::msg::Msg, core::raw_msg::RawMsg, core::state::AppState,
-    core::translator::translate_raw_to_domain, core::update::update,
-    infrastructure::fps_service::FpsService, presentation::components::elm_fps::ElmFpsCounter,
+    core::msg::{system::SystemMsg, Msg},
+    core::raw_msg::RawMsg,
+    core::state::AppState,
+    core::translator::translate_raw_to_domain,
+    core::update::update,
+    infrastructure::fps_service::FpsService,
+    presentation::components::elm_fps::ElmFpsCounter,
 };
 use tokio::sync::mpsc;
 
@@ -24,12 +28,18 @@ fn test_fps_raw_message_translation() {
     // Test app FPS translation
     let raw_msg = RawMsg::AppFpsUpdate(60.0);
     let domain_msgs = translate_raw_to_domain(raw_msg, &state);
-    assert_eq!(domain_msgs, vec![Msg::UpdateAppFps(60.0)]);
+    assert_eq!(
+        domain_msgs,
+        vec![Msg::System(SystemMsg::UpdateAppFps(60.0))]
+    );
 
     // Test render FPS translation
     let raw_msg = RawMsg::RenderFpsUpdate(120.0);
     let domain_msgs = translate_raw_to_domain(raw_msg, &state);
-    assert_eq!(domain_msgs, vec![Msg::UpdateRenderFps(120.0)]);
+    assert_eq!(
+        domain_msgs,
+        vec![Msg::System(SystemMsg::UpdateRenderFps(120.0))]
+    );
 }
 
 // test_fps_domain_message_handling removed - migrated to SystemState unit tests in src/core/state/system.rs
@@ -74,10 +84,10 @@ async fn test_fps_integration_full_flow() {
     assert!(rx.try_recv().is_err());
 
     // Manually test the update flow by simulating FPS updates
-    let (new_state, _) = update(Msg::UpdateAppFps(60.0), state.clone());
+    let (new_state, _) = update(Msg::System(SystemMsg::UpdateAppFps(60.0)), state.clone());
     state = new_state;
 
-    let (new_state, _) = update(Msg::UpdateRenderFps(120.0), state);
+    let (new_state, _) = update(Msg::System(SystemMsg::UpdateRenderFps(120.0)), state);
     state = new_state;
 
     // Verify state updates

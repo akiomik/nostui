@@ -1,7 +1,10 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    core::msg::Msg, core::state::AppState, core::update::update,
-    integration::elm_integration::ElmRuntime, Cmd, VERSION,
+    core::msg::{system::SystemMsg, Msg},
+    core::state::AppState,
+    core::update::update,
+    integration::elm_integration::ElmRuntime,
+    Cmd, VERSION,
 };
 
 /// Basic library flow test
@@ -128,7 +131,7 @@ fn test_error_handling_integration() {
     let mut runtime = ElmRuntime::new(initial_state);
 
     // Send error message
-    runtime.send_msg(Msg::ShowError("Test error".to_string()));
+    runtime.send_msg(Msg::System(SystemMsg::ShowError("Test error".to_string())));
     runtime.process_all_messages();
 
     // Check if error is displayed in status message
