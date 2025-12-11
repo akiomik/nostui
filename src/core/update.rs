@@ -2,7 +2,7 @@ use nostr_sdk::prelude::*;
 
 use crate::{
     core::cmd::Cmd,
-    core::msg::{system::SystemMsg, timeline::TimelineMsg, ui::UiMsg, user::UserMsg, Msg},
+    core::msg::{timeline::TimelineMsg, ui::UiMsg, user::UserMsg, Msg},
     core::state::AppState,
 };
 
@@ -167,37 +167,6 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
                     (state, cmds)
                 }
             }
-        }
-
-        // Legacy system messages (backward compatibility - to be phased out)
-        Msg::UpdateStatusMessage(message) => {
-            let commands = state.system.update(SystemMsg::UpdateStatusMessage(message));
-            (state, commands)
-        }
-
-        Msg::ClearStatusMessage => {
-            let commands = state.system.update(SystemMsg::ClearStatusMessage);
-            (state, commands)
-        }
-
-        Msg::SetLoading(loading) => {
-            let commands = state.system.update(SystemMsg::SetLoading(loading));
-            (state, commands)
-        }
-
-        Msg::UpdateAppFps(fps) => {
-            let commands = state.system.update(SystemMsg::UpdateAppFps(fps));
-            (state, commands)
-        }
-
-        Msg::UpdateRenderFps(fps) => {
-            let commands = state.system.update(SystemMsg::UpdateRenderFps(fps));
-            (state, commands)
-        }
-
-        Msg::ShowError(error) => {
-            let commands = state.system.update(SystemMsg::ShowError(error));
-            (state, commands)
         }
 
         // Legacy user messages (backward compatibility - to be phased out)

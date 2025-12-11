@@ -24,11 +24,11 @@ pub fn translate_raw_to_domain(raw: RawMsg, state: &AppState) -> Vec<Msg> {
         RawMsg::ReceiveEvent(event) => translate_nostr_event(event),
 
         // FPS updates
-        RawMsg::AppFpsUpdate(fps) => vec![Msg::UpdateAppFps(fps)],
-        RawMsg::RenderFpsUpdate(fps) => vec![Msg::UpdateRenderFps(fps)],
+        RawMsg::AppFpsUpdate(fps) => vec![Msg::System(SystemMsg::UpdateAppFps(fps))],
+        RawMsg::RenderFpsUpdate(fps) => vec![Msg::System(SystemMsg::UpdateRenderFps(fps))],
 
         // System events
-        RawMsg::Error(error) => vec![Msg::ShowError(error)],
+        RawMsg::Error(error) => vec![Msg::System(SystemMsg::ShowError(error))],
 
         // Ignore frequent system events in domain layer
         RawMsg::Tick | RawMsg::Render => vec![],
@@ -142,79 +142,79 @@ fn translate_action_to_msg(
 /// Translate reply key with validation
 fn translate_reply_key(state: &AppState) -> Vec<Msg> {
     if !can_interact_with_timeline(state) {
-        return vec![Msg::UpdateStatusMessage(
+        return vec![Msg::System(SystemMsg::UpdateStatusMessage(
             "Cannot reply: No note selected or input mode active".to_string(),
-        )];
+        ))];
     }
 
     if let Some(selected_note) = state.selected_note() {
         if selected_note.pubkey == state.user.current_user_pubkey {
-            vec![Msg::UpdateStatusMessage(
+            vec![Msg::System(SystemMsg::UpdateStatusMessage(
                 "Cannot reply to your own note".to_string(),
-            )]
+            ))]
         } else {
             vec![
                 Msg::Ui(UiMsg::ShowReply(selected_note.clone())),
-                Msg::UpdateStatusMessage(format!(
+                Msg::System(SystemMsg::UpdateStatusMessage(format!(
                     "Replying to {}...",
                     get_display_name(selected_note, state)
-                )),
+                ))),
             ]
         }
     } else {
-        vec![Msg::UpdateStatusMessage(
+        vec![Msg::System(SystemMsg::UpdateStatusMessage(
             "No note selected for reply".to_string(),
-        )]
+        ))]
     }
 }
 
 /// Translate like key with duplicate prevention
 fn translate_like_key(state: &AppState) -> Vec<Msg> {
     if !can_interact_with_timeline(state) {
-        return vec![Msg::UpdateStatusMessage(
+        return vec![Msg::System(SystemMsg::UpdateStatusMessage(
             "Cannot react: No note selected or input mode active".to_string(),
-        )];
+        ))];
     }
 
     if let Some(selected_note) = state.selected_note() {
         if has_user_reacted_to_note(selected_note, state) {
-            vec![Msg::UpdateStatusMessage(
+            vec![Msg::System(SystemMsg::UpdateStatusMessage(
                 "You have already liked this note".to_string(),
-            )]
+            ))]
         } else {
             vec![Msg::SendReaction(selected_note.clone())]
         }
     } else {
-        vec![Msg::UpdateStatusMessage(
+        vec![Msg::System(SystemMsg::UpdateStatusMessage(
             "No note selected for reaction".to_string(),
-        )]
+        ))]
     }
 }
 
 /// Translate repost key with validation
 fn translate_repost_key(state: &AppState) -> Vec<Msg> {
     if !can_interact_with_timeline(state) {
-        return vec![Msg::UpdateStatusMessage(
+        return vec![Msg::System(SystemMsg::UpdateStatusMessage(
             "Cannot repost: No note selected or input mode active".to_string(),
-        )];
+        ))];
     }
 
     if let Some(selected_note) = state.selected_note() {
         if selected_note.pubkey == state.user.current_user_pubkey {
-            vec![Msg::UpdateStatusMessage(
+            vec![Msg::System(SystemMsg::UpdateStatusMessage(
                 "Cannot repost your own note".to_string(),
-            )]
+            ))]
         } else if has_user_reposted_note(selected_note, state) {
-            vec![Msg::UpdateStatusMessage(
+            vec![Msg::System(SystemMsg::UpdateStatusMessage(
                 "You have already reposted this note".to_string(),
-            )]
+            ))]
         } else {
             vec![Msg::SendRepost(selected_note.clone())]
         }
     } else {
-        vec![Msg::UpdateStatusMessage(
+        vec![Msg::System(SystemMsg::UpdateStatusMessage(
             "No note selected for repost".to_string(),
-        )]
+        ))]
     }
 }
 
@@ -266,9 +266,9 @@ fn translate_nostr_event(event: Event) -> Vec<Msg> {
                     crate::domain::nostr::Profile::new(event.pubkey, event.created_at, metadata);
                 vec![Msg::UpdateProfile(event.pubkey, profile)]
             } else {
-                vec![Msg::ShowError(
+                vec![Msg::System(SystemMsg::ShowError(
                     "Failed to parse profile metadata".to_string(),
-                )]
+                ))]
             }
         }
 
@@ -282,10 +282,10 @@ fn translate_nostr_event(event: Event) -> Vec<Msg> {
 
         _ => {
             // Unknown event types are logged but not processed
-            vec![Msg::UpdateStatusMessage(format!(
+            vec![Msg::System(SystemMsg::UpdateStatusMessage(format!(
                 "Received unknown event type: {}",
                 event.kind
-            ))]
+            )))]
         }
     }
 }
@@ -484,7 +484,10 @@ mod tests {
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result.len(), 2);
         match (&result[0], &result[1]) {
-            (Msg::Ui(UiMsg::ShowReply(reply_event)), Msg::UpdateStatusMessage(msg)) => {
+            (
+                Msg::Ui(UiMsg::ShowReply(reply_event)),
+                Msg::System(SystemMsg::UpdateStatusMessage(msg)),
+            ) => {
                 assert_eq!(reply_event.id, event.id);
                 assert!(msg.contains("Replying to"));
             }
@@ -556,7 +559,9 @@ mod tests {
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result.len(), 1);
         match &result[0] {
-            Msg::UpdateStatusMessage(msg) => assert!(msg.contains("Cannot reply")),
+            Msg::System(SystemMsg::UpdateStatusMessage(msg)) => {
+                assert!(msg.contains("Cannot reply"))
+            }
             _ => panic!("Expected status message"),
         }
     }
@@ -601,7 +606,9 @@ mod tests {
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result.len(), 1);
         match &result[0] {
-            Msg::UpdateStatusMessage(msg) => assert!(msg.contains("already liked")),
+            Msg::System(SystemMsg::UpdateStatusMessage(msg)) => {
+                assert!(msg.contains("already liked"))
+            }
             _ => panic!("Expected status message about duplicate like"),
         }
     }
@@ -628,7 +635,9 @@ mod tests {
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result.len(), 1);
         match &result[0] {
-            Msg::UpdateStatusMessage(msg) => assert!(msg.contains("Cannot repost your own note")),
+            Msg::System(SystemMsg::UpdateStatusMessage(msg)) => {
+                assert!(msg.contains("Cannot repost your own note"))
+            }
             _ => panic!("Expected status message about own note repost"),
         }
     }

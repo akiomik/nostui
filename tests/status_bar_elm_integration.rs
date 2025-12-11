@@ -1,6 +1,9 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    core::msg::Msg, core::state::AppState, core::update::update, domain::nostr::Profile,
+    core::msg::{system::SystemMsg, Msg},
+    core::state::AppState,
+    core::update::update,
+    domain::nostr::Profile,
     presentation::components::elm_status_bar::ElmStatusBar,
 };
 
@@ -130,9 +133,11 @@ async fn test_status_bar_integration_full_flow() {
     assert!(initial_name.contains(":"));
 
     // 2. Stop loading and set initial message
-    let (state, _) = update(Msg::SetLoading(false), initial_state);
+    let (state, _) = update(Msg::System(SystemMsg::SetLoading(false)), initial_state);
     let (state, _) = update(
-        Msg::UpdateStatusMessage("Connecting to relays...".to_string()),
+        Msg::System(SystemMsg::UpdateStatusMessage(
+            "Connecting to relays...".to_string(),
+        )),
         state,
     );
 
@@ -154,12 +159,14 @@ async fn test_status_bar_integration_full_flow() {
 
     // 4. Update status to connected
     let (state, _) = update(
-        Msg::UpdateStatusMessage("Connected to 3 relays".to_string()),
+        Msg::System(SystemMsg::UpdateStatusMessage(
+            "Connected to 3 relays".to_string(),
+        )),
         state,
     );
 
     // 5. Clear status message
-    let (final_state, _) = update(Msg::ClearStatusMessage, state);
+    let (final_state, _) = update(Msg::System(SystemMsg::ClearStatusMessage), state);
 
     assert!(final_state.system.status_message.is_none());
     assert_eq!(ElmStatusBar::get_connection_status(&final_state), "Ready");

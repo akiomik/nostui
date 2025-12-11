@@ -286,7 +286,7 @@ fn test_elm_home_validation_edge_cases() -> Result<()> {
     let msgs = translate_raw_to_domain(RawMsg::Key(key), &state);
     assert_eq!(msgs.len(), 1);
     match &msgs[0] {
-        Msg::UpdateStatusMessage(msg) => {
+        Msg::System(nostui::core::msg::system::SystemMsg::UpdateStatusMessage(msg)) => {
             assert!(msg.contains("Cannot repost your own note"));
         }
         _ => panic!("Expected status message about own note repost"),

@@ -44,14 +44,6 @@ pub enum Msg {
     SendRepost(Event),
     SendTextNote(String, Vec<Tag>),
 
-    // Legacy system messages (to be phased out)
-    UpdateStatusMessage(String),
-    ClearStatusMessage,
-    SetLoading(bool),
-    UpdateAppFps(f64),
-    UpdateRenderFps(f64),
-    ShowError(String),
-
     // Legacy user messages (to be phased out)
     UpdateProfile(PublicKey, Profile),
 }
@@ -86,7 +78,7 @@ mod tests {
 
     #[test]
     fn test_msg_serialization() {
-        let msg = Msg::UpdateStatusMessage("test".to_string());
+        let msg = Msg::System(SystemMsg::UpdateStatusMessage("test".to_string()));
         let serialized = serde_json::to_string(&msg).unwrap();
         let deserialized: Msg = serde_json::from_str(&serialized).unwrap();
         assert_eq!(msg, deserialized);
