@@ -1,11 +1,9 @@
 use nostr_sdk::prelude::*;
-use std::cmp::Reverse;
 
 use crate::{
     core::cmd::Cmd,
-    core::msg::{system::SystemMsg, Msg},
+    core::msg::{system::SystemMsg, timeline::TimelineMsg, Msg},
     core::state::AppState,
-    domain::nostr::SortableEvent,
 };
 
 /// Elm-like update function
@@ -18,65 +16,83 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             (state, commands)
         }
 
-        // Timeline operations
+        // Timeline messages (delegated to TimelineState)
+        Msg::Timeline(timeline_msg) => {
+            let commands = state.timeline.update(timeline_msg);
+            (state, commands)
+        }
+
+        // Legacy timeline operations (backward compatibility - to be phased out)
         Msg::ScrollUp => {
-            if !state.ui.show_input && !state.timeline_is_empty() {
-                let new_index = match state.timeline.selected_index {
-                    Some(i) if i > 0 => Some(i - 1),
-                    Some(_) => Some(0),
-                    None => Some(0),
-                };
-                state.timeline.selected_index = new_index;
+            if !state.ui.show_input {
+                let commands = state.timeline.update(TimelineMsg::ScrollUp);
+                (state, commands)
+            } else {
+                (state, vec![])
             }
-            (state, vec![])
         }
 
         Msg::ScrollDown => {
-            if !state.ui.show_input && !state.timeline_is_empty() {
-                let max_index = state.timeline_len().saturating_sub(1);
-                let new_index = match state.timeline.selected_index {
-                    Some(i) if i < max_index => Some(i + 1),
-                    Some(_) => Some(max_index),
-                    None => Some(0),
-                };
-                state.timeline.selected_index = new_index;
+            if !state.ui.show_input {
+                let commands = state.timeline.update(TimelineMsg::ScrollDown);
+                (state, commands)
+            } else {
+                (state, vec![])
             }
-            (state, vec![])
         }
 
         Msg::ScrollToTop => {
-            if !state.ui.show_input && !state.timeline_is_empty() {
-                state.timeline.selected_index = Some(0);
+            if !state.ui.show_input {
+                let commands = state.timeline.update(TimelineMsg::ScrollToTop);
+                (state, commands)
+            } else {
+                (state, vec![])
             }
-            (state, vec![])
         }
 
         Msg::ScrollToBottom => {
-            if !state.ui.show_input && !state.timeline_is_empty() {
-                state.timeline.selected_index = Some(state.timeline_len().saturating_sub(1));
+            if !state.ui.show_input {
+                let commands = state.timeline.update(TimelineMsg::ScrollToBottom);
+                (state, commands)
+            } else {
+                (state, vec![])
             }
-            (state, vec![])
         }
 
         Msg::SelectNote(index) => {
-            state.timeline.selected_index = Some(index);
-            (state, vec![])
+            let commands = state.timeline.update(TimelineMsg::SelectNote(index));
+            (state, commands)
         }
 
         Msg::DeselectNote => {
-            state.timeline.selected_index = None;
-            state.system.status_message = None; // Clear status message as well
-            (state, vec![])
+            let commands = state.timeline.update(TimelineMsg::DeselectNote);
+            // Also clear system status message for legacy compatibility
+            state.system.status_message = None;
+            (state, commands)
         }
 
-        // Nostr domain events
-        Msg::AddNote(event) => update_add_note(event, state),
+        // Legacy Nostr domain events (backward compatibility - to be phased out)
+        Msg::AddNote(event) => {
+            let commands = state.timeline.update(TimelineMsg::AddNote(event));
+            (state, commands)
+        }
 
-        Msg::AddReaction(reaction) => update_add_reaction(reaction, state),
+        Msg::AddReaction(reaction) => {
+            let commands = state.timeline.update(TimelineMsg::AddReaction(reaction));
+            (state, commands)
+        }
 
-        Msg::AddRepost(repost) => update_add_repost(repost, state),
+        Msg::AddRepost(repost) => {
+            let commands = state.timeline.update(TimelineMsg::AddRepost(repost));
+            (state, commands)
+        }
 
-        Msg::AddZapReceipt(zap_receipt) => update_add_zap_receipt(zap_receipt, state),
+        Msg::AddZapReceipt(zap_receipt) => {
+            let commands = state
+                .timeline
+                .update(TimelineMsg::AddZapReceipt(zap_receipt));
+            (state, commands)
+        }
 
         Msg::SendReaction(target_event) => {
             let cmd = Cmd::SendReaction {
@@ -250,79 +266,7 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
     }
 }
 
-// Removed: update_receive_event function - domain events are now handled directly
-
-/// Add note to timeline
-fn update_add_note(event: Event, mut state: AppState) -> (AppState, Vec<Cmd>) {
-    let sortable_event = SortableEvent::new(event);
-    let note = Reverse(sortable_event);
-
-    state.timeline.notes.find_or_insert(note);
-
-    // Adjust selection position (new note was added)
-    if let Some(selected) = state.timeline.selected_index {
-        state.timeline.selected_index = Some(selected + 1);
-    }
-
-    (state, vec![])
-}
-
-/// Add reaction
-fn update_add_reaction(reaction: Event, mut state: AppState) -> (AppState, Vec<Cmd>) {
-    if let Some(event_id) = extract_last_event_id(&reaction) {
-        state
-            .timeline
-            .reactions
-            .entry(event_id)
-            .or_default()
-            .insert(reaction);
-    }
-    (state, vec![])
-}
-
-/// Add repost
-fn update_add_repost(repost: Event, mut state: AppState) -> (AppState, Vec<Cmd>) {
-    if let Some(event_id) = extract_last_event_id(&repost) {
-        state
-            .timeline
-            .reposts
-            .entry(event_id)
-            .or_default()
-            .insert(repost);
-    }
-    (state, vec![])
-}
-
-/// Add zap receipt
-fn update_add_zap_receipt(zap_receipt: Event, mut state: AppState) -> (AppState, Vec<Cmd>) {
-    if let Some(event_id) = extract_last_event_id(&zap_receipt) {
-        state
-            .timeline
-            .zap_receipts
-            .entry(event_id)
-            .or_default()
-            .insert(zap_receipt);
-    }
-    (state, vec![])
-}
-
-/// Helper function to extract event_id from the last e tag of an event
-fn extract_last_event_id(event: &Event) -> Option<EventId> {
-    use nostr_sdk::nostr::{Alphabet, SingleLetterTag, TagKind, TagStandard};
-
-    event
-        .tags
-        .iter()
-        .filter(|tag| tag.kind() == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::E)))
-        .next_back()
-        .and_then(|tag| {
-            if let Some(TagStandard::Event { event_id, .. }) = tag.as_standardized() {
-                Some(*event_id)
-            } else {
-                None
-            }
-        })
-}
+// Timeline-related helper functions moved to src/core/state/timeline.rs
 
 #[cfg(test)]
 mod tests {
