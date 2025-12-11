@@ -29,17 +29,7 @@ pub enum Msg {
     // UI operations (new path)
     Ui(UiMsg),
 
-    // Legacy timeline messages (to be phased out)
-    ScrollUp,
-    ScrollDown,
-    ScrollToTop,
-    ScrollToBottom,
-    SelectNote(usize),
-    DeselectNote,
-    AddNote(Event),
-    AddReaction(Event),
-    AddRepost(Event),
-    AddZapReceipt(Event),
+    // Legacy nostr messages (to be phased out)
     SendReaction(Event),
     SendRepost(Event),
     SendTextNote(String, Vec<Tag>),
@@ -64,7 +54,7 @@ mod tests {
     fn test_msg_frequent_detection() {
         // Domain messages are not frequent
         assert!(!Msg::System(SystemMsg::Quit).is_frequent());
-        assert!(!Msg::ScrollUp.is_frequent());
+        assert!(!Msg::Timeline(TimelineMsg::ScrollUp).is_frequent());
         use crate::core::msg::ui::UiMsg;
         assert!(!Msg::Ui(UiMsg::ShowNewNote).is_frequent());
     }
@@ -72,8 +62,14 @@ mod tests {
     #[test]
     fn test_msg_equality() {
         assert_eq!(Msg::System(SystemMsg::Quit), Msg::System(SystemMsg::Quit));
-        assert_eq!(Msg::ScrollUp, Msg::ScrollUp);
-        assert_ne!(Msg::ScrollUp, Msg::ScrollDown);
+        assert_eq!(
+            Msg::Timeline(TimelineMsg::ScrollUp),
+            Msg::Timeline(TimelineMsg::ScrollUp)
+        );
+        assert_ne!(
+            Msg::Timeline(TimelineMsg::ScrollUp),
+            Msg::Timeline(TimelineMsg::ScrollDown)
+        );
     }
 
     #[test]

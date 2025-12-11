@@ -1,3 +1,4 @@
+use crate::core::msg::timeline::TimelineMsg;
 use crate::core::msg::ui::UiMsg;
 use color_eyre::eyre::Result;
 use ratatui::{prelude::Rect, Frame};
@@ -134,7 +135,7 @@ impl Component for ElmHomeAdapter {
                 // Handle Unselect in normal mode (deselect note and clear status)
                 if let Some(runtime) = &mut self.elm_runtime {
                     use crate::core::msg::Msg;
-                    runtime.send_msg(Msg::DeselectNote);
+                    runtime.send_msg(Msg::Timeline(TimelineMsg::DeselectNote));
                     if let Err(e) = runtime.run_update_cycle() {
                         log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
                         return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));

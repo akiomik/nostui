@@ -270,7 +270,9 @@ pub struct ElmRuntimeStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::msg::timeline::TimelineMsg;
     use crate::core::msg::ui::UiMsg;
+    use crate::core::msg::Msg;
     use nostr_sdk::prelude::*;
 
     fn create_test_runtime() -> ElmRuntime {
@@ -329,13 +331,13 @@ mod tests {
 
         // Add event to timeline
         let event = create_test_event();
-        runtime.process_message(Msg::AddNote(event));
+        runtime.process_message(Msg::Timeline(TimelineMsg::AddNote(event)));
 
         // Test scroll operations
-        runtime.process_message(Msg::ScrollDown);
+        runtime.process_message(Msg::Timeline(TimelineMsg::ScrollDown));
         assert_eq!(runtime.state().timeline.selected_index, Some(0));
 
-        runtime.process_message(Msg::ScrollUp);
+        runtime.process_message(Msg::Timeline(TimelineMsg::ScrollUp));
         assert_eq!(runtime.state().timeline.selected_index, Some(0)); // No change as it's at the top
     }
 
@@ -415,7 +417,7 @@ mod tests {
 
         // Receive text note
         let text_event = create_test_event();
-        runtime.process_message(Msg::AddNote(text_event));
+        runtime.process_message(Msg::Timeline(TimelineMsg::AddNote(text_event)));
         assert_eq!(runtime.state().timeline_len(), 1);
 
         // Receive metadata event

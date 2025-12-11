@@ -116,15 +116,25 @@ fn translate_action_to_msg(
     use crate::integration::legacy::action::Action;
 
     match action {
-        Action::ScrollUp => vec![Msg::ScrollUp],
-        Action::ScrollDown => vec![Msg::ScrollDown],
-        Action::ScrollToTop => vec![Msg::ScrollToTop],
-        Action::ScrollToBottom => vec![Msg::ScrollToBottom],
+        Action::ScrollUp => vec![Msg::Timeline(
+            crate::core::msg::timeline::TimelineMsg::ScrollUp,
+        )],
+        Action::ScrollDown => vec![Msg::Timeline(
+            crate::core::msg::timeline::TimelineMsg::ScrollDown,
+        )],
+        Action::ScrollToTop => vec![Msg::Timeline(
+            crate::core::msg::timeline::TimelineMsg::ScrollToTop,
+        )],
+        Action::ScrollToBottom => vec![Msg::Timeline(
+            crate::core::msg::timeline::TimelineMsg::ScrollToBottom,
+        )],
         Action::NewTextNote => vec![Msg::Ui(UiMsg::ShowNewNote)],
         Action::ReplyTextNote => translate_reply_key(state),
         Action::React => translate_like_key(state),
         Action::Repost => translate_repost_key(state),
-        Action::Unselect => vec![Msg::DeselectNote],
+        Action::Unselect => vec![Msg::Timeline(
+            crate::core::msg::timeline::TimelineMsg::DeselectNote,
+        )],
         Action::Quit => vec![Msg::System(SystemMsg::Quit)],
         Action::Suspend => vec![Msg::System(SystemMsg::Suspend)],
         Action::SubmitTextNote => {
@@ -272,13 +282,21 @@ fn translate_nostr_event(event: Event) -> Vec<Msg> {
             }
         }
 
-        Kind::TextNote => vec![Msg::AddNote(event)],
+        Kind::TextNote => vec![Msg::Timeline(
+            crate::core::msg::timeline::TimelineMsg::AddNote(event),
+        )],
 
-        Kind::Reaction => vec![Msg::AddReaction(event)],
+        Kind::Reaction => vec![Msg::Timeline(
+            crate::core::msg::timeline::TimelineMsg::AddReaction(event),
+        )],
 
-        Kind::Repost => vec![Msg::AddRepost(event)],
+        Kind::Repost => vec![Msg::Timeline(
+            crate::core::msg::timeline::TimelineMsg::AddRepost(event),
+        )],
 
-        Kind::ZapReceipt => vec![Msg::AddZapReceipt(event)],
+        Kind::ZapReceipt => vec![Msg::Timeline(
+            crate::core::msg::timeline::TimelineMsg::AddZapReceipt(event),
+        )],
 
         _ => {
             // Unknown event types are logged but not processed
@@ -386,25 +404,50 @@ mod tests {
         // Test vim-style navigation
         let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::ScrollDown]);
+        assert_eq!(
+            result,
+            vec![Msg::Timeline(
+                crate::core::msg::timeline::TimelineMsg::ScrollDown
+            )]
+        );
 
         // Test Escape key in normal mode (should use keybinding configuration)
         let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::DeselectNote]);
+        assert_eq!(
+            result,
+            vec![Msg::Timeline(
+                crate::core::msg::timeline::TimelineMsg::DeselectNote
+            )]
+        );
 
         let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::ScrollUp]);
+        assert_eq!(
+            result,
+            vec![Msg::Timeline(
+                crate::core::msg::timeline::TimelineMsg::ScrollUp
+            )]
+        );
 
         // Test arrow keys
         let key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::ScrollDown]);
+        assert_eq!(
+            result,
+            vec![Msg::Timeline(
+                crate::core::msg::timeline::TimelineMsg::ScrollDown
+            )]
+        );
 
         let key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::ScrollUp]);
+        assert_eq!(
+            result,
+            vec![Msg::Timeline(
+                crate::core::msg::timeline::TimelineMsg::ScrollUp
+            )]
+        );
     }
 
     #[test]
@@ -502,7 +545,12 @@ mod tests {
         // Test text note
         let event = create_test_event();
         let result = translate_raw_to_domain(RawMsg::ReceiveEvent(event.clone()), &_state);
-        assert_eq!(result, vec![Msg::AddNote(event)]);
+        assert_eq!(
+            result,
+            vec![Msg::Timeline(
+                crate::core::msg::timeline::TimelineMsg::AddNote(event)
+            )]
+        );
 
         // Test metadata event
         let keys = Keys::generate();
