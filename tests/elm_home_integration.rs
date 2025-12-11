@@ -245,7 +245,9 @@ fn test_elm_home_translator_integration() -> Result<()> {
     let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
     let msgs = translate_raw_to_domain(RawMsg::Key(key), &state);
     assert!(!msgs.is_empty());
-    assert!(msgs.iter().any(|msg| matches!(msg, Msg::ShowReply(_))));
+    assert!(msgs
+        .iter()
+        .any(|msg| matches!(msg, Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(_)))));
 
     // Test repost key translation
     let key = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE);

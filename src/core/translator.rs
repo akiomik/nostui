@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use nostr_sdk::prelude::*;
 
 use crate::{
-    core::msg::{system::SystemMsg, Msg},
+    core::msg::{system::SystemMsg, ui::UiMsg, Msg},
     core::raw_msg::RawMsg,
     core::state::AppState,
 };
@@ -73,14 +73,14 @@ fn translate_input_mode_keys(key: crossterm::event::KeyEvent, state: &AppState) 
             code: KeyCode::Char('p'),
             modifiers: KeyModifiers::CONTROL,
             ..
-        } => vec![Msg::SubmitNote],
+        } => vec![Msg::Ui(UiMsg::SubmitNote)],
 
         KeyEvent {
             code: KeyCode::Esc, ..
         } => {
             // In input mode, always cancel input
             if state.ui.show_input {
-                vec![Msg::CancelInput]
+                vec![Msg::Ui(UiMsg::CancelInput)]
             } else {
                 // In normal mode, use keybinding configuration
                 translate_normal_mode_keys(key, state)
@@ -120,7 +120,7 @@ fn translate_action_to_msg(
         Action::ScrollDown => vec![Msg::ScrollDown],
         Action::ScrollToTop => vec![Msg::ScrollToTop],
         Action::ScrollToBottom => vec![Msg::ScrollToBottom],
-        Action::NewTextNote => vec![Msg::ShowNewNote],
+        Action::NewTextNote => vec![Msg::Ui(UiMsg::ShowNewNote)],
         Action::ReplyTextNote => translate_reply_key(state),
         Action::React => translate_like_key(state),
         Action::Repost => translate_repost_key(state),
@@ -130,7 +130,7 @@ fn translate_action_to_msg(
         Action::SubmitTextNote => {
             // Only process submit in input mode
             if state.ui.show_input {
-                vec![Msg::SubmitNote]
+                vec![Msg::Ui(UiMsg::SubmitNote)]
             } else {
                 vec![]
             }
@@ -154,7 +154,7 @@ fn translate_reply_key(state: &AppState) -> Vec<Msg> {
             )]
         } else {
             vec![
-                Msg::ShowReply(selected_note.clone()),
+                Msg::Ui(UiMsg::ShowReply(selected_note.clone())),
                 Msg::UpdateStatusMessage(format!(
                     "Replying to {}...",
                     get_display_name(selected_note, state)
@@ -430,7 +430,7 @@ mod tests {
         // Test Ctrl+P in input mode (submit)
         let key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::SubmitNote]);
+        assert_eq!(result, vec![Msg::Ui(UiMsg::SubmitNote)]);
 
         // Test plain Enter in input mode (now delegated to TextArea)
         state.ui.input_content = "Test".to_string();
@@ -441,7 +441,7 @@ mod tests {
         // Test Escape in input mode
         let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::CancelInput]);
+        assert_eq!(result, vec![Msg::Ui(UiMsg::CancelInput)]);
 
         // Test character input (now delegated to TextArea)
         state.ui.input_content = "Hello".to_string();
@@ -484,7 +484,7 @@ mod tests {
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result.len(), 2);
         match (&result[0], &result[1]) {
-            (Msg::ShowReply(reply_event), Msg::UpdateStatusMessage(msg)) => {
+            (Msg::Ui(UiMsg::ShowReply(reply_event)), Msg::UpdateStatusMessage(msg)) => {
                 assert_eq!(reply_event.id, event.id);
                 assert!(msg.contains("Replying to"));
             }
