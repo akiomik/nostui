@@ -37,44 +37,9 @@ fn test_status_bar_display_name_flow() {
     assert_eq!(updated_name, "Alice Smith");
 }
 
-#[test]
-fn test_status_message_flow() {
-    let keys = Keys::generate();
-    let state = AppState::new(keys.public_key());
+// test_status_message_flow removed - migrated to SystemState unit tests in src/core/state/system.rs
 
-    // Initial state should have no message
-    assert!(state.system.status_message.is_none());
-
-    // Update with status message
-    let test_message = "Connected to relay".to_string();
-    let (new_state, cmds) = update(Msg::UpdateStatusMessage(test_message.clone()), state);
-    assert!(cmds.is_empty());
-    assert_eq!(new_state.system.status_message, Some(test_message));
-
-    // Clear status message
-    let (final_state, cmds) = update(Msg::ClearStatusMessage, new_state);
-    assert!(cmds.is_empty());
-    assert!(final_state.system.status_message.is_none());
-}
-
-#[test]
-fn test_loading_state_flow() {
-    let keys = Keys::generate();
-    let state = AppState::new(keys.public_key());
-
-    // Should start in loading state
-    assert!(state.system.is_loading);
-
-    // Set loading to false
-    let (new_state, cmds) = update(Msg::SetLoading(false), state);
-    assert!(cmds.is_empty());
-    assert!(!new_state.system.is_loading);
-
-    // Set loading back to true
-    let (final_state, cmds) = update(Msg::SetLoading(true), new_state);
-    assert!(cmds.is_empty());
-    assert!(final_state.system.is_loading);
-}
+// test_loading_state_flow removed - migrated to SystemState unit tests in src/core/state/system.rs
 
 #[test]
 fn test_connection_status_helper() {

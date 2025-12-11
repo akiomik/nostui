@@ -9,6 +9,10 @@ use crate::{
     integration::legacy::mode::Mode,
 };
 
+pub mod system;
+
+pub use system::{FpsData, SystemState};
+
 /// Unified application state
 #[derive(Debug, Clone, Default)]
 pub struct AppState {
@@ -69,26 +73,6 @@ pub struct UserState {
     pub current_user_pubkey: PublicKey,
 }
 
-/// System-related state
-#[derive(Debug, Clone)]
-pub struct SystemState {
-    pub should_quit: bool,
-    pub should_suspend: bool,
-    pub fps_data: FpsData,
-    pub status_message: Option<String>,
-    pub is_loading: bool,
-}
-
-/// FPS measurement data
-#[derive(Debug, Clone)]
-pub struct FpsData {
-    pub app_fps: f64,
-    pub render_fps: f64,
-    pub app_frames: u32,
-    pub render_frames: u32,
-    // Only holds computed values since Instant is not Clone
-}
-
 impl Default for TimelineState {
     fn default() -> Self {
         Self {
@@ -108,29 +92,6 @@ impl Default for UserState {
         Self {
             profiles: HashMap::new(),
             current_user_pubkey: dummy_keys.public_key(),
-        }
-    }
-}
-
-impl Default for SystemState {
-    fn default() -> Self {
-        Self {
-            should_quit: false,
-            should_suspend: false,
-            fps_data: FpsData::default(),
-            status_message: None,
-            is_loading: true,
-        }
-    }
-}
-
-impl Default for FpsData {
-    fn default() -> Self {
-        Self {
-            app_fps: 0.0,
-            render_fps: 0.0,
-            app_frames: 0,
-            render_frames: 0,
         }
     }
 }
