@@ -192,7 +192,15 @@ fn translate_like_key(state: &AppState) -> Vec<Msg> {
                 "You have already liked this note".to_string(),
             ))]
         } else {
-            vec![Msg::SendReaction(selected_note.clone())]
+            {
+                let note1 = selected_note.id.to_bech32().unwrap_or_default();
+                vec![
+                    Msg::System(SystemMsg::UpdateStatusMessage(format!("[Liked] {}", note1))),
+                    Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
+                        selected_note.clone(),
+                    )),
+                ]
+            }
         }
     } else {
         vec![Msg::System(SystemMsg::UpdateStatusMessage(
@@ -219,7 +227,18 @@ fn translate_repost_key(state: &AppState) -> Vec<Msg> {
                 "You have already reposted this note".to_string(),
             ))]
         } else {
-            vec![Msg::SendRepost(selected_note.clone())]
+            {
+                let note1 = selected_note.id.to_bech32().unwrap_or_default();
+                vec![
+                    Msg::System(SystemMsg::UpdateStatusMessage(format!(
+                        "[Reposted] {}",
+                        note1
+                    ))),
+                    Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendRepost(
+                        selected_note.clone(),
+                    )),
+                ]
+            }
         }
     } else {
         vec![Msg::System(SystemMsg::UpdateStatusMessage(
@@ -520,7 +539,17 @@ mod tests {
         // Test like key
         let key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result, vec![Msg::SendReaction(event.clone())]);
+        assert_eq!(result.len(), 2);
+        match (&result[0], &result[1]) {
+            (
+                Msg::System(SystemMsg::UpdateStatusMessage(msg)),
+                Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(ev)),
+            ) => {
+                assert!(msg.contains("[Liked]"));
+                assert_eq!(ev.id, event.id);
+            }
+            _ => panic!("Expected status then SendReaction"),
+        }
 
         // Test reply key
         let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
@@ -630,10 +659,15 @@ mod tests {
         // First like should work
         let key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result.len(), 1);
-        match &result[0] {
-            Msg::SendReaction(_) => {}
-            _ => panic!("Expected SendReaction message"),
+        assert_eq!(result.len(), 2);
+        match (&result[0], &result[1]) {
+            (
+                Msg::System(SystemMsg::UpdateStatusMessage(msg)),
+                Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(_)),
+            ) => {
+                assert!(msg.contains("[Liked]"));
+            }
+            _ => panic!("Expected status then SendReaction"),
         }
 
         // Simulate user has already reacted

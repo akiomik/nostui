@@ -2,11 +2,13 @@ use nostr_sdk::prelude::*;
 
 use crate::{infrastructure::config::Config, integration::legacy::mode::Mode};
 
+pub mod nostr;
 pub mod system;
 pub mod timeline;
 pub mod ui;
 pub mod user;
 
+pub use nostr::NostrState;
 pub use system::{FpsData, SystemState};
 pub use timeline::TimelineState;
 pub use user::UserState;
@@ -18,6 +20,7 @@ pub struct AppState {
     pub ui: UiState,
     pub user: UserState,
     pub system: SystemState,
+    pub nostr: NostrState,
     pub config: ConfigState,
 }
 

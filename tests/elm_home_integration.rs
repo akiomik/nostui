@@ -240,12 +240,16 @@ fn test_elm_home_translator_integration() -> Result<()> {
     // Test like key translation
     let key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
     let msgs = translate_raw_to_domain(RawMsg::Key(key), &state);
-    assert_eq!(msgs.len(), 1);
-    match &msgs[0] {
-        Msg::SendReaction(reaction_event) => {
+    assert_eq!(msgs.len(), 2);
+    match (&msgs[0], &msgs[1]) {
+        (
+            Msg::System(nostui::core::msg::system::SystemMsg::UpdateStatusMessage(msg)),
+            Msg::Nostr(nostui::core::msg::nostr::NostrMsg::SendReaction(reaction_event)),
+        ) => {
+            assert!(msg.contains("[Liked]"));
             assert_eq!(reaction_event.id, event.id);
         }
-        _ => panic!("Expected SendReaction message"),
+        _ => panic!("Expected status then SendReaction message"),
     }
 
     // Test reply key translation
@@ -259,12 +263,16 @@ fn test_elm_home_translator_integration() -> Result<()> {
     // Test repost key translation
     let key = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE);
     let msgs = translate_raw_to_domain(RawMsg::Key(key), &state);
-    assert_eq!(msgs.len(), 1);
-    match &msgs[0] {
-        Msg::SendRepost(repost_event) => {
+    assert_eq!(msgs.len(), 2);
+    match (&msgs[0], &msgs[1]) {
+        (
+            Msg::System(nostui::core::msg::system::SystemMsg::UpdateStatusMessage(msg)),
+            Msg::Nostr(nostui::core::msg::nostr::NostrMsg::SendRepost(repost_event)),
+        ) => {
+            assert!(msg.contains("[Reposted]"));
             assert_eq!(repost_event.id, event.id);
         }
-        _ => panic!("Expected SendRepost message"),
+        _ => panic!("Expected status then SendRepost message"),
     }
 
     Ok(())

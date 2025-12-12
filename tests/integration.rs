@@ -87,7 +87,9 @@ fn test_complex_workflow() {
     runtime.send_msg(Msg::Timeline(TimelineMsg::AddNote(event.clone())));
 
     // 2. Send reaction
-    runtime.send_msg(Msg::SendReaction(event.clone()));
+    runtime.send_msg(Msg::Nostr(
+        nostui::core::msg::nostr::NostrMsg::SendReaction(event.clone()),
+    ));
 
     // 3. Start reply
     runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(event)));
