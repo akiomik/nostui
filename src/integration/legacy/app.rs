@@ -134,12 +134,34 @@ impl App {
         loop {
             if let Some(e) = tui.next().await {
                 match e {
-                    tui::Event::Quit => action_tx.send(Action::Quit)?,
-                    tui::Event::Tick => action_tx.send(Action::Tick)?,
+                    tui::Event::Quit => {
+                        action_tx.send(Action::Quit)?;
+                        if let Some(ref mut runtime) = self.elm_runtime {
+                            use crate::core::raw_msg::RawMsg;
+                            runtime.send_raw_msg(RawMsg::Quit);
+                        }
+                    }
+                    tui::Event::Tick => {
+                        action_tx.send(Action::Tick)?;
+                        if let Some(ref mut runtime) = self.elm_runtime {
+                            use crate::core::raw_msg::RawMsg;
+                            runtime.send_raw_msg(RawMsg::Tick);
+                        }
+                    }
                     tui::Event::Render => action_tx.send(Action::Render)?,
-                    tui::Event::Resize(x, y) => action_tx.send(Action::Resize(x, y))?,
+                    tui::Event::Resize(x, y) => {
+                        action_tx.send(Action::Resize(x, y))?;
+                        if let Some(ref mut runtime) = self.elm_runtime {
+                            use crate::core::raw_msg::RawMsg;
+                            runtime.send_raw_msg(RawMsg::Resize(x, y));
+                        }
+                    }
                     tui::Event::Key(key) => {
                         action_tx.send(Action::Key(key))?;
+                        if let Some(ref mut runtime) = self.elm_runtime {
+                            use crate::core::raw_msg::RawMsg;
+                            runtime.send_raw_msg(RawMsg::Key(key));
+                        }
 
                         // Check if we're in input mode and should block keyindings
                         let should_block_keybindings = if self.config.experimental.use_elm_home {
@@ -267,12 +289,26 @@ impl App {
                 }
                 match action {
                     Action::Tick => {
+                        if let Some(ref mut runtime) = self.elm_runtime {
+                            use crate::core::raw_msg::RawMsg;
+                            runtime.send_raw_msg(RawMsg::Tick);
+                        }
                         self.last_tick_key_events.drain(..);
                     }
-                    Action::Quit => self.should_quit = true,
+                    Action::Quit => {
+                        if let Some(ref mut runtime) = self.elm_runtime {
+                            use crate::core::raw_msg::RawMsg;
+                            runtime.send_raw_msg(RawMsg::Quit);
+                        }
+                        self.should_quit = true
+                    }
                     Action::Suspend => self.should_suspend = true,
                     Action::Resume => self.should_suspend = false,
                     Action::Resize(w, h) => {
+                        if let Some(ref mut runtime) = self.elm_runtime {
+                            use crate::core::raw_msg::RawMsg;
+                            runtime.send_raw_msg(RawMsg::Resize(w, h));
+                        }
                         tui.resize(Rect::new(0, 0, w, h))?;
                         tui.draw(|f| {
                             for component in self.components.iter_mut() {
@@ -297,7 +333,11 @@ impl App {
                             }
                         })?;
                     }
-                    Action::ReceiveEvent(ref _event) => {
+                    Action::ReceiveEvent(ref event) => {
+                        if let Some(ref mut runtime) = self.elm_runtime {
+                            use crate::core::raw_msg::RawMsg;
+                            runtime.send_raw_msg(RawMsg::ReceiveEvent(event.clone()));
+                        }
                         // log::debug!("Got nostr event: {}", event.id);
                     }
                     Action::SendReaction(ref target_event) => {
