@@ -16,90 +16,40 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             (state, commands)
         }
 
-        // Timeline messages (delegated to TimelineState)
-        Msg::Timeline(timeline_msg) => {
-            let commands = state.timeline.update(timeline_msg);
-            (state, commands)
-        }
-
         // User messages (delegated to UserState)
         Msg::User(user_msg) => {
             let commands = state.user.update(user_msg);
             (state, commands)
         }
 
-        // Legacy timeline operations (backward compatibility - to be phased out)
-        Msg::ScrollUp => {
-            if !state.ui.show_input {
-                let commands = state.timeline.update(TimelineMsg::ScrollUp);
-                (state, commands)
-            } else {
-                (state, vec![])
+        // Timeline messages (delegated to TimelineState)
+        Msg::Timeline(timeline_msg) => {
+            // When input is shown, ignore scroll-related timeline msgs
+            if state.ui.show_input {
+                match timeline_msg {
+                    TimelineMsg::ScrollUp
+                    | TimelineMsg::ScrollDown
+                    | TimelineMsg::ScrollToTop
+                    | TimelineMsg::ScrollToBottom => {
+                        return (state, vec![]);
+                    }
+                    _ => {}
+                }
             }
-        }
 
-        Msg::ScrollDown => {
-            if !state.ui.show_input {
-                let commands = state.timeline.update(TimelineMsg::ScrollDown);
-                (state, commands)
-            } else {
-                (state, vec![])
-            }
-        }
-
-        Msg::ScrollToTop => {
-            if !state.ui.show_input {
-                let commands = state.timeline.update(TimelineMsg::ScrollToTop);
-                (state, commands)
-            } else {
-                (state, vec![])
-            }
-        }
-
-        Msg::ScrollToBottom => {
-            if !state.ui.show_input {
-                let commands = state.timeline.update(TimelineMsg::ScrollToBottom);
-                (state, commands)
-            } else {
-                (state, vec![])
-            }
-        }
-
-        Msg::SelectNote(index) => {
-            let commands = state.timeline.update(TimelineMsg::SelectNote(index));
+            let commands = match timeline_msg {
+                TimelineMsg::DeselectNote => {
+                    let cmds = state.timeline.update(TimelineMsg::DeselectNote);
+                    // Clear system status message when explicitly deselecting via TimelineMsg
+                    state.system.status_message = None;
+                    cmds
+                }
+                other => state.timeline.update(other),
+            };
             (state, commands)
         }
 
-        Msg::DeselectNote => {
-            let commands = state.timeline.update(TimelineMsg::DeselectNote);
-            // Also clear system status message for legacy compatibility
-            state.system.status_message = None;
-            (state, commands)
-        }
-
-        // Legacy Nostr domain events (backward compatibility - to be phased out)
-        Msg::AddNote(event) => {
-            let commands = state.timeline.update(TimelineMsg::AddNote(event));
-            (state, commands)
-        }
-
-        Msg::AddReaction(reaction) => {
-            let commands = state.timeline.update(TimelineMsg::AddReaction(reaction));
-            (state, commands)
-        }
-
-        Msg::AddRepost(repost) => {
-            let commands = state.timeline.update(TimelineMsg::AddRepost(repost));
-            (state, commands)
-        }
-
-        Msg::AddZapReceipt(zap_receipt) => {
-            let commands = state
-                .timeline
-                .update(TimelineMsg::AddZapReceipt(zap_receipt));
-            (state, commands)
-        }
-
+        // Legacy nostr operations (backward compatibility - to be phased out)
         Msg::SendReaction(target_event) => {
             let cmd = Cmd::SendReaction {
                 target_event: target_event.clone(),
@@ -212,7 +162,7 @@ mod tests {
         // With empty timeline, selection index remains unchanged
         state.timeline.selected_index = Some(5);
 
-        let (new_state, cmds) = update(Msg::ScrollUp, state);
+        let (new_state, cmds) = update(Msg::Timeline(TimelineMsg::ScrollUp), state);
 
         // No change due to empty timeline
         assert_eq!(new_state.timeline.selected_index, Some(5));
@@ -225,7 +175,7 @@ mod tests {
         state.timeline.selected_index = Some(3);
         // With empty timeline, selection index doesn't change
 
-        let (new_state, _cmds) = update(Msg::ScrollDown, state);
+        let (new_state, _cmds) = update(Msg::Timeline(TimelineMsg::ScrollDown), state);
 
         // No change due to empty timeline
         assert_eq!(new_state.timeline.selected_index, Some(3));
@@ -317,7 +267,7 @@ mod tests {
     fn test_update_add_text_note() {
         let state = create_test_state();
         let event = create_test_event();
-        let (new_state, cmds) = update(Msg::AddNote(event), state);
+        let (new_state, cmds) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
 
         assert_eq!(new_state.timeline.notes.len(), 1);
         assert!(cmds.is_empty());
@@ -339,7 +289,7 @@ mod tests {
     #[test]
     fn test_update_select_note() {
         let state = create_test_state();
-        let (new_state, cmds) = update(Msg::SelectNote(3), state);
+        let (new_state, cmds) = update(Msg::Timeline(TimelineMsg::SelectNote(3)), state);
 
         assert_eq!(new_state.timeline.selected_index, Some(3));
         assert!(cmds.is_empty());
@@ -351,7 +301,7 @@ mod tests {
         state.timeline.selected_index = Some(5);
         state.system.status_message = Some("test status".to_string());
 
-        let (new_state, cmds) = update(Msg::DeselectNote, state);
+        let (new_state, cmds) = update(Msg::Timeline(TimelineMsg::DeselectNote), state);
 
         assert_eq!(new_state.timeline.selected_index, None);
         assert_eq!(new_state.system.status_message, None);

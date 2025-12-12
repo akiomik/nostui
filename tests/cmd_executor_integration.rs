@@ -1,9 +1,15 @@
 use color_eyre::eyre::Result;
 use nostr_sdk::prelude::*;
 use nostui::{
-    core::cmd::Cmd, core::cmd_executor::CmdExecutor, core::msg::Msg, core::raw_msg::RawMsg,
-    core::state::AppState, core::translator::translate_raw_to_domain,
-    integration::elm_integration::ElmRuntime, integration::legacy::action::Action,
+    core::{
+        cmd::Cmd,
+        cmd_executor::CmdExecutor,
+        msg::{timeline::TimelineMsg, Msg},
+        raw_msg::RawMsg,
+        state::AppState,
+        translator::translate_raw_to_domain,
+    },
+    integration::{elm_integration::ElmRuntime, legacy::action::Action},
 };
 use tokio::sync::mpsc;
 
@@ -83,8 +89,8 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
     );
 
     // Add event to timeline first so the key can work
-    runtime.send_msg(Msg::AddNote(target_event.clone()));
-    runtime.send_msg(Msg::ScrollDown); // Select the note
+    runtime.send_msg(Msg::Timeline(TimelineMsg::AddNote(target_event.clone())));
+    runtime.send_msg(Msg::Timeline(TimelineMsg::ScrollDown)); // Select the note
 
     // Process messages to update state before testing translator
     let _initial_commands = runtime.process_all_messages();

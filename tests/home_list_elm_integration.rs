@@ -1,6 +1,10 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    core::msg::Msg, core::state::AppState, core::update::update,
+    core::{
+        msg::{timeline::TimelineMsg, Msg},
+        state::AppState,
+        update::update,
+    },
     presentation::components::elm_home_list::ElmHomeList,
 };
 
@@ -61,7 +65,7 @@ fn test_selection_state_integration_with_elm() {
         let event = EventBuilder::text_note(format!("Test note {}", i))
             .sign_with_keys(&keys)
             .unwrap();
-        let (new_state, _) = update(Msg::AddNote(event), state);
+        let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
 
@@ -70,7 +74,7 @@ fn test_selection_state_integration_with_elm() {
     assert!(!ElmHomeList::get_selection_info(&state).has_selection);
 
     // Select first item via Elm update
-    let (new_state, _) = update(Msg::SelectNote(0), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::SelectNote(0)), state);
     state = new_state;
     let info = ElmHomeList::get_selection_info(&state);
     assert_eq!(info.selected_index, Some(0));
@@ -79,14 +83,14 @@ fn test_selection_state_integration_with_elm() {
     assert!(!info.is_at_bottom);
 
     // Select last item
-    let (new_state, _) = update(Msg::SelectNote(4), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::SelectNote(4)), state);
     state = new_state;
     let info = ElmHomeList::get_selection_info(&state);
     assert!(info.is_at_bottom);
     assert!(!info.is_at_top);
 
     // Deselect
-    let (new_state, _) = update(Msg::DeselectNote, state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::DeselectNote), state);
     state = new_state;
     assert!(!ElmHomeList::get_selection_info(&state).has_selection);
 }
@@ -105,7 +109,7 @@ fn test_scrollable_conditions() {
     let event = EventBuilder::text_note("Test note")
         .sign_with_keys(&keys)
         .unwrap();
-    let (new_state, _) = update(Msg::AddNote(event), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
     state = new_state;
     assert!(ElmHomeList::is_scrollable(&state));
 
@@ -130,12 +134,12 @@ fn test_scroll_with_input_shown() {
         let event = EventBuilder::text_note(format!("Note {}", i))
             .sign_with_keys(&keys)
             .unwrap();
-        let (new_state, _) = update(Msg::AddNote(event), state);
+        let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
 
     // Select first item
-    let (new_state, _) = update(Msg::ScrollDown, state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::ScrollDown), state);
     state = new_state;
     assert_eq!(state.timeline.selected_index, Some(0));
 
@@ -144,11 +148,11 @@ fn test_scroll_with_input_shown() {
     state = new_state;
 
     // Try to scroll while input is shown - should not change selection
-    let (new_state, _) = update(Msg::ScrollDown, state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::ScrollDown), state);
     state = new_state;
     assert_eq!(state.timeline.selected_index, Some(0)); // Unchanged
 
-    let (new_state, _) = update(Msg::ScrollUp, state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::ScrollUp), state);
     state = new_state;
     assert_eq!(state.timeline.selected_index, Some(0)); // Still unchanged
 }
@@ -163,12 +167,12 @@ fn test_out_of_bounds_selection_handling() {
         let event = EventBuilder::text_note(format!("Note {}", i))
             .sign_with_keys(&keys)
             .unwrap();
-        let (new_state, _) = update(Msg::AddNote(event), state);
+        let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
 
     // Try to select out of bounds index
-    let (new_state, _) = update(Msg::SelectNote(10), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::SelectNote(10)), state);
     state = new_state;
 
     // The update function should handle out of bounds gracefully
@@ -195,11 +199,11 @@ fn test_selection_info_comprehensive() {
     let event = EventBuilder::text_note("Single note")
         .sign_with_keys(&keys)
         .unwrap();
-    let (new_state, _) = update(Msg::AddNote(event), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
     state = new_state;
 
     // Select the only note
-    let (new_state, _) = update(Msg::SelectNote(0), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::SelectNote(0)), state);
     state = new_state;
     let info = ElmHomeList::get_selection_info(&state);
     assert_eq!(info.timeline_length, 1);
@@ -212,12 +216,12 @@ fn test_selection_info_comprehensive() {
         let event = EventBuilder::text_note(format!("Note {}", i))
             .sign_with_keys(&keys)
             .unwrap();
-        let (new_state, _) = update(Msg::AddNote(event), state);
+        let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
 
     // Select middle
-    let (new_state, _) = update(Msg::SelectNote(2), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::SelectNote(2)), state);
     state = new_state;
     let info = ElmHomeList::get_selection_info(&state);
     assert_eq!(info.timeline_length, 5);
@@ -240,7 +244,7 @@ async fn test_complete_ui_workflow() {
         let event = EventBuilder::text_note(format!("Timeline post #{}", i))
             .sign_with_keys(&keys)
             .unwrap();
-        let (new_state, _) = update(Msg::AddNote(event), state);
+        let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
 
@@ -249,12 +253,15 @@ async fn test_complete_ui_workflow() {
     assert_eq!(ElmHomeList::get_selection_info(&state).timeline_length, 10);
 
     // 4. Navigate through timeline
-    let (new_state, _) = update(Msg::ScrollDown, state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::ScrollDown), state);
     state = new_state;
     assert_eq!(state.timeline.selected_index, Some(0));
 
     // 5. Jump to bottom
-    let (new_state, _) = update(Msg::ScrollToBottom, state);
+    let (new_state, _) = update(
+        Msg::Timeline(nostui::core::msg::timeline::TimelineMsg::ScrollToBottom),
+        state,
+    );
     state = new_state;
     let info = ElmHomeList::get_selection_info(&state);
     assert!(info.is_at_bottom);
@@ -267,7 +274,7 @@ async fn test_complete_ui_workflow() {
 
     // 7. Try to scroll (should be ignored)
     let old_selection = state.timeline.selected_index;
-    let (new_state, _) = update(Msg::ScrollUp, state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::ScrollUp), state);
     state = new_state;
     assert_eq!(state.timeline.selected_index, old_selection);
 
@@ -277,7 +284,10 @@ async fn test_complete_ui_workflow() {
     assert!(ElmHomeList::is_scrollable(&state));
 
     // 9. Final navigation test
-    let (new_state, _) = update(Msg::ScrollToTop, state);
+    let (new_state, _) = update(
+        Msg::Timeline(nostui::core::msg::timeline::TimelineMsg::ScrollToTop),
+        state,
+    );
     state = new_state;
     let final_info = ElmHomeList::get_selection_info(&state);
     assert!(final_info.is_at_top);

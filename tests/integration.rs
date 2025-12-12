@@ -1,8 +1,10 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    core::msg::{system::SystemMsg, Msg},
-    core::state::AppState,
-    core::update::update,
+    core::{
+        msg::{system::SystemMsg, timeline::TimelineMsg, Msg},
+        state::AppState,
+        update::update,
+    },
     integration::elm_integration::ElmRuntime,
     Cmd, VERSION,
 };
@@ -82,7 +84,7 @@ fn test_complex_workflow() {
     let event = EventBuilder::text_note("Test post")
         .sign_with_keys(&keys)
         .unwrap();
-    runtime.send_msg(Msg::AddNote(event.clone()));
+    runtime.send_msg(Msg::Timeline(TimelineMsg::AddNote(event.clone())));
 
     // 2. Send reaction
     runtime.send_msg(Msg::SendReaction(event.clone()));
@@ -206,7 +208,7 @@ fn test_performance_many_events() {
         let event = EventBuilder::text_note(format!("Event #{}", i))
             .sign_with_keys(&keys)
             .unwrap();
-        runtime.send_msg(Msg::AddNote(event));
+        runtime.send_msg(Msg::Timeline(TimelineMsg::AddNote(event)));
     }
 
     runtime.process_all_messages();

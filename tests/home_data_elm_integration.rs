@@ -1,6 +1,10 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    core::msg::Msg, core::state::AppState, core::update::update,
+    core::{
+        msg::{timeline::TimelineMsg, Msg},
+        state::AppState,
+        update::update,
+    },
     presentation::components::elm_home_data::ElmHomeData,
 };
 use ratatui::{prelude::*, widgets::Padding};
@@ -29,7 +33,7 @@ fn test_timeline_note_management_flow() {
     let event1 = EventBuilder::text_note("First post")
         .sign_with_keys(&keys)
         .unwrap();
-    let (new_state, cmds) = update(Msg::AddNote(event1.clone()), state);
+    let (new_state, cmds) = update(Msg::Timeline(TimelineMsg::AddNote(event1.clone())), state);
     state = new_state;
     assert!(cmds.is_empty());
 
@@ -43,7 +47,7 @@ fn test_timeline_note_management_flow() {
     let event2 = EventBuilder::text_note("Second post")
         .sign_with_keys(&keys)
         .unwrap();
-    let (new_state, _) = update(Msg::AddNote(event2.clone()), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event2.clone())), state);
     state = new_state;
 
     // Should have 2 notes now
@@ -104,7 +108,10 @@ fn test_social_engagement_flow() {
         .sign_with_keys(&author_keys)
         .unwrap();
     let post_id = original_post.id;
-    let (new_state, _) = update(Msg::AddNote(original_post.clone()), state);
+    let (new_state, _) = update(
+        Msg::Timeline(TimelineMsg::AddNote(original_post.clone())),
+        state,
+    );
     state = new_state;
 
     // Initially no engagement
@@ -117,7 +124,7 @@ fn test_social_engagement_flow() {
     let reaction = EventBuilder::reaction(&original_post, "👍")
         .sign_with_keys(&reactor_keys)
         .unwrap();
-    let (new_state, _) = update(Msg::AddReaction(reaction), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddReaction(reaction)), state);
     state = new_state;
 
     // Should have 1 reaction
@@ -128,7 +135,7 @@ fn test_social_engagement_flow() {
     let repost = EventBuilder::repost(&original_post, None)
         .sign_with_keys(&reactor_keys)
         .unwrap();
-    let (new_state, _) = update(Msg::AddRepost(repost), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddRepost(repost)), state);
     state = new_state;
 
     // Should have 1 reaction and 1 repost
@@ -147,7 +154,7 @@ fn test_timeline_selection_flow() {
         let event = EventBuilder::text_note(format!("Post #{}", i))
             .sign_with_keys(&keys)
             .unwrap();
-        let (new_state, _) = update(Msg::AddNote(event), state);
+        let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
 
@@ -155,19 +162,19 @@ fn test_timeline_selection_flow() {
     assert!(ElmHomeData::get_selected_note(&state).is_none());
 
     // Select first note
-    let (new_state, _) = update(Msg::SelectNote(0), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::SelectNote(0)), state);
     state = new_state;
     let selected = ElmHomeData::get_selected_note(&state);
     assert!(selected.is_some());
     assert!(selected.unwrap().content.contains("Post #"));
 
     // Select invalid note
-    let (new_state, _) = update(Msg::SelectNote(10), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::SelectNote(10)), state);
     state = new_state;
     assert!(ElmHomeData::get_selected_note(&state).is_none());
 
     // Deselect
-    let (new_state, _) = update(Msg::DeselectNote, state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::DeselectNote), state);
     state = new_state;
     assert!(ElmHomeData::get_selected_note(&state).is_none());
 }
@@ -184,7 +191,7 @@ fn test_timeline_interaction_conditions() {
     let event = EventBuilder::text_note("Test post")
         .sign_with_keys(&keys)
         .unwrap();
-    let (new_state, _) = update(Msg::AddNote(event), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
     state = new_state;
 
     // Now can interact
@@ -215,9 +222,9 @@ fn test_timeline_stats_calculation() {
         .sign_with_keys(&keys2)
         .unwrap();
 
-    let (new_state, _) = update(Msg::AddNote(event1.clone()), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event1.clone())), state);
     state = new_state;
-    let (new_state, _) = update(Msg::AddNote(event2.clone()), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event2.clone())), state);
     state = new_state;
 
     // Add profiles
@@ -237,7 +244,7 @@ fn test_timeline_stats_calculation() {
     let reaction = EventBuilder::reaction(&event1, "👍")
         .sign_with_keys(&keys2)
         .unwrap();
-    let (new_state, _) = update(Msg::AddReaction(reaction), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddReaction(reaction)), state);
     state = new_state;
 
     // Calculate stats
@@ -259,7 +266,7 @@ fn test_text_note_creation() {
     let event = EventBuilder::text_note("Test content")
         .sign_with_keys(&keys)
         .unwrap();
-    let (new_state, _) = update(Msg::AddNote(event.clone()), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event.clone())), state);
     state = new_state;
 
     let metadata = Metadata::new().name("Test User");
@@ -297,9 +304,9 @@ async fn test_complete_home_data_workflow() {
         .sign_with_keys(&author_keys)
         .unwrap();
 
-    let (new_state, _) = update(Msg::AddNote(post1.clone()), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(post1.clone())), state);
     state = new_state;
-    let (new_state, _) = update(Msg::AddNote(post2.clone()), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(post2.clone())), state);
     state = new_state;
 
     // 3. Receive author profile
@@ -316,13 +323,13 @@ async fn test_complete_home_data_workflow() {
     let reaction = EventBuilder::reaction(&post1, "🚀")
         .sign_with_keys(&user_keys)
         .unwrap();
-    let (new_state, _) = update(Msg::AddReaction(reaction), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddReaction(reaction)), state);
     state = new_state;
 
     let repost = EventBuilder::repost(&post2, None)
         .sign_with_keys(&user_keys)
         .unwrap();
-    let (new_state, _) = update(Msg::AddRepost(repost), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddRepost(repost)), state);
     state = new_state;
 
     // 5. Verify final state
@@ -372,7 +379,7 @@ fn test_large_timeline_performance() {
         let event = EventBuilder::text_note(format!("Large timeline post #{}", i))
             .sign_with_keys(&keys)
             .unwrap();
-        let (new_state, _) = update(Msg::AddNote(event), state);
+        let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
 

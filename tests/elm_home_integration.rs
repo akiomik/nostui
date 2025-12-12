@@ -2,10 +2,12 @@ use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
 use nostui::{
-    core::msg::Msg,
-    core::raw_msg::RawMsg,
-    core::state::AppState,
-    core::translator::translate_raw_to_domain,
+    core::{
+        msg::{timeline::TimelineMsg, Msg},
+        raw_msg::RawMsg,
+        state::AppState,
+        translator::translate_raw_to_domain,
+    },
     presentation::components::elm_home::{ElmHome, HomeAction},
 };
 
@@ -176,7 +178,12 @@ fn test_elm_home_key_processing() -> Result<()> {
     let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
     let msgs = home.process_key(key, &state);
     // Navigation is handled by translator.rs, component returns empty
-    assert!(msgs.is_empty() || msgs.iter().all(|msg| matches!(msg, Msg::ScrollDown)));
+    assert!(
+        msgs.is_empty()
+            || msgs
+                .iter()
+                .all(|msg| matches!(msg, Msg::Timeline(TimelineMsg::ScrollDown)))
+    );
 
     // Test input mode key processing
     state.ui.show_input = true;
