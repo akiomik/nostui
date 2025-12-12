@@ -309,7 +309,11 @@ impl App {
                         } else if let Some(ref mut runtime) = self.elm_runtime {
                             log::info!("App.rs: Using ElmRuntime - sending SendReaction message");
                             use crate::core::msg::Msg;
-                            runtime.send_msg(Msg::SendReaction(target_event.clone()));
+                            runtime.send_msg(Msg::Nostr(
+                                crate::core::msg::nostr::NostrMsg::SendReaction(
+                                    target_event.clone(),
+                                ),
+                            ));
                         } else {
                             log::info!("App.rs: Using legacy system");
                             // Legacy fallback
@@ -330,7 +334,9 @@ impl App {
                         } else if let Some(ref mut runtime) = self.elm_runtime {
                             log::info!("App.rs: Using ElmRuntime - sending SendRepost message");
                             use crate::core::msg::Msg;
-                            runtime.send_msg(Msg::SendRepost(target_event.clone()));
+                            runtime.send_msg(Msg::Nostr(
+                                crate::core::msg::nostr::NostrMsg::SendRepost(target_event.clone()),
+                            ));
                         } else {
                             log::info!("App.rs: Using legacy system");
                             // Legacy fallback

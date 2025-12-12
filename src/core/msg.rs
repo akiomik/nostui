@@ -2,12 +2,14 @@
 use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 
+pub mod nostr;
 pub mod system;
 pub mod timeline;
 pub mod ui;
 pub mod user;
 
 use crate::domain::nostr::Profile;
+use nostr::NostrMsg;
 use system::SystemMsg;
 use timeline::TimelineMsg;
 use ui::UiMsg;
@@ -29,10 +31,8 @@ pub enum Msg {
     // UI operations (new path)
     Ui(UiMsg),
 
-    // Legacy nostr messages (to be phased out)
-    SendReaction(Event),
-    SendRepost(Event),
-    SendTextNote(String, Vec<Tag>),
+    // Nostr operations (delegated to NostrMsg)
+    Nostr(NostrMsg),
 
     // Legacy user messages (to be phased out)
     UpdateProfile(PublicKey, Profile),

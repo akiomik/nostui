@@ -1,5 +1,3 @@
-use nostr_sdk::prelude::*;
-
 use crate::{
     core::cmd::Cmd,
     core::msg::{timeline::TimelineMsg, ui::UiMsg, user::UserMsg, Msg},
@@ -49,38 +47,10 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             (state, commands)
         }
 
-        // Legacy nostr operations (backward compatibility - to be phased out)
-        Msg::SendReaction(target_event) => {
-            let cmd = Cmd::SendReaction {
-                target_event: target_event.clone(),
-            };
-            let note1 = target_event.id.to_bech32().unwrap_or_default();
-            state.system.status_message = Some(format!("[Liked] {}", note1));
-            (state, vec![cmd])
-        }
-
-        Msg::SendRepost(target_event) => {
-            let cmd = Cmd::SendRepost {
-                target_event: target_event.clone(),
-            };
-            let note1 = target_event.id.to_bech32().unwrap_or_default();
-            state.system.status_message = Some(format!("[Reposted] {}", note1));
-            (state, vec![cmd])
-        }
-
-        Msg::SendTextNote(content, tags) => {
-            log::info!(
-                "update.rs: Processing Msg::SendTextNote - content: '{}', tags: {:?}",
-                content,
-                tags
-            );
-            let cmd = Cmd::SendTextNote {
-                content: content.clone(),
-                tags,
-            };
-            state.system.status_message = Some(format!("[Posted] {}", content));
-            log::info!("update.rs: Generated Cmd::SendTextNote, returning command");
-            (state, vec![cmd])
+        // Nostr operations (delegated via NostrState)
+        Msg::Nostr(nostr_msg) => {
+            let commands = state.nostr.update(nostr_msg);
+            (state, commands)
         }
 
         // New UI path (delegates to existing behavior for now)
@@ -132,6 +102,7 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nostr_sdk::prelude::*;
 
     fn create_test_state() -> AppState {
         AppState::new(Keys::generate().public_key())
@@ -249,9 +220,14 @@ mod tests {
     fn test_update_send_reaction() {
         let state = create_test_state();
         let target_event = create_test_event();
-        let (new_state, cmds) = update(Msg::SendReaction(target_event.clone()), state);
+        let (new_state, cmds) = update(
+            Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
+                target_event.clone(),
+            )),
+            state,
+        );
 
-        assert!(new_state.system.status_message.is_some());
+        assert!(new_state.system.status_message.is_none());
         assert_eq!(cmds.len(), 1);
         match &cmds[0] {
             Cmd::SendReaction {

@@ -220,8 +220,12 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
     let event2 = create_test_event();
 
     // Send multiple commands
-    runtime.send_msg(Msg::SendReaction(event1.clone()));
-    runtime.send_msg(Msg::SendRepost(event2.clone()));
+    runtime.send_msg(Msg::Nostr(
+        nostui::core::msg::nostr::NostrMsg::SendReaction(event1.clone()),
+    ));
+    runtime.send_msg(Msg::Nostr(nostui::core::msg::nostr::NostrMsg::SendRepost(
+        event2.clone(),
+    )));
     runtime.send_msg(Msg::System(nostui::core::msg::system::SystemMsg::Resize(
         100, 50,
     )));
@@ -286,7 +290,9 @@ fn test_error_handling_in_execution() -> Result<()> {
     drop(action_rx);
 
     // Try to send a command - should handle the error gracefully
-    runtime.send_msg(Msg::SendReaction(create_test_event()));
+    runtime.send_msg(Msg::Nostr(
+        nostui::core::msg::nostr::NostrMsg::SendReaction(create_test_event()),
+    ));
     let result = runtime.run_update_cycle();
 
     // The execution should succeed but log the error

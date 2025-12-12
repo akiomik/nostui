@@ -346,7 +346,9 @@ mod tests {
         let mut runtime = create_test_runtime();
         let target_event = create_test_event();
 
-        let commands = runtime.process_message(Msg::SendReaction(target_event.clone()));
+        let commands = runtime.process_message(Msg::Nostr(
+            crate::core::msg::nostr::NostrMsg::SendReaction(target_event.clone()),
+        ));
         assert_eq!(commands.len(), 1);
 
         match &commands[0] {
@@ -358,8 +360,9 @@ mod tests {
             _ => panic!("Expected SendReaction command"),
         }
 
-        // Check if status message is set
-        assert!(runtime.state().system.status_message.is_some());
+        // Status message is now set by translator when generating messages,
+        // not by update() on Msg::Nostr
+        assert!(runtime.state().system.status_message.is_none());
     }
 
     #[test]
@@ -471,8 +474,12 @@ mod tests {
         let target_event = create_test_event();
 
         // Send messages that generate commands
-        runtime.process_message(Msg::SendReaction(target_event.clone()));
-        runtime.process_message(Msg::SendRepost(target_event));
+        runtime.process_message(Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
+            target_event.clone(),
+        )));
+        runtime.process_message(Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendRepost(
+            target_event,
+        )));
 
         // Get pending commands
         let pending = runtime.pending_commands();
@@ -500,7 +507,9 @@ mod tests {
 
         // Send a message that generates a command
         let target_event = create_test_event();
-        runtime.send_msg(Msg::SendReaction(target_event.clone()));
+        runtime.send_msg(Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
+            target_event.clone(),
+        )));
 
         // Process messages and execute commands
         let execution_log = runtime.run_update_cycle().unwrap();
@@ -535,7 +544,9 @@ mod tests {
 
         // Send a message that generates a command
         let target_event = create_test_event();
-        runtime.send_msg(Msg::SendReaction(target_event.clone()));
+        runtime.send_msg(Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
+            target_event.clone(),
+        )));
 
         // Process messages and execute commands
         let execution_log = runtime.run_update_cycle().unwrap();

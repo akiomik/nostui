@@ -149,7 +149,9 @@ impl Component for ElmHomeAdapter {
                     let state = runtime.state();
                     if let Some(selected_event) = state.selected_note() {
                         use crate::core::msg::Msg;
-                        runtime.send_msg(Msg::SendReaction(selected_event.clone()));
+                        runtime.send_msg(Msg::Nostr(
+                            crate::core::msg::nostr::NostrMsg::SendReaction(selected_event.clone()),
+                        ));
                         if let Err(e) = runtime.run_update_cycle() {
                             log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
                             return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));
@@ -165,7 +167,9 @@ impl Component for ElmHomeAdapter {
                     let state = runtime.state();
                     if let Some(selected_event) = state.selected_note() {
                         use crate::core::msg::Msg;
-                        runtime.send_msg(Msg::SendRepost(selected_event.clone()));
+                        runtime.send_msg(Msg::Nostr(
+                            crate::core::msg::nostr::NostrMsg::SendRepost(selected_event.clone()),
+                        ));
                         if let Err(e) = runtime.run_update_cycle() {
                             log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
                             return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));
@@ -180,7 +184,9 @@ impl Component for ElmHomeAdapter {
             Action::SendReaction(event) => {
                 if let Some(runtime) = &mut self.elm_runtime {
                     use crate::core::msg::Msg;
-                    runtime.send_msg(Msg::SendReaction(event.clone()));
+                    runtime.send_msg(Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
+                        event.clone(),
+                    )));
                     if let Err(e) = runtime.run_update_cycle() {
                         log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
                         return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));
@@ -191,7 +197,9 @@ impl Component for ElmHomeAdapter {
             Action::SendRepost(event) => {
                 if let Some(runtime) = &mut self.elm_runtime {
                     use crate::core::msg::Msg;
-                    runtime.send_msg(Msg::SendRepost(event.clone()));
+                    runtime.send_msg(Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendRepost(
+                        event.clone(),
+                    )));
                     if let Err(e) = runtime.run_update_cycle() {
                         log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
                         return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));
@@ -240,7 +248,10 @@ impl Component for ElmHomeAdapter {
             Action::SendTextNote(content, tags) => {
                 if let Some(runtime) = &mut self.elm_runtime {
                     use crate::core::msg::Msg;
-                    runtime.send_msg(Msg::SendTextNote(content.clone(), tags.clone()));
+                    runtime.send_msg(Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendTextNote(
+                        content.clone(),
+                        tags.clone(),
+                    )));
                     if let Err(e) = runtime.run_update_cycle() {
                         log::error!("ElmRuntime error in ElmHomeAdapter: {}", e);
                         return Ok(Some(Action::Error(format!("ElmRuntime error: {}", e))));
