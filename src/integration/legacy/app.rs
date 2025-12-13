@@ -90,7 +90,7 @@ impl App {
 
         let keys = Keys::parse(&self.config.privatekey)?;
         let conn = Connection::new(keys.clone(), self.config.relays.clone()).await?;
-        let (mut req_rx, event_tx, terminate_tx, conn_wrapper) = ConnectionProcess::new(conn)?;
+        let (mut req_rx, _event_tx, terminate_tx, conn_wrapper) = ConnectionProcess::new(conn)?;
         conn_wrapper.run();
 
         // Initialize NostrService for Elm architecture
@@ -305,7 +305,6 @@ impl App {
                         // When using ElmHome, actions are already processed by ElmHomeAdapter
                         if self.config.experimental.use_elm_home {
                             log::info!("App.rs: Using ElmHome - action already processed by adapter, skipping");
-                            // ElmHomeAdapter has already processed this action
                         } else if let Some(ref mut runtime) = self.elm_runtime {
                             log::info!("App.rs: Using ElmRuntime - sending SendReaction message");
                             use crate::core::msg::Msg;
@@ -314,15 +313,14 @@ impl App {
                                     target_event.clone(),
                                 ),
                             ));
+                            if let Err(e) = runtime.run_update_cycle() {
+                                log::error!("ElmRuntime error: {}", e);
+                                action_tx
+                                    .send(Action::Error(format!("ElmRuntime error: {}", e)))?;
+                            }
                         } else {
-                            log::info!("App.rs: Using legacy system");
-                            // Legacy fallback
-                            let event =
-                                EventBuilder::reaction(target_event, "+").sign_with_keys(&keys)?;
-                            // log::debug!("Send reaction: {}", event.id);
-                            event_tx.send(event)?;
-                            let note1 = target_event.id.to_bech32()?;
-                            action_tx.send(Action::SystemMessage(format!("[Liked] {note1}")))?;
+                            // In non-ElmHome mode, ElmRuntime must be available. Log error if missing.
+                            log::error!("App.rs: ElmRuntime not available to process SendReaction");
                         }
                     }
                     Action::SendRepost(ref target_event) => {
@@ -330,22 +328,20 @@ impl App {
                         // When using ElmHome, actions are already processed by ElmHomeAdapter
                         if self.config.experimental.use_elm_home {
                             log::info!("App.rs: Using ElmHome - action already processed by adapter, skipping");
-                            // ElmHomeAdapter has already processed this action
                         } else if let Some(ref mut runtime) = self.elm_runtime {
                             log::info!("App.rs: Using ElmRuntime - sending SendRepost message");
                             use crate::core::msg::Msg;
                             runtime.send_msg(Msg::Nostr(
                                 crate::core::msg::nostr::NostrMsg::SendRepost(target_event.clone()),
                             ));
+                            if let Err(e) = runtime.run_update_cycle() {
+                                log::error!("ElmRuntime error: {}", e);
+                                action_tx
+                                    .send(Action::Error(format!("ElmRuntime error: {}", e)))?;
+                            }
                         } else {
-                            log::info!("App.rs: Using legacy system");
-                            // Legacy fallback
-                            let event =
-                                EventBuilder::repost(target_event, None).sign_with_keys(&keys)?;
-                            // log::debug!("Send repost: {}", event.id);
-                            event_tx.send(event)?;
-                            let note1 = target_event.id.to_bech32()?;
-                            action_tx.send(Action::SystemMessage(format!("[Reposted] {note1}")))?;
+                            // In non-ElmHome mode, ElmRuntime must be available. Log error if missing.
+                            log::error!("App.rs: ElmRuntime not available to process SendRepost");
                         }
                     }
                     Action::SendTextNote(ref content, ref tags) => {
@@ -357,21 +353,18 @@ impl App {
                         // When using ElmHome, actions are already processed by ElmHomeAdapter
                         if self.config.experimental.use_elm_home {
                             log::info!("App.rs: Using ElmHome - action already processed by adapter, skipping");
-                            // ElmHomeAdapter has already processed this action
-                            // No need to process again to avoid duplication
                         } else if let Some(ref mut runtime) = self.elm_runtime {
                             log::info!("App.rs: Using ElmRuntime - sending SubmitNote message");
                             use crate::core::msg::Msg;
                             runtime.send_msg(Msg::Ui(UiMsg::SubmitNote));
+                            if let Err(e) = runtime.run_update_cycle() {
+                                log::error!("ElmRuntime error: {}", e);
+                                action_tx
+                                    .send(Action::Error(format!("ElmRuntime error: {}", e)))?;
+                            }
                         } else {
-                            log::info!("App.rs: Using legacy system");
-                            // Legacy fallback
-                            let event = EventBuilder::text_note(content)
-                                .tags(tags.iter().cloned())
-                                .sign_with_keys(&keys)?;
-                            // log::debug!("Send text note: {}", event.id);
-                            event_tx.send(event)?;
-                            action_tx.send(Action::SystemMessage(format!("[Posted] {content}")))?;
+                            // In non-ElmHome mode, ElmRuntime must be available. Log error if missing.
+                            log::error!("App.rs: ElmRuntime not available to process SendTextNote");
                         }
                     }
                     _ => {}
