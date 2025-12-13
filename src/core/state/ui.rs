@@ -9,7 +9,8 @@ impl UiState {
         match msg {
             UiMsg::ShowNewNote => {
                 self.reply_to = None;
-                self.show_input = true;
+                self.show_input = true; // TODO: migrate callers to UiMode and remove this flag
+                self.current_mode = crate::core::state::UiMode::Composing;
                 self.input_content.clear();
                 self.cursor_position = Default::default();
                 self.selection = None;
@@ -17,14 +18,16 @@ impl UiState {
             }
             UiMsg::ShowReply(target_event) => {
                 self.reply_to = Some(target_event);
-                self.show_input = true;
+                self.show_input = true; // TODO: migrate callers to UiMode and remove this flag
+                self.current_mode = crate::core::state::UiMode::Composing;
                 self.input_content.clear();
                 self.cursor_position = Default::default();
                 self.selection = None;
                 vec![]
             }
             UiMsg::CancelInput => {
-                self.show_input = false;
+                self.show_input = false; // TODO: migrate callers to UiMode and remove this flag
+                self.current_mode = crate::core::state::UiMode::Normal;
                 self.reply_to = None;
                 self.input_content.clear();
                 self.cursor_position = Default::default();
