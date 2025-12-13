@@ -1,6 +1,6 @@
 use nostr_sdk::prelude::*;
 
-use crate::{infrastructure::config::Config, integration::legacy::mode::Mode};
+use crate::infrastructure::config::Config;
 
 pub mod nostr;
 pub mod system;
@@ -31,13 +31,21 @@ pub struct ConfigState {
     pub config: Config,
 }
 
+/// High-level UI mode for keybindings and view switching
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum UiMode {
+    #[default]
+    Normal,
+    Composing,
+}
+
 /// UI-related state
 #[derive(Debug, Clone, Default)]
 pub struct UiState {
-    pub show_input: bool,
+    pub show_input: bool, // TODO: Remove after migrating all checks to UiMode
     pub input_content: String,
     pub reply_to: Option<Event>,
-    pub current_mode: Mode,
+    pub current_mode: UiMode,
     pub cursor_position: CursorPosition,
     pub selection: Option<TextSelection>,
     pub pending_input_keys: Vec<crossterm::event::KeyEvent>, // Queue for stateless TextArea processing
