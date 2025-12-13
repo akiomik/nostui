@@ -6,7 +6,8 @@ use color_eyre::eyre::Result;
 
 use nostui::{
     infrastructure::cli::Cli,
-    integration::legacy::app::App,
+    infrastructure::config::Config,
+    integration::app_runner::AppRunner,
     utils::{initialize_logging, initialize_panic_handler},
 };
 
@@ -16,8 +17,18 @@ async fn tokio_main() -> Result<()> {
     initialize_panic_handler()?;
 
     let args = <Cli as clap::Parser>::parse();
-    let mut app = App::new(args.tick_rate, args.frame_rate)?;
-    app.run().await?;
+
+    // Load configuration (file-based)
+    let config = Config::new()?;
+
+    // Override runtime rates from CLI for now (future: move tick/frame rates into Config)
+    let tick_rate = args.tick_rate;
+    let frame_rate = args.frame_rate;
+
+    // Initialize and run the new Elm AppRunner
+    let mut runner =
+        AppRunner::new_with_config(config.clone(), tick_rate, frame_rate, false).await?;
+    runner.run().await?;
 
     Ok(())
 }
