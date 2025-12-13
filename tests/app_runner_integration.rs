@@ -1,0 +1,53 @@
+use nostr_sdk::ToBech32;
+use nostui::core::raw_msg::RawMsg;
+use nostui::integration::app_runner::AppRunner;
+
+// Note: This test exercises headless mode. It avoids opening a real TUI and
+// network side effects are contained within NostrService which we won't drive far.
+
+#[tokio::test]
+async fn test_app_runner_headless_initialization() {
+    use nostr_sdk::prelude::*;
+
+    // Create runner in headless mode so it won't enter crossterm raw mode
+    let cfg = nostui::infrastructure::config::Config {
+        privatekey: Keys::generate().secret_key().to_bech32().unwrap(),
+        relays: vec!["wss://example.com".into()],
+        ..Default::default()
+    };
+
+    let runner = AppRunner::new_with_config(cfg, 10.0, 30.0, true)
+        .await
+        .expect("failed to create AppRunner");
+
+    // Basic sanity checks on internal runtime state
+    let state = runner.runtime().state().clone();
+    assert!(state.system.is_loading); // initial state starts loading
+}
+
+#[tokio::test]
+async fn test_app_runner_headless_one_loop_quit() {
+    // Headless runner
+    let cfg = nostui::infrastructure::config::Config {
+        privatekey: nostr_sdk::prelude::Keys::generate()
+            .secret_key()
+            .to_bech32()
+            .unwrap(),
+        relays: vec!["wss://example.com".into()],
+        ..Default::default()
+    };
+
+    let mut runner = AppRunner::new_with_config(cfg, 10.0, 30.0, true)
+        .await
+        .expect("failed to create AppRunner");
+
+    // Send a Quit to runtime before running, so the loop exits immediately
+    runner.runtime_mut().send_raw_msg(RawMsg::Quit);
+
+    // Run should exit quickly
+    let res = tokio::time::timeout(std::time::Duration::from_millis(50), runner.run()).await;
+    assert!(
+        res.is_ok(),
+        "runner.run() should complete promptly in headless quit scenario"
+    );
+}
