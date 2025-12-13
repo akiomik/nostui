@@ -229,6 +229,38 @@ fn test_selection_info_comprehensive() {
     assert!(!info.is_at_bottom);
 }
 
+#[test]
+fn test_clamps_selection_to_valid_range_in_draw() {
+    // Given: state with items and an out-of-bounds selection
+    let keys = Keys::generate();
+    let mut state = AppState::new(keys.public_key());
+
+    for i in 0..3 {
+        let ev = EventBuilder::text_note(format!("Note {}", i))
+            .sign_with_keys(&keys)
+            .unwrap();
+        let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(ev)), state);
+        state = new_state;
+    }
+
+    // Set selection to exactly len() (invalid index)
+    state.timeline.selected_index = Some(state.timeline.notes.len());
+
+    let list = ElmHomeList::new();
+
+    // When: we render using a test backend, draw should not panic due to OOB
+    let area = ratatui::prelude::Rect::new(0, 0, 80, 20);
+    let backend = ratatui::backend::TestBackend::new(area.width, area.height);
+    let mut terminal = ratatui::Terminal::new(backend).unwrap();
+
+    terminal
+        .draw(|f| {
+            let frame_area = f.area();
+            let _ = list.draw(&state, f, frame_area);
+        })
+        .unwrap();
+}
+
 #[tokio::test]
 async fn test_complete_ui_workflow() {
     let keys = Keys::generate();

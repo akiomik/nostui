@@ -54,8 +54,11 @@ impl ElmHomeList {
             (item.0, item.1)
         });
 
-        // Create list state from AppState
-        let mut list_state = self.create_list_state_from_app_state(state);
+        // Create list state from AppState, but clamp selection to valid range to avoid OOB
+        let mut list_state = tui_widget_list::ListState::default();
+        let safe_index =
+            Self::calculate_valid_scroll_position(state.timeline.selected_index, item_count);
+        list_state.select(safe_index);
 
         let list = ListView::new(builder, item_count)
             .block(Block::default().title("Timeline").padding(padding))
