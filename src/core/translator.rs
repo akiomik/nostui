@@ -287,44 +287,48 @@ fn get_display_name(note: &Event, state: &AppState) -> String {
 
 /// Translates Nostr events into domain events
 fn translate_nostr_event(event: Event) -> Vec<Msg> {
+    // Receiving any Nostr event implies that initial loading has progressed
+    // Clear the loading indicator on first event reception
+    let mut msgs = vec![Msg::System(SystemMsg::SetLoading(false))];
     match event.kind {
         Kind::Metadata => {
             // Parse metadata and update profile
             if let Ok(metadata) = Metadata::from_json(event.content.clone()) {
                 let profile =
                     crate::domain::nostr::Profile::new(event.pubkey, event.created_at, metadata);
-                vec![Msg::UpdateProfile(event.pubkey, profile)]
+                msgs.push(Msg::UpdateProfile(event.pubkey, profile));
             } else {
-                vec![Msg::System(SystemMsg::ShowError(
+                msgs.push(Msg::System(SystemMsg::ShowError(
                     "Failed to parse profile metadata".to_string(),
-                ))]
+                )));
             }
         }
 
-        Kind::TextNote => vec![Msg::Timeline(
+        Kind::TextNote => msgs.push(Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::AddNote(event),
-        )],
+        )),
 
-        Kind::Reaction => vec![Msg::Timeline(
+        Kind::Reaction => msgs.push(Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::AddReaction(event),
-        )],
+        )),
 
-        Kind::Repost => vec![Msg::Timeline(
+        Kind::Repost => msgs.push(Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::AddRepost(event),
-        )],
+        )),
 
-        Kind::ZapReceipt => vec![Msg::Timeline(
+        Kind::ZapReceipt => msgs.push(Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::AddZapReceipt(event),
-        )],
+        )),
 
         _ => {
             // Unknown event types are logged but not processed
-            vec![Msg::System(SystemMsg::UpdateStatusMessage(format!(
+            msgs.push(Msg::System(SystemMsg::UpdateStatusMessage(format!(
                 "Received unknown event type: {}",
                 event.kind
-            )))]
+            ))));
         }
     }
+    msgs
 }
 
 #[cfg(test)]
@@ -576,9 +580,10 @@ mod tests {
         let result = translate_raw_to_domain(RawMsg::ReceiveEvent(event.clone()), &_state);
         assert_eq!(
             result,
-            vec![Msg::Timeline(
-                crate::core::msg::timeline::TimelineMsg::AddNote(event)
-            )]
+            vec![
+                Msg::System(SystemMsg::SetLoading(false)),
+                Msg::Timeline(crate::core::msg::timeline::TimelineMsg::AddNote(event))
+            ]
         );
 
         // Test metadata event
@@ -589,12 +594,12 @@ mod tests {
             .unwrap();
 
         let result = translate_raw_to_domain(RawMsg::ReceiveEvent(metadata_event.clone()), &_state);
-        assert_eq!(result.len(), 1);
-        match &result[0] {
-            Msg::UpdateProfile(pubkey, _) => {
+        assert_eq!(result.len(), 2);
+        match (&result[0], &result[1]) {
+            (Msg::System(SystemMsg::SetLoading(false)), Msg::UpdateProfile(pubkey, _)) => {
                 assert_eq!(*pubkey, keys.public_key());
             }
-            _ => panic!("Expected UpdateProfile message"),
+            _ => panic!("Expected SetLoading(false) then UpdateProfile message"),
         }
     }
 
