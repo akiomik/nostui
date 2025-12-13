@@ -48,7 +48,7 @@ pub struct ExperimentalConfig {
 impl Default for ExperimentalConfig {
     fn default() -> Self {
         Self {
-            use_elm_home: false, // Default to legacy for safety
+            use_elm_home: true, // Default to Elm Home (can be overridden by user config)
             elm_cache_enabled: true,
             elm_performance_logging: false,
         }

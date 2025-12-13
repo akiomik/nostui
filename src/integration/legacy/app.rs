@@ -17,7 +17,7 @@ use crate::{
     integration::legacy::action::Action,
     integration::legacy::mode::Mode,
     integration::legacy::{
-        components::{fps::FpsCounter, home::Home, status_bar::StatusBar},
+        components::{fps::FpsCounter, status_bar::StatusBar},
         Component,
     },
 };
@@ -39,13 +39,10 @@ impl App {
         let config = Config::new()?;
         let pubkey = Keys::parse(config.privatekey.as_str())?.public_key();
 
-        // Create home component based on configuration
-        let home: Box<dyn Component> = if config.experimental.use_elm_home {
-            log::info!("Using experimental Elm Home component");
+        // Always use Elm Home component (legacy Home is removed from code path)
+        let home: Box<dyn Component> = {
+            log::info!("Using Elm Home component by default");
             Box::new(ElmHomeAdapter::new())
-        } else {
-            log::info!("Using legacy Home component");
-            Box::new(Home::new())
         };
 
         let fps = FpsCounter::default();
@@ -104,30 +101,16 @@ impl App {
         let elm_runtime =
             ElmRuntime::new_with_nostr_executor(initial_state, action_tx.clone(), nostr_cmd_tx);
 
-        // If using Elm Home, set the runtime in the adapter
-        if self.config.experimental.use_elm_home {
-            log::info!("Setting ElmRuntime in ElmHomeAdapter");
-            if let Some(home_component) = self.components.get_mut(0) {
-                log::info!("Found home component, checking if it's ElmHomeAdapter...");
-                if home_component.is_elm_home_adapter() {
-                    log::info!("Confirmed: component is ElmHomeAdapter");
-                    if let Some(elm_adapter) = home_component.as_elm_home_adapter() {
-                        elm_adapter.set_runtime(elm_runtime);
-                        log::info!("✅ ElmRuntime successfully set in ElmHomeAdapter");
-                    } else {
-                        log::error!("❌ Failed to cast to ElmHomeAdapter despite is_elm_home_adapter() == true");
-                    }
-                } else {
-                    log::error!("❌ Component is NOT ElmHomeAdapter! Got different component type");
-                    // Fallback: set runtime directly
-                    log::info!("Falling back to direct ElmRuntime setting");
-                    self.elm_runtime = Some(elm_runtime);
-                }
+        // Set ElmRuntime into ElmHomeAdapter (index 0) and keep a minimal fallback
+        if let Some(home_component) = self.components.get_mut(0) {
+            if let Some(adapter) = home_component.as_elm_home_adapter() {
+                adapter.set_runtime(elm_runtime);
             } else {
-                log::error!("❌ No home component found at index 0");
+                // Fallback: store runtime directly if the component wasn't the adapter
+                self.elm_runtime = Some(elm_runtime);
             }
         } else {
-            log::info!("Setting ElmRuntime directly (legacy mode)");
+            // Fallback: no component found, store runtime directly
             self.elm_runtime = Some(elm_runtime);
         }
 
@@ -164,7 +147,7 @@ impl App {
                         }
 
                         // Check if we're in input mode and should block keyindings
-                        let should_block_keybindings = if self.config.experimental.use_elm_home {
+                        let should_block_keybindings = {
                             log::debug!("App.rs: Using elm_home, checking input mode");
                             if let Some(home_component) = self.components.first() {
                                 log::debug!("App.rs: Found home component at index 0");
@@ -201,9 +184,6 @@ impl App {
                                 log::warn!("App.rs: No home component found at index 0");
                                 false
                             }
-                        } else {
-                            log::debug!("App.rs: Not using elm_home");
-                            false
                         };
 
                         if !should_block_keybindings {
