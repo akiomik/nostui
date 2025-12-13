@@ -99,13 +99,10 @@ impl Config {
                     .or_insert_with(|| cmd.clone());
             }
         }
-        for (mode, default_styles) in default_config.styles.iter() {
-            let user_styles = cfg.styles.entry(*mode).or_default();
-            for (style_key, style) in default_styles.iter() {
-                user_styles
-                    .entry(style_key.clone())
-                    .or_insert_with(|| *style);
-            }
+        for (style_key, style) in default_config.styles.iter() {
+            cfg.styles
+                .entry(style_key.clone())
+                .or_insert_with(|| *style);
         }
 
         if cfg.privatekey.is_empty() {
