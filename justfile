@@ -8,7 +8,15 @@ lint:
 
 test:
   cargo test --all-features --workspace
+
+test-cov:
+  cargo llvm-cov --all-features --workspace
+
+doc:
   cargo doc --no-deps --document-private-items --all-features --workspace --examples
 
 fmt:
-  cargo fmt --all --check
+  cargo fmt --all
+
+run:
+  cargo run
