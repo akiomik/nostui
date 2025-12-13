@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     core::{raw_msg::RawMsg, state::AppState},
-    infrastructure::{config::Config, nostr_service::NostrService, tui},
+    infrastructure::{config::Config, fps_service::FpsService, nostr_service::NostrService, tui},
     integration::elm_integration::ElmRuntime,
     integration::legacy::action::Action,
     presentation::components::{
@@ -35,6 +35,8 @@ pub struct AppRunner<'a> {
     nostr_terminate_tx: mpsc::UnboundedSender<()>,
     // Incoming events from Nostr network
     nostr_event_rx: mpsc::UnboundedReceiver<Event>,
+    // FPS service sending RawMsg updates
+    fps_service: FpsService,
 }
 
 impl<'a> AppRunner<'a> {
@@ -65,6 +67,8 @@ impl<'a> AppRunner<'a> {
         nostr_service.run();
 
         let runtime = ElmRuntime::new_with_nostr_executor(initial_state, action_tx, nostr_cmd_tx);
+        let raw_tx = runtime.get_raw_sender().expect("raw sender must exist");
+        let fps_service = FpsService::new(raw_tx);
 
         // Initialize TUI only when interactive
         let tui = if headless {
@@ -86,6 +90,7 @@ impl<'a> AppRunner<'a> {
             fps: ElmFpsCounter::new(),
             nostr_terminate_tx,
             nostr_event_rx,
+            fps_service,
         })
     }
 
@@ -112,9 +117,13 @@ impl<'a> AppRunner<'a> {
                             }
                             tui::Event::Tick => {
                                 self.runtime.send_raw_msg(RawMsg::Tick);
+                                // Count app tick for FPS based on TUI tick cadence
+                                self.fps_service.on_app_tick();
                             }
                             tui::Event::Render => {
-                                // Rendering will be handled below explicitly
+                                // Render on explicit Render events from TUI backend
+                                self.render()?;
+                                self.fps_service.on_render();
                             }
                             tui::Event::Resize(w, h) => {
                                 self.runtime.send_raw_msg(RawMsg::Resize(w, h));
@@ -175,11 +184,6 @@ impl<'a> AppRunner<'a> {
                         // or side effects already executed by CmdExecutor/NostrService.
                     }
                 }
-            }
-
-            // Render at least once per loop (on high FPS this is cheap)
-            if !self.headless {
-                self.render()?;
             }
 
             // Check quit condition from Elm state
