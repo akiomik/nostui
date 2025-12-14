@@ -22,8 +22,7 @@ fn create_test_state() -> AppState {
 fn create_test_state_with_config() -> AppState {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use nostui::infrastructure::config::Config;
-    use nostui::integration::legacy::{action::Action, mode::Mode};
-    use nostui::presentation::config::keybindings::KeyBindings;
+    use nostui::presentation::config::keybindings::{ElmAction, KeyBindings};
     use std::collections::HashMap;
 
     // Create config with test keybindings
@@ -33,36 +32,34 @@ fn create_test_state_with_config() -> AppState {
     let mut home_bindings = HashMap::new();
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE)],
-        Action::ScrollDown,
+        ElmAction::ScrollDown,
     );
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE)],
-        Action::ScrollUp,
+        ElmAction::ScrollUp,
     );
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE)],
-        Action::React,
+        ElmAction::React,
     );
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE)],
-        Action::ReplyTextNote,
+        ElmAction::ReplyTextNote,
     );
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE)],
-        Action::Repost,
+        ElmAction::Repost,
     );
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE)],
-        Action::NewTextNote,
+        ElmAction::NewTextNote,
     );
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)],
-        Action::Unselect,
+        ElmAction::Unselect,
     );
 
-    let mut keybindings_map = HashMap::new();
-    keybindings_map.insert(Mode::Home, home_bindings);
-    config.keybindings = KeyBindings(keybindings_map);
+    config.keybindings = KeyBindings(home_bindings);
 
     AppState::new_with_config(Keys::generate().public_key(), config)
 }
