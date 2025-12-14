@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     core::cmd::{Cmd, TuiCommand},
-    infrastructure::nostr_command::NostrCommand,
+    infrastructure::{nostr_command::NostrCommand, tui_service::TuiService},
     integration::legacy::action::Action,
 };
 
@@ -12,6 +12,7 @@ use crate::{
 pub struct CmdExecutor {
     action_sender: mpsc::UnboundedSender<Action>,
     nostr_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
+    tui_service: Option<TuiService>,
 }
 
 impl CmdExecutor {
@@ -20,6 +21,7 @@ impl CmdExecutor {
         Self {
             action_sender,
             nostr_sender: None,
+            tui_service: None,
         }
     }
 
@@ -31,12 +33,18 @@ impl CmdExecutor {
         Self {
             action_sender,
             nostr_sender: Some(nostr_sender),
+            tui_service: None,
         }
     }
 
     /// Add NostrCommand support to existing executor
     pub fn set_nostr_sender(&mut self, nostr_sender: mpsc::UnboundedSender<NostrCommand>) {
         self.nostr_sender = Some(nostr_sender);
+    }
+
+    /// Inject TUI service for executing TuiCommand
+    pub fn set_tui_service(&mut self, tui_service: TuiService) {
+        self.tui_service = Some(tui_service);
     }
 
     /// Execute a single command by converting it to appropriate Action or NostrCommand
@@ -140,12 +148,30 @@ impl CmdExecutor {
             Cmd::Tui(tui_cmd) => {
                 match tui_cmd {
                     TuiCommand::Render => {
-                        // TODO: call TuiService.render() once injected; for now fallback
-                        self.action_sender.send(Action::Render)?;
+                        if let Some(_tui) = &self.tui_service {
+                            // placeholder to avoid unused_variable warning while TuiService wiring is in progress
+                        }
+
+                        if let Some(_tui) = &self.tui_service {
+                            // Render is initiated by AppRunner with a closure; here we emit Action as a fallback
+                            // In follow-up, we will route a render request back to AppRunner/TuiService with a stored closure.
+                            self.action_sender.send(Action::Render)?;
+                        } else {
+                            self.action_sender.send(Action::Render)?;
+                        }
                     }
                     TuiCommand::Resize { width, height } => {
-                        // TODO: call TuiService.resize(); for now fallback
-                        self.action_sender.send(Action::Resize(*width, *height))?;
+                        if let Some(_tui) = &self.tui_service {
+                            // placeholder to avoid unused_variable warning while TuiService wiring is in progress
+                        }
+
+                        if let Some(_tui) = &self.tui_service {
+                            // Execute resize directly on TUI
+                            // Note: this call is async; production path will own an async handle. For now, fallback to Action.
+                            self.action_sender.send(Action::Resize(*width, *height))?;
+                        } else {
+                            self.action_sender.send(Action::Resize(*width, *height))?;
+                        }
                     }
                 }
             }
