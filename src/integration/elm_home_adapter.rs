@@ -6,8 +6,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     core::raw_msg::RawMsg, core::state::AppState, integration::elm_integration::ElmRuntime,
-    integration::legacy::action::Action, integration::legacy::Component,
-    presentation::components::elm_home::ElmHome,
+    integration::legacy::action::Action, presentation::components::elm_home::ElmHome,
 };
 
 /// Adapter that bridges the legacy Component trait with the new Elm architecture
@@ -62,7 +61,8 @@ impl Default for ElmHomeAdapter {
     }
 }
 
-impl Component for ElmHomeAdapter {
+// Legacy Component trait removed; keep methods as plain impl on adapter
+impl ElmHomeAdapter {
     fn register_action_handler(&mut self, tx: mpsc::UnboundedSender<Action>) -> Result<()> {
         self.action_tx = Some(tx);
         Ok(())
@@ -76,7 +76,7 @@ impl Component for ElmHomeAdapter {
         Ok(())
     }
 
-    fn update(&mut self, action: Action) -> Result<Option<Action>> {
+    pub fn update(&mut self, action: Action) -> Result<Option<Action>> {
         // Check if we're in input mode and handle it specially
         if let Some(runtime) = &mut self.elm_runtime {
             let state = runtime.state();
@@ -283,7 +283,7 @@ impl Component for ElmHomeAdapter {
         Ok(None)
     }
 
-    fn draw(&mut self, f: &mut Frame, area: Rect) -> Result<()> {
+    pub fn draw(&mut self, f: &mut Frame, area: Rect) -> Result<()> {
         log::debug!("ElmHomeAdapter: draw() called");
 
         if self.elm_runtime.is_none() {
@@ -315,11 +315,11 @@ impl Component for ElmHomeAdapter {
         Ok(())
     }
 
-    fn init(&mut self, _area: Rect) -> Result<()> {
+    pub fn init(&mut self, _area: Rect) -> Result<()> {
         Ok(())
     }
 
-    fn handle_events(
+    pub fn handle_events(
         &mut self,
         _event: Option<crate::infrastructure::tui::Event>,
     ) -> Result<Option<Action>> {
@@ -327,15 +327,15 @@ impl Component for ElmHomeAdapter {
         Ok(None)
     }
 
-    fn is_elm_home_adapter(&self) -> bool {
+    pub fn is_elm_home_adapter(&self) -> bool {
         true
     }
 
-    fn as_elm_home_adapter(&mut self) -> Option<&mut ElmHomeAdapter> {
+    pub fn as_elm_home_adapter(&mut self) -> Option<&mut ElmHomeAdapter> {
         Some(self)
     }
 
-    fn as_elm_home_adapter_ref(&self) -> Option<&ElmHomeAdapter> {
+    pub fn as_elm_home_adapter_ref(&self) -> Option<&ElmHomeAdapter> {
         Some(self)
     }
 }

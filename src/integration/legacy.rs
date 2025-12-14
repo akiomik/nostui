@@ -4,9 +4,4 @@
 //! as the migration to Elm architecture progresses.
 
 pub mod action;
-mod component_trait;
-pub mod components;
 pub mod mode;
-pub mod widgets;
-
-pub use component_trait::Component;
