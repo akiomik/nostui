@@ -5,7 +5,6 @@ mod elm_home_adapter_tests {
     use nostui::{
         core::state::AppState, integration::elm_home_adapter::ElmHomeAdapter,
         integration::elm_integration::ElmRuntime, integration::legacy::action::Action,
-        integration::legacy::Component,
     };
     use tokio::sync::mpsc;
 
