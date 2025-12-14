@@ -95,49 +95,41 @@ fn translate_input_mode_keys(key: crossterm::event::KeyEvent, state: &AppState) 
 
 /// Key bindings when in normal navigation mode
 fn translate_normal_mode_keys(key: crossterm::event::KeyEvent, state: &AppState) -> Vec<Msg> {
-    use crate::integration::legacy::mode::Mode;
-
-    // Get keybindings for Home mode from config state
-    if let Some(home_keybindings) = state.config.config.keybindings.get(&Mode::Home) {
-        // Check if this single key matches any configured action
-        if let Some(action) = home_keybindings.get(&vec![key]) {
-            return translate_action_to_msg(action, state);
-        }
+    // Get keybindings from config state (flat mapping)
+    if let Some(action) = state.config.config.keybindings.get(&vec![key]) {
+        return translate_action_to_msg(action, state);
     }
 
     vec![] // No matching keybinding found
 }
 
 /// Convert Action to Msg based on current state
-fn translate_action_to_msg(
-    action: &crate::integration::legacy::action::Action,
-    state: &AppState,
-) -> Vec<Msg> {
-    use crate::integration::legacy::action::Action;
+use crate::presentation::config::keybindings::ElmAction;
 
+fn translate_action_to_msg(action: &ElmAction, state: &AppState) -> Vec<Msg> {
     match action {
-        Action::ScrollUp => vec![Msg::Timeline(
+        ElmAction::ScrollUp => vec![Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::ScrollUp,
         )],
-        Action::ScrollDown => vec![Msg::Timeline(
+        ElmAction::ScrollDown => vec![Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::ScrollDown,
         )],
-        Action::ScrollToTop => vec![Msg::Timeline(
+        ElmAction::ScrollToTop => vec![Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::ScrollToTop,
         )],
-        Action::ScrollToBottom => vec![Msg::Timeline(
+        ElmAction::ScrollToBottom => vec![Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::ScrollToBottom,
         )],
-        Action::NewTextNote => vec![Msg::Ui(UiMsg::ShowNewNote)],
-        Action::ReplyTextNote => translate_reply_key(state),
-        Action::React => translate_like_key(state),
-        Action::Repost => translate_repost_key(state),
-        Action::Unselect => vec![Msg::Timeline(
+        ElmAction::NewTextNote => vec![Msg::Ui(UiMsg::ShowNewNote)],
+        ElmAction::ReplyTextNote => translate_reply_key(state),
+        ElmAction::React => translate_like_key(state),
+        ElmAction::Repost => translate_repost_key(state),
+        ElmAction::Unselect => vec![Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::DeselectNote,
         )],
-        Action::Quit => vec![Msg::System(SystemMsg::Quit)],
-        Action::Suspend => vec![Msg::System(SystemMsg::Suspend)],
-        Action::SubmitTextNote => {
+        ElmAction::Quit => vec![Msg::System(SystemMsg::Quit)],
+        ElmAction::Suspend => vec![Msg::System(SystemMsg::Suspend)],
+        ElmAction::SubmitTextNote => {
             // Only process submit in input mode
             if state.ui.show_input {
                 vec![Msg::Ui(UiMsg::SubmitNote)]
@@ -145,7 +137,6 @@ fn translate_action_to_msg(
                 vec![]
             }
         }
-        _ => vec![], // Other actions not handled in normal mode
     }
 }
 
@@ -338,7 +329,7 @@ mod tests {
 
     fn create_test_state() -> AppState {
         use crate::infrastructure::config::Config;
-        use crate::integration::legacy::{action::Action, mode::Mode};
+        use crate::presentation::config::keybindings::ElmAction as Action;
         use crate::presentation::config::keybindings::KeyBindings;
         use std::collections::HashMap;
 
@@ -392,9 +383,7 @@ mod tests {
             Action::Unselect,
         );
 
-        let mut keybindings_map = HashMap::new();
-        keybindings_map.insert(Mode::Home, home_bindings);
-        config.keybindings = KeyBindings(keybindings_map);
+        config.keybindings = KeyBindings(home_bindings);
 
         AppState::new_with_config(Keys::generate().public_key(), config)
     }

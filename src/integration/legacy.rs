@@ -4,7 +4,6 @@
 //! as the migration to Elm architecture progresses.
 
 pub mod action;
-pub mod app;
 mod component_trait;
 pub mod components;
 pub mod mode;

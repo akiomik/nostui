@@ -91,13 +91,11 @@ impl Config {
 
         let mut cfg: Self = builder.build()?.try_deserialize()?;
 
-        for (mode, default_bindings) in default_config.keybindings.iter() {
-            let user_bindings = cfg.keybindings.entry(*mode).or_default();
-            for (key, cmd) in default_bindings.iter() {
-                user_bindings
-                    .entry(key.clone())
-                    .or_insert_with(|| cmd.clone());
-            }
+        // Merge default keybindings into user config (flat mapping)
+        for (keyseq, action) in default_config.keybindings.iter() {
+            cfg.keybindings
+                .entry(keyseq.clone())
+                .or_insert_with(|| action.clone());
         }
         for (style_key, style) in default_config.styles.iter() {
             cfg.styles

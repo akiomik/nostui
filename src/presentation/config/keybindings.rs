@@ -5,29 +5,40 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use derive_deref::{Deref, DerefMut};
 use serde::{de::Deserializer, Deserialize};
 
-use crate::{integration::legacy::action::Action, integration::legacy::mode::Mode};
-
 #[derive(Clone, Debug, Default, Deref, DerefMut)]
-pub struct KeyBindings(pub HashMap<Mode, HashMap<Vec<KeyEvent>, Action>>);
+pub struct KeyBindings(pub HashMap<Vec<KeyEvent>, ElmAction>);
+
+#[derive(Clone, Debug, Deserialize)]
+pub enum ElmAction {
+    // Navigation
+    ScrollUp,
+    ScrollDown,
+    ScrollToTop,
+    ScrollToBottom,
+    Unselect,
+
+    // Compose/interactions
+    NewTextNote,
+    ReplyTextNote,
+    React,
+    Repost,
+
+    // System
+    Quit,
+    Suspend,
+    SubmitTextNote,
+}
 
 impl<'de> Deserialize<'de> for KeyBindings {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let parsed_map = HashMap::<Mode, HashMap<String, Action>>::deserialize(deserializer)?;
-
+        let parsed_map = HashMap::<String, ElmAction>::deserialize(deserializer)?;
         let keybindings = parsed_map
             .into_iter()
-            .map(|(mode, inner_map)| {
-                let converted_inner_map = inner_map
-                    .into_iter()
-                    .map(|(key_str, cmd)| (parse_key_sequence(&key_str).unwrap(), cmd))
-                    .collect();
-                (mode, converted_inner_map)
-            })
+            .map(|(key_str, action)| (parse_key_sequence(&key_str).unwrap(), action))
             .collect();
-
         Ok(KeyBindings(keybindings))
     }
 }
