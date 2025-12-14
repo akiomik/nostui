@@ -2,7 +2,8 @@ use color_eyre::eyre::Result;
 use tokio::sync::mpsc;
 
 use crate::{
-    core::cmd::Cmd, infrastructure::nostr_command::NostrCommand,
+    core::cmd::{Cmd, TuiCommand},
+    infrastructure::nostr_command::NostrCommand,
     integration::legacy::action::Action,
 };
 
@@ -127,11 +128,26 @@ impl CmdExecutor {
             }
 
             Cmd::Resize { width, height } => {
+                // Backward compatibility path (will be removed)
                 self.action_sender.send(Action::Resize(*width, *height))?;
             }
 
             Cmd::Render => {
+                // Backward compatibility path (will be removed)
                 self.action_sender.send(Action::Render)?;
+            }
+
+            Cmd::Tui(tui_cmd) => {
+                match tui_cmd {
+                    TuiCommand::Render => {
+                        // TODO: call TuiService.render() once injected; for now fallback
+                        self.action_sender.send(Action::Render)?;
+                    }
+                    TuiCommand::Resize { width, height } => {
+                        // TODO: call TuiService.resize(); for now fallback
+                        self.action_sender.send(Action::Resize(*width, *height))?;
+                    }
+                }
             }
 
             Cmd::LogError { message } => {
@@ -224,6 +240,10 @@ impl CmdName for Cmd {
             Cmd::StartTimer { .. } => "StartTimer".to_string(),
             Cmd::StopTimer { .. } => "StopTimer".to_string(),
             Cmd::Batch(cmds) => format!("Batch({})", cmds.len()),
+            Cmd::Tui(tc) => match tc {
+                TuiCommand::Render => "Tui(Render)".to_string(),
+                TuiCommand::Resize { .. } => "Tui(Resize)".to_string(),
+            },
         }
     }
 }

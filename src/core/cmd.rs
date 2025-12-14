@@ -3,6 +3,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::msg::Msg;
 
+/// UI (TUI) specific sub-commands executed by the host/runtime
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TuiCommand {
+    Render,
+    Resize { width: u16, height: u16 },
+}
+
 /// Elm-like command definitions
 /// Represents side effects (network communication, file I/O, etc.)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -15,9 +22,10 @@ pub enum Cmd {
     DisconnectFromRelays,
     SubscribeToTimeline,
 
-    // UI-related commands
+    // UI-related commands (migrating to TuiCommand)
     Resize { width: u16, height: u16 },
     Render,
+    Tui(TuiCommand),
 
     // File/configuration related
     SaveConfig,
@@ -62,6 +70,7 @@ impl Cmd {
 
             Cmd::Resize { .. }
             | Cmd::Render
+            | Cmd::Tui(..)
             | Cmd::LogError { .. }
             | Cmd::LogInfo { .. }
             | Cmd::StartTimer { .. }
@@ -76,7 +85,7 @@ impl Cmd {
     pub fn priority(&self) -> u8 {
         match self {
             // UI-related has highest priority
-            Cmd::Render | Cmd::Resize { .. } => 0,
+            Cmd::Render | Cmd::Resize { .. } | Cmd::Tui(..) => 0,
 
             // User actions have high priority
             Cmd::SendReaction { .. } | Cmd::SendRepost { .. } | Cmd::SendTextNote { .. } => 1,
