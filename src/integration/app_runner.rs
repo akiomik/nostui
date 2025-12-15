@@ -21,6 +21,7 @@ pub struct AppRunner<'a> {
     tick_rate: f64,
     frame_rate: f64,
     runtime: ElmRuntime,
+    // NOTE: Action channel kept temporarily for non-UI side effects (nostr status, etc.)
     action_rx: mpsc::UnboundedReceiver<Action>,
     render_req_rx: mpsc::UnboundedReceiver<()>,
     // NOTE: In tests or non-interactive environments, TUI can be absent.
@@ -187,33 +188,16 @@ impl<'a> AppRunner<'a> {
                     .send_raw_msg(RawMsg::Error(format!("ElmRuntime error: {}", e)));
             }
 
-            // Handle actions that require immediate host reaction (resize/render)
+            // Handle only non-UI actions; UI is driven via Cmd (render-req/TuiService)
             while let Ok(action) = self.action_rx.try_recv() {
                 match action {
-                    Action::Resize(w, h) => {
-                        if !self.headless {
-                            if let Some(tui) = &mut self.tui {
-                                let mut guard = tui.lock().await;
-                                guard.resize(ratatui::prelude::Rect::new(0, 0, w, h))?;
-                                drop(guard);
-                                // Defer actual render to coalesced path
-                                should_render = true;
-                            }
-                        }
-                    }
-                    Action::Render => {
-                        if !self.headless {
-                            // Defer actual render to coalesced path
-                            should_render = true;
-                        }
-                    }
                     Action::Quit => {
                         // Also allow quitting via Action channel if sent
                         self.runtime.send_raw_msg(RawMsg::Quit);
                     }
                     _ => {
-                        // Other actions are either handled inside Elm (translated to messages)
-                        // or side effects already executed by CmdExecutor/NostrService.
+                        // Ignore UI-related legacy actions (Render/Resize) and others here.
+                        // Non-UI actions (e.g., nostr status) are handled elsewhere or translated to RawMsg/Msg.
                     }
                 }
             }
