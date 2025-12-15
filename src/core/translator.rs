@@ -28,6 +28,7 @@ pub fn translate_raw_to_domain(raw: RawMsg, state: &AppState) -> Vec<Msg> {
         RawMsg::RenderFpsUpdate(fps) => vec![Msg::System(SystemMsg::UpdateRenderFps(fps))],
 
         // System events
+        RawMsg::SystemMessage(msg) => vec![Msg::System(SystemMsg::UpdateStatusMessage(msg))],
         RawMsg::Error(error) => vec![Msg::System(SystemMsg::ShowError(error))],
 
         // Ignore frequent system events in domain layer
