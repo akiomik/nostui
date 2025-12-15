@@ -65,8 +65,11 @@ impl SystemState {
             }
 
             SystemMsg::Resize(width, height) => {
-                // Resize is the only SystemMsg that generates a command
-                vec![Cmd::Resize { width, height }]
+                // Resize generates a TUI resize command
+                vec![Cmd::Tui(crate::core::cmd::TuiCommand::Resize {
+                    width,
+                    height,
+                })]
             }
 
             // Status management
@@ -142,7 +145,7 @@ mod tests {
 
         assert_eq!(cmds.len(), 1);
         match &cmds[0] {
-            Cmd::Resize { width, height } => {
+            Cmd::Tui(crate::core::cmd::TuiCommand::Resize { width, height }) => {
                 assert_eq!(*width, 80);
                 assert_eq!(*height, 24);
             }

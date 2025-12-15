@@ -22,9 +22,7 @@ pub enum Cmd {
     DisconnectFromRelays,
     SubscribeToTimeline,
 
-    // UI-related commands (migrating to TuiCommand)
-    Resize { width: u16, height: u16 },
-    Render,
+    // UI-related commands
     Tui(TuiCommand),
 
     // File/configuration related
@@ -68,9 +66,7 @@ impl Cmd {
             | Cmd::SaveConfig
             | Cmd::LoadConfig => true,
 
-            Cmd::Resize { .. }
-            | Cmd::Render
-            | Cmd::Tui(..)
+            Cmd::Tui(..)
             | Cmd::LogError { .. }
             | Cmd::LogInfo { .. }
             | Cmd::StartTimer { .. }
@@ -85,7 +81,7 @@ impl Cmd {
     pub fn priority(&self) -> u8 {
         match self {
             // UI-related has highest priority
-            Cmd::Render | Cmd::Resize { .. } | Cmd::Tui(..) => 0,
+            Cmd::Tui(..) => 0,
 
             // User actions have high priority
             Cmd::SendReaction { .. } | Cmd::SendRepost { .. } | Cmd::SendTextNote { .. } => 1,
@@ -140,14 +136,14 @@ mod tests {
 
     #[test]
     fn test_cmd_batch_single() {
-        let original_cmd = Cmd::Render;
+        let original_cmd = Cmd::Tui(TuiCommand::Render);
         let cmd = Cmd::batch(vec![original_cmd.clone()]);
         assert_eq!(cmd, original_cmd);
     }
 
     #[test]
     fn test_cmd_batch_multiple() {
-        let cmds = vec![Cmd::Render, Cmd::SaveConfig];
+        let cmds = vec![Cmd::Tui(TuiCommand::Render), Cmd::SaveConfig];
         let batch_cmd = Cmd::batch(cmds.clone());
         assert_eq!(batch_cmd, Cmd::Batch(cmds));
     }
@@ -165,17 +161,17 @@ mod tests {
         }
         .is_async());
 
-        assert!(!Cmd::Render.is_async());
-        assert!(!Cmd::Resize {
+        assert!(!Cmd::Tui(TuiCommand::Render).is_async());
+        assert!(!Cmd::Tui(TuiCommand::Resize {
             width: 100,
             height: 50
-        }
+        })
         .is_async());
     }
 
     #[test]
     fn test_cmd_priority() {
-        assert_eq!(Cmd::Render.priority(), 0);
+        assert_eq!(Cmd::Tui(TuiCommand::Render).priority(), 0);
         assert_eq!(
             Cmd::SendReaction {
                 target_event: create_test_event()
@@ -201,8 +197,8 @@ mod tests {
             Cmd::LogInfo {
                 message: "test".to_string(),
             }, // priority 4
-            Cmd::Render,     // priority 0
-            Cmd::SaveConfig, // priority 3
+            Cmd::Tui(TuiCommand::Render), // priority 0
+            Cmd::SaveConfig,              // priority 3
         ]);
 
         // バッチの優先度は含まれるコマンドの最高優先度（最小値）
@@ -224,7 +220,7 @@ mod tests {
     #[test]
     fn test_cmd_batch_is_async() {
         let sync_batch = Cmd::Batch(vec![
-            Cmd::Render,
+            Cmd::Tui(TuiCommand::Render),
             Cmd::LogInfo {
                 message: "test".to_string(),
             },
@@ -232,7 +228,7 @@ mod tests {
         assert!(!sync_batch.is_async());
 
         let async_batch = Cmd::Batch(vec![
-            Cmd::Render,
+            Cmd::Tui(TuiCommand::Render),
             Cmd::SendTextNote {
                 content: "test".to_string(),
                 tags: vec![],
