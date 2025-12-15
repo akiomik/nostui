@@ -154,16 +154,18 @@ impl CmdExecutor {
             Cmd::Tui(tui_cmd) => {
                 match tui_cmd {
                     TuiCommand::Render => {
-                        if let Some(tx) = &self.tui_sender {
-                            let _ = tx.send(TuiCommand::Render);
-                            return Ok(());
-                        }
+                        // Prefer AppRunner-orchestrated rendering via render request channel
                         if let Some(rtx) = &self.render_req_sender {
                             let _ = rtx.send(());
                             return Ok(());
                         }
+                        // Fallback: if a TUI sender is configured, forward Render (legacy behavior)
+                        if let Some(tx) = &self.tui_sender {
+                            let _ = tx.send(TuiCommand::Render);
+                            return Ok(());
+                        }
                         // Fallback during transition (will be removed): if no sender available
-                        log::warn!("CmdExecutor: falling back to Action::Render (no TUI render sender configured)");
+                        log::warn!("CmdExecutor: falling back to Action::Render (no render sender configured)");
                         self.action_sender.send(Action::Render)?;
                     }
                     TuiCommand::Resize { width, height } => {
@@ -174,9 +176,12 @@ impl CmdExecutor {
                             });
                             return Ok(());
                         }
-                        // Fallback during transition (will be removed): if no sender available
-                        log::warn!("CmdExecutor: falling back to Action::Resize (no TUI sender configured) {}x{}", width, height);
-                        self.action_sender.send(Action::Resize(*width, *height))?;
+                        // No TUI sender configured: drop with warning (no legacy Action fallback)
+                        log::warn!(
+                            "CmdExecutor: TUI sender not configured; dropping Resize command {}x{}",
+                            width,
+                            height
+                        );
                     }
                 }
             }
@@ -337,7 +342,11 @@ mod tests {
 
     #[test]
     fn test_execute_resize() {
-        let (executor, mut rx) = create_test_executor();
+        let (mut executor, _action_rx) = create_test_executor();
+        // Provide TUI sender and assert that Resize is routed there
+        let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
+        executor.set_tui_sender(tui_tx);
+
         let cmd = Cmd::Tui(crate::core::cmd::TuiCommand::Resize {
             width: 80,
             height: 24,
@@ -345,13 +354,13 @@ mod tests {
 
         executor.execute_command(&cmd).unwrap();
 
-        let received_action = rx.try_recv().unwrap();
-        match received_action {
-            Action::Resize(width, height) => {
+        let tui_cmd = tui_rx.try_recv().unwrap();
+        match tui_cmd {
+            TuiCommand::Resize { width, height } => {
                 assert_eq!(width, 80);
                 assert_eq!(height, 24);
             }
-            _ => panic!("Expected Resize action"),
+            _ => panic!("Expected TuiCommand::Resize"),
         }
     }
 
@@ -382,7 +391,13 @@ mod tests {
 
     #[test]
     fn test_execute_batch() {
-        let (executor, mut rx) = create_test_executor();
+        let (mut executor, _rx) = create_test_executor();
+        // Provide TUI and Render request senders
+        let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
+        executor.set_tui_sender(tui_tx);
+        let (render_tx, mut render_rx) = mpsc::unbounded_channel::<()>();
+        executor.set_render_request_sender(render_tx);
+
         let cmds = vec![
             Cmd::Tui(crate::core::cmd::TuiCommand::Render),
             Cmd::Tui(crate::core::cmd::TuiCommand::Resize {
@@ -394,12 +409,16 @@ mod tests {
 
         executor.execute_command(&batch_cmd).unwrap();
 
-        // Should receive both actions
-        let action1 = rx.try_recv().unwrap();
-        let action2 = rx.try_recv().unwrap();
-
-        assert!(matches!(action1, Action::Render));
-        assert!(matches!(action2, Action::Resize(100, 50)));
+        // Should receive render request and resize command
+        render_rx.try_recv().unwrap();
+        let tui_cmd = tui_rx.try_recv().unwrap();
+        assert!(matches!(
+            tui_cmd,
+            TuiCommand::Resize {
+                width: 100,
+                height: 50
+            }
+        ));
     }
 
     #[test]

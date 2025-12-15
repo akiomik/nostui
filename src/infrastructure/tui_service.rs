@@ -28,10 +28,11 @@ impl TuiService {
         inner: Option<Arc<Mutex<tui::Tui>>>,
     ) -> (
         tokio::sync::mpsc::UnboundedSender<crate::core::cmd::TuiCommand>,
+        tokio::sync::mpsc::UnboundedReceiver<crate::core::cmd::TuiCommand>,
         Self,
     ) {
-        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        (tx, Self { inner })
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        (tx, rx, Self { inner })
     }
 
     /// Run background loop consuming TuiCommand from the given receiver.

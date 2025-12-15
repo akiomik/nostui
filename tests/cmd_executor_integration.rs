@@ -228,19 +228,30 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
         100, 50,
     )));
 
+    // Provide TUI sender BEFORE executing to capture resize command
+    let (tui_tx, mut tui_rx) = tokio::sync::mpsc::unbounded_channel::<TuiCommand>();
+    runtime.add_tui_sender(tui_tx).unwrap();
+
     let execution_log = runtime
         .run_update_cycle()
         .expect("Command execution should succeed");
     assert_eq!(execution_log.len(), 3);
 
-    // Verify all actions were sent
+    // Verify reaction/repost actions
     let action1 = action_rx.try_recv()?;
     let action2 = action_rx.try_recv()?;
-    let action3 = action_rx.try_recv()?;
-
     assert!(matches!(action1, Action::SendReaction(_)));
     assert!(matches!(action2, Action::SendRepost(_)));
-    assert!(matches!(action3, Action::Resize(100, 50)));
+
+    // Verify resize TUI command
+    let tui_cmd = tui_rx.try_recv()?;
+    assert!(matches!(
+        tui_cmd,
+        TuiCommand::Resize {
+            width: 100,
+            height: 50
+        }
+    ));
 
     Ok(())
 }
@@ -248,8 +259,8 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
 #[test]
 fn test_batch_command_execution() -> Result<()> {
     let _state = create_test_state();
-    let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
-    let executor = CmdExecutor::new(action_tx);
+    let (action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
+    let mut executor = CmdExecutor::new(action_tx);
 
     // Create a batch command
     let batch_cmd = Cmd::batch(vec![
@@ -263,17 +274,28 @@ fn test_batch_command_execution() -> Result<()> {
         },
     ]);
 
+    // Route TUI and Render requests through dedicated channels BEFORE execution
+    let (tui_tx, mut tui_rx) = tokio::sync::mpsc::unbounded_channel::<TuiCommand>();
+    executor.set_tui_sender(tui_tx);
+    let (render_tx, mut render_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    executor.set_render_request_sender(render_tx);
+
     executor.execute_command(&batch_cmd)?;
 
-    // Should receive Render and Resize actions during transition (LogInfo doesn't generate actions)
-    let action1 = action_rx.try_recv()?;
-    let action2 = action_rx.try_recv()?;
+    // Should receive Render signal and Resize TUI command (LogInfo doesn't generate actions)
+    render_rx.try_recv()?;
+    let tui_cmd = tui_rx.try_recv()?;
+    assert!(matches!(
+        tui_cmd,
+        TuiCommand::Resize {
+            width: 80,
+            height: 24
+        }
+    ));
 
-    assert!(matches!(action1, Action::Render));
-    assert!(matches!(action2, Action::Resize(80, 24)));
-
-    // No more actions should be available
-    assert!(action_rx.try_recv().is_err());
+    // No more TUI commands or render signals should be available
+    assert!(tui_rx.try_recv().is_err());
+    assert!(render_rx.try_recv().is_err());
 
     Ok(())
 }
@@ -355,8 +377,12 @@ fn test_translator_integration_with_executor() -> Result<()> {
 #[test]
 fn test_performance_with_many_commands() -> Result<()> {
     let state = create_test_state();
-    let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+    let (action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
     let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+
+    // Provide TUI sender BEFORE executing to capture resize commands
+    let (tui_tx, mut tui_rx) = tokio::sync::mpsc::unbounded_channel::<TuiCommand>();
+    runtime.add_tui_sender(tui_tx).unwrap();
 
     let start = std::time::Instant::now();
 
@@ -378,15 +404,15 @@ fn test_performance_with_many_commands() -> Result<()> {
     // Should complete in reasonable time (less than 100ms)
     assert!(duration.as_millis() < 100);
 
-    // Verify all actions were sent
+    // Verify all resize commands were sent via TUI channel
     for i in 0..100 {
-        let action = action_rx.try_recv()?;
-        match action {
-            Action::Resize(width, height) => {
+        let tui_cmd = tui_rx.try_recv()?;
+        match tui_cmd {
+            TuiCommand::Resize { width, height } => {
                 assert_eq!(width, 100 + (i as u16));
                 assert_eq!(height, 50 + (i as u16));
             }
-            _ => panic!("Expected Resize action"),
+            _ => panic!("Expected TuiCommand::Resize"),
         }
     }
 

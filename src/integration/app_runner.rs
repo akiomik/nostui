@@ -85,8 +85,12 @@ impl<'a> AppRunner<'a> {
             )))
         };
         // Wire TuiService with channel (Nostr-like pattern)
-        let (_tui_cmd_tx, _tui_service) =
+        let (tui_cmd_tx, tui_cmd_rx, tui_service) =
             crate::infrastructure::tui_service::TuiService::new_with_channel(tui.clone());
+        // Start TuiService background loop
+        let _tui_handle = tui_service.clone().run(tui_cmd_rx);
+        // Route TUI commands from CmdExecutor
+        let _ = runtime.add_tui_sender(tui_cmd_tx);
 
         Ok(Self {
             headless,
