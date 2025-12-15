@@ -164,9 +164,10 @@ impl CmdExecutor {
                             let _ = tx.send(TuiCommand::Render);
                             return Ok(());
                         }
-                        // Fallback during transition (will be removed): if no sender available
-                        log::warn!("CmdExecutor: falling back to Action::Render (no render sender configured)");
-                        self.action_sender.send(Action::Render)?;
+                        // No render sender configured: drop with warning (no legacy Action fallback)
+                        log::warn!(
+                            "CmdExecutor: no render sender configured; dropping Render command"
+                        );
                     }
                     TuiCommand::Resize { width, height } => {
                         if let Some(tx) = &self.tui_sender {
@@ -366,16 +367,16 @@ mod tests {
 
     #[test]
     fn test_execute_render() {
-        let (executor, mut rx) = create_test_executor();
+        let (mut executor, _rx) = create_test_executor();
         let cmd = Cmd::Tui(crate::core::cmd::TuiCommand::Render);
+        // Provide render request sender and ensure signal is emitted
+        let (render_tx, mut render_rx) = mpsc::unbounded_channel::<()>();
+        executor.set_render_request_sender(render_tx);
 
         executor.execute_command(&cmd).unwrap();
 
-        let received_action = rx.try_recv().unwrap();
-        match received_action {
-            Action::Render => {}
-            _ => panic!("Expected Render action"),
-        }
+        // Should receive render signal (unit) instead of Action
+        render_rx.try_recv().unwrap();
     }
 
     #[test]
