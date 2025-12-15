@@ -22,8 +22,68 @@ impl TuiService {
         Self { inner }
     }
 
+    /// Create a channel-driven TuiService like NostrService pattern.
+    /// Returns (command_sender, service).
+    pub fn new_with_channel(
+        inner: Option<Arc<Mutex<tui::Tui>>>,
+    ) -> (
+        tokio::sync::mpsc::UnboundedSender<crate::core::cmd::TuiCommand>,
+        Self,
+    ) {
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        (tx, Self { inner })
+    }
+
+    /// Run background loop consuming TuiCommand from the given receiver.
+    pub fn run(
+        self,
+        mut rx: tokio::sync::mpsc::UnboundedReceiver<crate::core::cmd::TuiCommand>,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            use crate::core::cmd::TuiCommand;
+            while let Some(cmd) = rx.recv().await {
+                match cmd {
+                    TuiCommand::Resize { width, height } => {
+                        if let Some(inner) = &self.inner {
+                            let mut tui = inner.lock().await;
+                            let _ = tui.resize(ratatui::prelude::Rect::new(0, 0, width, height));
+                        }
+                    }
+                    TuiCommand::Render => {
+                        // Rendering stays orchestrated by AppRunner; ignore here.
+                    }
+                }
+            }
+        })
+    }
+
     pub fn is_available(&self) -> bool {
         self.inner.is_some()
+    }
+
+    pub async fn enter(&self) -> Result<()> {
+        if let Some(inner) = &self.inner {
+            let mut tui = inner.lock().await;
+            tui.enter()?;
+        }
+        Ok(())
+    }
+
+    pub async fn exit(&self) -> Result<()> {
+        if let Some(inner) = &self.inner {
+            let mut tui = inner.lock().await;
+            tui.exit()?;
+        }
+        Ok(())
+    }
+
+    pub async fn next_event(&self) -> Option<tui::Event> {
+        if let Some(inner) = &self.inner {
+            let mut tui = inner.lock().await;
+            tui.next().await
+        } else {
+            None
+        }
     }
 
     pub async fn render<F>(&self, mut draw: F) -> Result<()>

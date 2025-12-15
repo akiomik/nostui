@@ -22,11 +22,12 @@ pub struct AppRunner<'a> {
     frame_rate: f64,
     runtime: ElmRuntime,
     action_rx: mpsc::UnboundedReceiver<Action>,
+    render_req_rx: mpsc::UnboundedReceiver<()>,
     // NOTE: In tests or non-interactive environments, TUI can be absent.
     // TODO: Prefer injecting a concrete TUI implementation (e.g., real or test backend)
     // rather than using Option. This avoids conditional logic in the runner and
     // makes dependencies explicit at the composition root.
-    tui: Option<tui::Tui>,
+    tui: Option<std::sync::Arc<tokio::sync::Mutex<tui::Tui>>>,
     // Presentation components (stateless/pure rendering)
     home: ElmHome<'a>,
     status_bar: ElmStatusBar,
@@ -66,16 +67,26 @@ impl<'a> AppRunner<'a> {
             NostrService::new(conn, keys.clone(), action_tx.clone())?;
         nostr_service.run();
 
-        let runtime = ElmRuntime::new_with_nostr_executor(initial_state, action_tx, nostr_cmd_tx);
+        let mut runtime =
+            ElmRuntime::new_with_nostr_executor(initial_state, action_tx, nostr_cmd_tx);
         let raw_tx = runtime.get_raw_sender().expect("raw sender must exist");
         let fps_service = FpsService::new(raw_tx);
+
+        // Render request channel from CmdExecutor -> AppRunner
+        let (render_req_tx, render_req_rx) = mpsc::unbounded_channel::<()>();
+        let _ = runtime.add_render_request_sender(render_req_tx);
 
         // Initialize TUI only when interactive
         let tui = if headless {
             None
         } else {
-            Some(tui::Tui::new()?.tick_rate(tick_rate).frame_rate(frame_rate))
+            Some(std::sync::Arc::new(tokio::sync::Mutex::new(
+                tui::Tui::new()?.tick_rate(tick_rate).frame_rate(frame_rate),
+            )))
         };
+        // Wire TuiService with channel (Nostr-like pattern)
+        let (_tui_cmd_tx, _tui_service) =
+            crate::infrastructure::tui_service::TuiService::new_with_channel(tui.clone());
 
         Ok(Self {
             headless,
@@ -84,7 +95,10 @@ impl<'a> AppRunner<'a> {
             frame_rate,
             runtime,
             action_rx,
+            render_req_rx,
             tui,
+            // Keep service for future direct Cmd::Tui execution
+            // (currently CmdExecutor falls back to Action until wiring is complete)
             home: ElmHome::new(),
             status_bar: ElmStatusBar::new(),
             fps: ElmFpsCounter::new(),
@@ -98,11 +112,18 @@ impl<'a> AppRunner<'a> {
     pub async fn run(&mut self) -> Result<()> {
         if !self.headless {
             if let Some(tui) = &mut self.tui {
-                tui.enter()?;
+                let mut guard = tui.lock().await;
+                guard.enter()?;
             }
         }
 
         loop {
+            // Coalesce render requests (at most one render per loop)
+            let mut should_render = false;
+            while let Ok(()) = self.render_req_rx.try_recv() {
+                should_render = true;
+            }
+
             // Drain Nostr events first to keep timeline responsive
             while let Ok(ev) = self.nostr_event_rx.try_recv() {
                 self.runtime.send_raw_msg(RawMsg::ReceiveEvent(ev));
@@ -110,7 +131,11 @@ impl<'a> AppRunner<'a> {
 
             if !self.headless {
                 if let Some(tui) = &mut self.tui {
-                    if let Some(e) = tui.next().await {
+                    let e_opt = {
+                        let mut guard = tui.lock().await;
+                        guard.next().await
+                    };
+                    if let Some(e) = e_opt {
                         match e {
                             tui::Event::Quit => {
                                 self.runtime.send_raw_msg(RawMsg::Quit);
@@ -121,9 +146,8 @@ impl<'a> AppRunner<'a> {
                                 self.fps_service.on_app_tick();
                             }
                             tui::Event::Render => {
-                                // Render on explicit Render events from TUI backend
-                                self.render()?;
-                                self.fps_service.on_render();
+                                // Coalesce render request; actual render happens once per loop
+                                should_render = true;
                             }
                             tui::Event::Resize(w, h) => {
                                 self.runtime.send_raw_msg(RawMsg::Resize(w, h));
@@ -165,14 +189,18 @@ impl<'a> AppRunner<'a> {
                     Action::Resize(w, h) => {
                         if !self.headless {
                             if let Some(tui) = &mut self.tui {
-                                tui.resize(ratatui::prelude::Rect::new(0, 0, w, h))?;
-                                self.render()?;
+                                let mut guard = tui.lock().await;
+                                guard.resize(ratatui::prelude::Rect::new(0, 0, w, h))?;
+                                drop(guard);
+                                // Defer actual render to coalesced path
+                                should_render = true;
                             }
                         }
                     }
                     Action::Render => {
                         if !self.headless {
-                            self.render()?;
+                            // Defer actual render to coalesced path
+                            should_render = true;
                         }
                     }
                     Action::Quit => {
@@ -186,6 +214,12 @@ impl<'a> AppRunner<'a> {
                 }
             }
 
+            // Execute coalesced render if requested
+            if should_render && !self.headless {
+                self.render().await?;
+                self.fps_service.on_render();
+            }
+
             // Check quit condition from Elm state
             if self.runtime.state().system.should_quit {
                 break;
@@ -196,16 +230,18 @@ impl<'a> AppRunner<'a> {
         let _ = self.nostr_terminate_tx.send(());
         if !self.headless {
             if let Some(tui) = &mut self.tui {
-                tui.exit()?;
+                let mut guard = tui.lock().await;
+                guard.exit()?;
             }
         }
         Ok(())
     }
 
-    fn render(&mut self) -> Result<()> {
+    async fn render(&mut self) -> Result<()> {
         let state = self.runtime.state().clone();
         if let Some(tui) = &mut self.tui {
-            tui.draw(|f| {
+            let mut guard = tui.lock().await;
+            guard.draw(|f| {
                 let area = f.area();
                 // Home timeline and input overlay
                 self.home.render(f, area, &state);
