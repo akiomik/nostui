@@ -119,6 +119,38 @@ impl ElmRuntime {
         self.msg_tx.clone()
     }
 
+    /// Add TUI command sender support to existing executor (for TuiCommand execution)
+    pub fn add_tui_sender(
+        &mut self,
+        tui_sender: mpsc::UnboundedSender<crate::core::cmd::TuiCommand>,
+    ) -> Result<(), String> {
+        if let Some(executor) = &mut self.cmd_executor {
+            executor.set_tui_sender(tui_sender);
+            Ok(())
+        } else {
+            Err(
+                "No executor available. Use set_executor() or set_nostr_executor() first."
+                    .to_string(),
+            )
+        }
+    }
+
+    /// Add render request sender for orchestrated rendering in AppRunner
+    pub fn add_render_request_sender(
+        &mut self,
+        render_sender: mpsc::UnboundedSender<()>,
+    ) -> Result<(), String> {
+        if let Some(executor) = &mut self.cmd_executor {
+            executor.set_render_request_sender(render_sender);
+            Ok(())
+        } else {
+            Err(
+                "No executor available. Use set_executor() or set_nostr_executor() first."
+                    .to_string(),
+            )
+        }
+    }
+
     /// Get current state (read-only)
     pub fn state(&self) -> &AppState {
         &self.state
