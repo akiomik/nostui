@@ -25,6 +25,7 @@ pub enum RawMsg {
     RenderFpsUpdate(f64),
 
     // System status
+    SystemMessage(String),
     Error(String),
 }
 

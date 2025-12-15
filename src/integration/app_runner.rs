@@ -61,17 +61,20 @@ impl<'a> AppRunner<'a> {
         let initial_state = AppState::new_with_config(keys.public_key(), config.clone());
         let (action_tx, action_rx) = mpsc::unbounded_channel::<Action>();
 
+        // Create runtime (without Nostr support yet) to obtain raw_tx for NostrService
+        let mut runtime = ElmRuntime::new_with_executor(initial_state, action_tx);
+        let raw_tx = runtime.get_raw_sender().expect("raw sender must exist");
+
         // Initialize NostrService and start it in background
         let conn =
             crate::domain::nostr::Connection::new(keys.clone(), config.relays.clone()).await?;
         let (nostr_event_rx, nostr_cmd_tx, nostr_terminate_tx, nostr_service) =
-            NostrService::new(conn, keys.clone(), action_tx.clone())?;
+            NostrService::new(conn, keys.clone(), raw_tx.clone())?;
         nostr_service.run();
 
-        let mut runtime =
-            ElmRuntime::new_with_nostr_executor(initial_state, action_tx, nostr_cmd_tx);
-        let raw_tx = runtime.get_raw_sender().expect("raw sender must exist");
-        let fps_service = FpsService::new(raw_tx);
+        // Add Nostr support to runtime now that we have the sender
+        let _ = runtime.add_nostr_support(nostr_cmd_tx.clone());
+        let fps_service = FpsService::new(raw_tx.clone());
 
         // Render request channel from CmdExecutor -> AppRunner
         let (render_req_tx, render_req_rx) = mpsc::unbounded_channel::<()>();
