@@ -1,5 +1,6 @@
 use color_eyre::eyre::Result;
 use nostr_sdk::prelude::*;
+use nostui::core::cmd::TuiCommand;
 use nostui::{
     core::{
         cmd::Cmd,
@@ -252,11 +253,11 @@ fn test_batch_command_execution() -> Result<()> {
 
     // Create a batch command
     let batch_cmd = Cmd::batch(vec![
-        Cmd::Render,
-        Cmd::Resize {
+        Cmd::Tui(TuiCommand::Render),
+        Cmd::Tui(TuiCommand::Resize {
             width: 80,
             height: 24,
-        },
+        }),
         Cmd::LogInfo {
             message: "Batch execution test".to_string(),
         },
@@ -264,7 +265,7 @@ fn test_batch_command_execution() -> Result<()> {
 
     executor.execute_command(&batch_cmd)?;
 
-    // Should receive Render and Resize actions (LogInfo doesn't generate actions)
+    // Should receive Render and Resize actions during transition (LogInfo doesn't generate actions)
     let action1 = action_rx.try_recv()?;
     let action2 = action_rx.try_recv()?;
 

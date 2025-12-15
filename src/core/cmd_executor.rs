@@ -151,16 +151,6 @@ impl CmdExecutor {
                 // This remains as TODO since it's not Nostr-related
             }
 
-            Cmd::Resize { width, height } => {
-                // Backward compatibility path (will be removed)
-                self.action_sender.send(Action::Resize(*width, *height))?;
-            }
-
-            Cmd::Render => {
-                // Delegate to TUI Render handling to avoid duplication
-                return self.execute_command(&Cmd::Tui(TuiCommand::Render));
-            }
-
             Cmd::Tui(tui_cmd) => {
                 match tui_cmd {
                     TuiCommand::Render => {
@@ -274,8 +264,6 @@ impl CmdName for Cmd {
             Cmd::SubscribeToTimeline => "SubscribeToTimeline".to_string(),
             Cmd::SaveConfig => "SaveConfig".to_string(),
             Cmd::LoadConfig => "LoadConfig".to_string(),
-            Cmd::Resize { .. } => "Resize".to_string(),
-            Cmd::Render => "Render".to_string(),
             Cmd::LogError { .. } => "LogError".to_string(),
             Cmd::LogInfo { .. } => "LogInfo".to_string(),
             Cmd::StartTimer { .. } => "StartTimer".to_string(),
@@ -350,10 +338,10 @@ mod tests {
     #[test]
     fn test_execute_resize() {
         let (executor, mut rx) = create_test_executor();
-        let cmd = Cmd::Resize {
+        let cmd = Cmd::Tui(crate::core::cmd::TuiCommand::Resize {
             width: 80,
             height: 24,
-        };
+        });
 
         executor.execute_command(&cmd).unwrap();
 
@@ -370,7 +358,7 @@ mod tests {
     #[test]
     fn test_execute_render() {
         let (executor, mut rx) = create_test_executor();
-        let cmd = Cmd::Render;
+        let cmd = Cmd::Tui(crate::core::cmd::TuiCommand::Render);
 
         executor.execute_command(&cmd).unwrap();
 
@@ -396,11 +384,11 @@ mod tests {
     fn test_execute_batch() {
         let (executor, mut rx) = create_test_executor();
         let cmds = vec![
-            Cmd::Render,
-            Cmd::Resize {
+            Cmd::Tui(crate::core::cmd::TuiCommand::Render),
+            Cmd::Tui(crate::core::cmd::TuiCommand::Resize {
                 width: 100,
                 height: 50,
-            },
+            }),
         ];
         let batch_cmd = Cmd::Batch(cmds);
 
@@ -416,9 +404,13 @@ mod tests {
 
     #[test]
     fn test_execute_multiple_commands() {
-        let (executor, mut rx) = create_test_executor();
+        let (mut executor, _rx) = create_test_executor();
+        // Provide render request sender to observe execution
+        let (render_tx, mut render_rx) = mpsc::unbounded_channel::<()>();
+        executor.set_render_request_sender(render_tx);
+
         let commands = vec![
-            Cmd::Render,
+            Cmd::Tui(crate::core::cmd::TuiCommand::Render),
             Cmd::LogInfo {
                 message: "test".to_string(),
             },
@@ -427,12 +419,11 @@ mod tests {
         let log = executor.execute_commands(&commands).unwrap();
 
         assert_eq!(log.len(), 2);
-        assert!(log[0].contains("✓ Executed: Render"));
+        assert!(log[0].contains("✓ Executed: Tui(Render)"));
         assert!(log[1].contains("✓ Executed: LogInfo"));
 
-        // Should receive the render action
-        let action = rx.try_recv().unwrap();
-        assert!(matches!(action, Action::Render));
+        // Should receive the render signal
+        render_rx.try_recv().unwrap();
     }
 
     #[test]
@@ -442,7 +433,10 @@ mod tests {
         };
         assert_eq!(cmd.name(), "SendReaction");
 
-        let batch_cmd = Cmd::Batch(vec![Cmd::Render, Cmd::None]);
+        let batch_cmd = Cmd::Batch(vec![
+            Cmd::Tui(crate::core::cmd::TuiCommand::Render),
+            Cmd::None,
+        ]);
         assert_eq!(batch_cmd.name(), "Batch(2)");
     }
 
