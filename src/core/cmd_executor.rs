@@ -76,9 +76,8 @@ impl CmdExecutor {
                     let nostr_cmd = NostrCommand::like(target_event.clone());
                     nostr_sender.send(nostr_cmd)?;
                 } else {
-                    // Fallback to legacy Action system
-                    self.action_sender
-                        .send(Action::SendReaction(target_event.clone()))?;
+                    // No NostrService available: drop with warning (no legacy Action fallback)
+                    log::warn!("SendReaction ignored: NostrService not available");
                 }
             }
 
@@ -87,9 +86,8 @@ impl CmdExecutor {
                     let nostr_cmd = NostrCommand::repost(target_event.clone(), None);
                     nostr_sender.send(nostr_cmd)?;
                 } else {
-                    // Fallback to legacy Action system
-                    self.action_sender
-                        .send(Action::SendRepost(target_event.clone()))?;
+                    // No NostrService available: drop with warning (no legacy Action fallback)
+                    log::warn!("SendRepost ignored: NostrService not available");
                 }
             }
 
@@ -105,10 +103,8 @@ impl CmdExecutor {
                     nostr_sender.send(nostr_cmd)?;
                     log::info!("CmdExecutor: Successfully sent NostrCommand::SendTextNote");
                 } else {
-                    log::info!("CmdExecutor: No NostrService, falling back to legacy Action");
-                    // Fallback to legacy Action system
-                    self.action_sender
-                        .send(Action::SendTextNote(content.clone(), tags.clone()))?;
+                    // No NostrService available: drop with warning (no legacy Action fallback)
+                    log::warn!("SendTextNote ignored: NostrService not available");
                 }
             }
 
@@ -311,13 +307,8 @@ mod tests {
 
         executor.execute_command(&cmd).unwrap();
 
-        let received_action = rx.try_recv().unwrap();
-        match received_action {
-            Action::SendReaction(received_event) => {
-                assert_eq!(received_event.id, event.id);
-            }
-            _ => panic!("Expected SendReaction action"),
-        }
+        // No Nostr sender configured: should NOT send any Action (dropped with warn)
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]
@@ -330,14 +321,8 @@ mod tests {
 
         executor.execute_command(&cmd).unwrap();
 
-        let received_action = rx.try_recv().unwrap();
-        match received_action {
-            Action::SendTextNote(content, tags) => {
-                assert_eq!(content, "Hello, Nostr!");
-                assert!(tags.is_empty());
-            }
-            _ => panic!("Expected SendTextNote action"),
-        }
+        // No Nostr sender configured: should NOT send any Action (dropped with warn)
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]
@@ -512,23 +497,17 @@ mod tests {
     }
 
     #[test]
-    fn test_fallback_to_action() {
+    fn test_no_fallback_without_nostr_sender() {
         let (executor, mut rx) = create_test_executor(); // No NostrSender
         let target_event = create_test_event();
         let cmd = Cmd::SendReaction {
             target_event: target_event.clone(),
         };
 
-        // Should fallback to Action
+        // Should NOT fallback to Action
         executor.execute_command(&cmd).unwrap();
 
-        let received_action = rx.try_recv().unwrap();
-        match received_action {
-            Action::SendReaction(received_event) => {
-                assert_eq!(received_event.id, target_event.id);
-            }
-            _ => panic!("Expected SendReaction action"),
-        }
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]

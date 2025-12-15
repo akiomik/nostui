@@ -548,14 +548,8 @@ mod tests {
         assert_eq!(execution_log.len(), 1);
         assert!(execution_log[0].contains("✓ Executed: SendReaction"));
 
-        // Check that action was sent
-        let received_action = action_rx.try_recv().unwrap();
-        match received_action {
-            Action::SendReaction(received_event) => {
-                assert_eq!(received_event.id, target_event.id);
-            }
-            _ => panic!("Expected SendReaction action"),
-        }
+        // Without Nostr executor, no Action should be sent (command is dropped with warning)
+        assert!(action_rx.try_recv().is_err());
     }
 
     #[test]

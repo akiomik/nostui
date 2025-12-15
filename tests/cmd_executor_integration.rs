@@ -121,14 +121,8 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
     assert!(!execution_log.is_empty());
     assert!(execution_log.iter().any(|log| log.contains("SendReaction")));
 
-    // Verify Action was sent to legacy system
-    let received_action = action_rx.try_recv()?;
-    match received_action {
-        Action::SendReaction(received_event) => {
-            assert_eq!(received_event.id, target_event.id);
-        }
-        _ => panic!("Expected SendReaction action, got {:?}", received_action),
-    }
+    // Without Nostr executor, no Action should be sent (command is dropped with warning)
+    assert!(action_rx.try_recv().is_err());
 
     Ok(())
 }
@@ -159,15 +153,8 @@ fn test_text_note_submission_workflow() -> Result<()> {
     // Should have executed SendTextNote command
     assert!(execution_log.iter().any(|log| log.contains("SendTextNote")));
 
-    // Verify the action was sent
-    let received_action = action_rx.try_recv()?;
-    match received_action {
-        Action::SendTextNote(content, tags) => {
-            assert_eq!(content, "Hello, Nostr from Elm!");
-            assert!(tags.is_empty());
-        }
-        _ => panic!("Expected SendTextNote action, got {:?}", received_action),
-    }
+    // Without Nostr executor, no Action should be sent (command is dropped with warning)
+    assert!(action_rx.try_recv().is_err());
 
     Ok(())
 }
@@ -194,16 +181,8 @@ fn test_reply_workflow_with_tags() -> Result<()> {
         .expect("Command execution should succeed");
     assert!(execution_log.iter().any(|log| log.contains("SendTextNote")));
 
-    // Verify reply was sent with proper tags
-    let received_action = action_rx.try_recv()?;
-    match received_action {
-        Action::SendTextNote(content, tags) => {
-            assert_eq!(content, "Great point!");
-            // Should have reply tags
-            assert!(!tags.is_empty());
-        }
-        _ => panic!("Expected SendTextNote action for reply"),
-    }
+    // Without Nostr executor, no Action should be sent (command is dropped with warning)
+    assert!(action_rx.try_recv().is_err());
 
     Ok(())
 }
@@ -237,11 +216,8 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
         .expect("Command execution should succeed");
     assert_eq!(execution_log.len(), 3);
 
-    // Verify reaction/repost actions
-    let action1 = action_rx.try_recv()?;
-    let action2 = action_rx.try_recv()?;
-    assert!(matches!(action1, Action::SendReaction(_)));
-    assert!(matches!(action2, Action::SendRepost(_)));
+    // Without Nostr executor, no Nostr actions should be sent (commands are dropped with warning)
+    assert!(action_rx.try_recv().is_err());
 
     // Verify resize TUI command
     let tui_cmd = tui_rx.try_recv()?;
@@ -315,19 +291,16 @@ fn test_error_handling_in_execution() -> Result<()> {
     ));
     let result = runtime.run_update_cycle();
 
-    // The execution should succeed but log the error
+    // The execution should succeed and simply ignore the command when Nostr is unavailable
     match result {
         Ok(log) => {
-            // Should contain error log about failed execution
-            assert!(!log.is_empty());
+            // Should be empty or contain only non-error entries
             assert!(log
                 .iter()
-                .any(|entry| entry.contains("✗ Failed to execute")));
-            println!("Error correctly logged: {:?}", log);
+                .all(|entry| entry.contains("✓ Executed") || entry.is_empty()));
         }
         Err(_) => {
-            // This shouldn't happen as errors are logged, not returned
-            panic!("Expected successful execution with error logging, not failure");
+            panic!("Expected successful execution without errors");
         }
     }
 
