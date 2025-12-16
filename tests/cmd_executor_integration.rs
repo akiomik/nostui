@@ -76,8 +76,8 @@ fn create_test_event() -> Event {
 fn test_complete_elm_to_action_workflow() -> Result<()> {
     // Set up the pipeline: ElmRuntime -> CmdExecutor -> Actions
     let state = create_test_state_with_config();
-    let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
-    let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+    let mut runtime = ElmRuntime::new_with_executor(state);
 
     // Simulate user input: like a post
     let target_event = create_test_event();
@@ -130,8 +130,8 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
 #[test]
 fn test_text_note_submission_workflow() -> Result<()> {
     let state = create_test_state();
-    let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
-    let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+    let mut runtime = ElmRuntime::new_with_executor(state);
 
     // Simulate text note submission workflow
     // Start new note
@@ -162,8 +162,8 @@ fn test_text_note_submission_workflow() -> Result<()> {
 #[test]
 fn test_reply_workflow_with_tags() -> Result<()> {
     let state = create_test_state();
-    let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
-    let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+    let mut runtime = ElmRuntime::new_with_executor(state);
 
     let target_event = create_test_event();
 
@@ -190,8 +190,8 @@ fn test_reply_workflow_with_tags() -> Result<()> {
 #[test]
 fn test_multiple_commands_in_sequence() -> Result<()> {
     let state = create_test_state();
-    let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
-    let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+    let mut runtime = ElmRuntime::new_with_executor(state);
 
     let event1 = create_test_event();
     let event2 = create_test_event();
@@ -235,8 +235,7 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
 #[test]
 fn test_batch_command_execution() -> Result<()> {
     let _state = create_test_state();
-    let (action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
-    let mut executor = CmdExecutor::new(action_tx);
+    let mut executor = CmdExecutor::new();
 
     // Create a batch command
     let batch_cmd = Cmd::batch(vec![
@@ -279,8 +278,8 @@ fn test_batch_command_execution() -> Result<()> {
 #[test]
 fn test_error_handling_in_execution() -> Result<()> {
     let state = create_test_state();
-    let (action_tx, action_rx) = mpsc::unbounded_channel::<Action>();
-    let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+    let (_action_tx, action_rx) = mpsc::unbounded_channel::<Action>();
+    let mut runtime = ElmRuntime::new_with_executor(state);
 
     // Drop the action receiver to simulate a closed channel
     drop(action_rx);
@@ -310,8 +309,8 @@ fn test_error_handling_in_execution() -> Result<()> {
 #[test]
 fn test_translator_integration_with_executor() -> Result<()> {
     let mut state = create_test_state_with_config();
-    let (action_tx, mut _action_rx) = mpsc::unbounded_channel::<Action>();
-    let mut runtime = ElmRuntime::new_with_executor(state.clone(), action_tx);
+    let (_action_tx, mut _action_rx) = mpsc::unbounded_channel::<Action>();
+    let mut runtime = ElmRuntime::new_with_executor(state.clone());
 
     // Add an event and select it
     let event = create_test_event();
@@ -350,8 +349,7 @@ fn test_translator_integration_with_executor() -> Result<()> {
 #[test]
 fn test_performance_with_many_commands() -> Result<()> {
     let state = create_test_state();
-    let (action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
-    let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+    let mut runtime = ElmRuntime::new_with_executor(state);
 
     // Provide TUI sender BEFORE executing to capture resize commands
     let (tui_tx, mut tui_rx) = tokio::sync::mpsc::unbounded_channel::<TuiCommand>();
@@ -395,8 +393,7 @@ fn test_performance_with_many_commands() -> Result<()> {
 #[test]
 fn test_runtime_stats_with_executor() -> Result<()> {
     let state = create_test_state();
-    let (action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
-    let runtime = ElmRuntime::new_with_executor(state, action_tx);
+    let runtime = ElmRuntime::new_with_executor(state);
 
     let stats = runtime.get_stats();
     assert!(stats.has_executor);
