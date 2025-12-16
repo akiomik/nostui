@@ -5,6 +5,5 @@
 //! - Legacy code (for gradual removal)
 
 pub mod app_runner;
-pub mod elm_home_adapter;
 pub mod elm_integration;
 pub mod legacy;
