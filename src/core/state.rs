@@ -130,13 +130,6 @@ impl AppState {
 mod tests {
     use super::*;
 
-    fn create_test_event() -> Event {
-        let keys = Keys::generate();
-        EventBuilder::text_note("test content")
-            .sign_with_keys(&keys)
-            .unwrap()
-    }
-
     #[test]
     fn test_app_state_default() {
         let state = AppState::default();

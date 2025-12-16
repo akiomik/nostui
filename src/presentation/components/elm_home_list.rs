@@ -69,14 +69,6 @@ impl ElmHomeList {
         Ok(())
     }
 
-    /// Convert AppState UI selection to tui_widget_list::ListState
-    /// Pure function that transforms Elm state to widget state
-    fn create_list_state_from_app_state(&self, state: &AppState) -> tui_widget_list::ListState {
-        let mut list_state = tui_widget_list::ListState::default();
-        list_state.select(state.timeline.selected_index);
-        list_state
-    }
-
     /// Calculate valid scroll position for timeline
     /// Pure function that ensures scroll position is within bounds
     pub fn calculate_valid_scroll_position(
