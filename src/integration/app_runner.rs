@@ -6,7 +6,6 @@ use crate::{
     core::{raw_msg::RawMsg, state::AppState},
     infrastructure::{config::Config, fps_service::FpsService, nostr_service::NostrService, tui},
     integration::elm_integration::ElmRuntime,
-    integration::legacy::action::Action,
     presentation::components::{
         elm_fps::ElmFpsCounter, elm_home::ElmHome, elm_status_bar::ElmStatusBar,
     },
@@ -21,9 +20,7 @@ pub struct AppRunner<'a> {
     tick_rate: f64,
     frame_rate: f64,
     runtime: ElmRuntime,
-    // NOTE: Action channel kept temporarily for non-UI side effects (nostr status, etc.)
-    action_rx: mpsc::UnboundedReceiver<Action>,
-    render_req_rx: mpsc::UnboundedReceiver<()>,
+    render_req_rx: mpsc::UnboundedReceiver<()>, 
     // NOTE: In tests or non-interactive environments, TUI can be absent.
     // TODO: Prefer injecting a concrete TUI implementation (e.g., real or test backend)
     // rather than using Option. This avoids conditional logic in the runner and
@@ -59,10 +56,10 @@ impl<'a> AppRunner<'a> {
 
         // Initialize ElmRuntime with Nostr support
         let initial_state = AppState::new_with_config(keys.public_key(), config.clone());
-        let (action_tx, action_rx) = mpsc::unbounded_channel::<Action>();
+        // Legacy action channel removed
 
         // Create runtime (without Nostr support yet) to obtain raw_tx for NostrService
-        let mut runtime = ElmRuntime::new_with_executor(initial_state, action_tx);
+        let mut runtime = ElmRuntime::new_with_executor(initial_state, /* action_tx removed */ mpsc::unbounded_channel().0 );
         let raw_tx = runtime.get_raw_sender().expect("raw sender must exist");
 
         // Initialize NostrService and start it in background
@@ -102,7 +99,6 @@ impl<'a> AppRunner<'a> {
             tick_rate,
             frame_rate,
             runtime,
-            action_rx,
             render_req_rx,
             tui,
             // Keep service for future direct Cmd::Tui execution
@@ -191,19 +187,6 @@ impl<'a> AppRunner<'a> {
                     .send_raw_msg(RawMsg::Error(format!("ElmRuntime error: {}", e)));
             }
 
-            // Handle only non-UI actions; UI is driven via Cmd (render-req/TuiService)
-            while let Ok(action) = self.action_rx.try_recv() {
-                match action {
-                    Action::Quit => {
-                        // Also allow quitting via Action channel if sent
-                        self.runtime.send_raw_msg(RawMsg::Quit);
-                    }
-                    _ => {
-                        // Ignore UI-related legacy actions (Render/Resize) and others here.
-                        // Non-UI actions (e.g., nostr status) are handled elsewhere or translated to RawMsg/Msg.
-                    }
-                }
-            }
 
             // Execute coalesced render if requested
             if should_render && !self.headless {
