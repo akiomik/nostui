@@ -3,41 +3,31 @@ use tokio::sync::mpsc;
 
 use crate::{
     core::cmd::{Cmd, TuiCommand},
-    infrastructure::{nostr_command::NostrCommand, tui_service::TuiService},
-    integration::legacy::action::Action,
+    infrastructure::nostr_command::NostrCommand,
 };
 
 /// Command executor that bridges Elm commands to Action and NostrCommand systems
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct CmdExecutor {
-    action_sender: mpsc::UnboundedSender<Action>,
     nostr_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
-    tui_service: Option<TuiService>,
     tui_sender: Option<mpsc::UnboundedSender<TuiCommand>>,
     render_req_sender: Option<mpsc::UnboundedSender<()>>,
 }
 
 impl CmdExecutor {
-    /// Create a new command executor with Action support only
-    pub fn new(action_sender: mpsc::UnboundedSender<Action>) -> Self {
+    /// Create a new command executor
+    pub fn new() -> Self {
         Self {
-            action_sender,
             nostr_sender: None,
-            tui_service: None,
             tui_sender: None,
             render_req_sender: None,
         }
     }
 
-    /// Create a new command executor with both Action and NostrCommand support
-    pub fn new_with_nostr(
-        action_sender: mpsc::UnboundedSender<Action>,
-        nostr_sender: mpsc::UnboundedSender<NostrCommand>,
-    ) -> Self {
+    /// Create a new command executor with NostrCommand support
+    pub fn new_with_nostr(nostr_sender: mpsc::UnboundedSender<NostrCommand>) -> Self {
         Self {
-            action_sender,
             nostr_sender: Some(nostr_sender),
-            tui_service: None,
             tui_sender: None,
             render_req_sender: None,
         }
@@ -46,11 +36,6 @@ impl CmdExecutor {
     /// Add NostrCommand support to existing executor
     pub fn set_nostr_sender(&mut self, nostr_sender: mpsc::UnboundedSender<NostrCommand>) {
         self.nostr_sender = Some(nostr_sender);
-    }
-
-    /// Inject TUI service for executing TuiCommand (legacy compatibility).
-    pub fn set_tui_service(&mut self, tui_service: TuiService) {
-        self.tui_service = Some(tui_service);
     }
 
     /// Inject TUI command sender for executing TuiCommand asynchronously.
@@ -234,7 +219,6 @@ impl CmdExecutor {
     /// Get execution statistics
     pub fn get_stats(&self) -> CmdExecutorStats {
         CmdExecutorStats {
-            is_action_sender_closed: self.action_sender.is_closed(),
             has_nostr_sender: self.nostr_sender.is_some(),
             is_nostr_sender_closed: self.nostr_sender.as_ref().map(|sender| sender.is_closed()),
         }
@@ -244,7 +228,6 @@ impl CmdExecutor {
 /// Command executor statistics
 #[derive(Debug, Clone)]
 pub struct CmdExecutorStats {
-    pub is_action_sender_closed: bool,
     pub has_nostr_sender: bool,
     pub is_nostr_sender_closed: Option<bool>,
 }
@@ -281,14 +264,14 @@ impl CmdName for Cmd {
 
 #[cfg(test)]
 mod tests {
+    use crate::integration::legacy::action::Action;
+
     use super::*;
     use nostr_sdk::prelude::*;
     use tokio::sync::mpsc;
 
-    fn create_test_executor() -> (CmdExecutor, mpsc::UnboundedReceiver<Action>) {
-        let (tx, rx) = mpsc::unbounded_channel();
-        let executor = CmdExecutor::new(tx);
-        (executor, rx)
+    fn create_test_executor() -> CmdExecutor {
+        CmdExecutor::new()
     }
 
     fn create_test_event() -> Event {
@@ -300,7 +283,8 @@ mod tests {
 
     #[test]
     fn test_execute_send_reaction() {
-        let (executor, mut rx) = create_test_executor();
+        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let executor = CmdExecutor::new_with_nostr(nostr_tx);
         let event = create_test_event();
         let cmd = Cmd::SendReaction {
             target_event: event.clone(),
@@ -308,13 +292,23 @@ mod tests {
 
         executor.execute_command(&cmd).unwrap();
 
-        // No Nostr sender configured: should NOT send any Action (dropped with warn)
-        assert!(rx.try_recv().is_err());
+        let nostr_cmd = nostr_rx.try_recv().unwrap();
+        match nostr_cmd {
+            NostrCommand::SendReaction {
+                target_event: received_event,
+                content,
+            } => {
+                assert_eq!(received_event.id, event.id);
+                assert_eq!(content, "+");
+            }
+            _ => panic!("Expected SendReaction NostrCommand"),
+        }
     }
 
     #[test]
     fn test_execute_send_text_note() {
-        let (executor, mut rx) = create_test_executor();
+        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let executor = CmdExecutor::new_with_nostr(nostr_tx);
         let cmd = Cmd::SendTextNote {
             content: "Hello, Nostr!".to_string(),
             tags: vec![],
@@ -322,13 +316,19 @@ mod tests {
 
         executor.execute_command(&cmd).unwrap();
 
-        // No Nostr sender configured: should NOT send any Action (dropped with warn)
-        assert!(rx.try_recv().is_err());
+        let nostr_cmd = nostr_rx.try_recv().unwrap();
+        match nostr_cmd {
+            NostrCommand::SendTextNote { tags, content } => {
+                assert_eq!(content, "Hello, Nostr!".to_string());
+                assert!(tags.is_empty());
+            }
+            _ => panic!("Expected SendReaction NostrCommand"),
+        }
     }
 
     #[test]
     fn test_execute_resize() {
-        let (mut executor, _action_rx) = create_test_executor();
+        let mut executor = create_test_executor();
         // Provide TUI sender and assert that Resize is routed there
         let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
         executor.set_tui_sender(tui_tx);
@@ -352,7 +352,7 @@ mod tests {
 
     #[test]
     fn test_execute_render() {
-        let (mut executor, _rx) = create_test_executor();
+        let mut executor = create_test_executor();
         let cmd = Cmd::Tui(crate::core::cmd::TuiCommand::Render);
         // Provide render request sender and ensure signal is emitted
         let (render_tx, mut render_rx) = mpsc::unbounded_channel::<()>();
@@ -366,18 +366,17 @@ mod tests {
 
     #[test]
     fn test_execute_none() {
-        let (executor, mut rx) = create_test_executor();
+        let executor = create_test_executor();
         let cmd = Cmd::None;
 
         executor.execute_command(&cmd).unwrap();
 
-        // Should not send any action
-        assert!(rx.try_recv().is_err());
+        // Should not error and produce no side effects
     }
 
     #[test]
     fn test_execute_batch() {
-        let (mut executor, _rx) = create_test_executor();
+        let mut executor = create_test_executor();
         // Provide TUI and Render request senders
         let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
         executor.set_tui_sender(tui_tx);
@@ -409,7 +408,7 @@ mod tests {
 
     #[test]
     fn test_execute_multiple_commands() {
-        let (mut executor, _rx) = create_test_executor();
+        let mut executor = create_test_executor();
         // Provide render request sender to observe execution
         let (render_tx, mut render_rx) = mpsc::unbounded_channel::<()>();
         executor.set_render_request_sender(render_tx);
@@ -447,19 +446,18 @@ mod tests {
 
     #[test]
     fn test_executor_stats() {
-        let (executor, _rx) = create_test_executor();
+        let executor = create_test_executor();
         let stats = executor.get_stats();
 
-        assert!(!stats.is_action_sender_closed);
         assert!(!stats.has_nostr_sender);
         assert!(stats.is_nostr_sender_closed.is_none());
     }
 
     #[test]
     fn test_executor_with_nostr_sender() {
-        let (action_tx, _action_rx) = mpsc::unbounded_channel();
+        let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
         let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
-        let executor = CmdExecutor::new_with_nostr(action_tx, nostr_tx);
+        let executor = CmdExecutor::new_with_nostr(nostr_tx);
 
         let stats = executor.get_stats();
         assert!(stats.has_nostr_sender);
@@ -468,9 +466,8 @@ mod tests {
 
     #[test]
     fn test_nostr_command_routing() {
-        let (action_tx, mut action_rx) = mpsc::unbounded_channel();
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
-        let executor = CmdExecutor::new_with_nostr(action_tx, nostr_tx);
+        let executor = CmdExecutor::new_with_nostr(nostr_tx);
 
         let target_event = create_test_event();
         let cmd = Cmd::SendReaction {
@@ -493,29 +490,26 @@ mod tests {
             _ => panic!("Expected SendReaction NostrCommand"),
         }
 
-        // Action should NOT be sent
-        assert!(action_rx.try_recv().is_err());
+        // No Action channel anymore; ensure only NostrCommand was sent
     }
 
     #[test]
     fn test_no_fallback_without_nostr_sender() {
-        let (executor, mut rx) = create_test_executor(); // No NostrSender
+        let executor = create_test_executor(); // No NostrSender
         let target_event = create_test_event();
         let cmd = Cmd::SendReaction {
             target_event: target_event.clone(),
         };
 
-        // Should NOT fallback to Action
+        // Should NOT fallback to Action; command succeeds silently
         executor.execute_command(&cmd).unwrap();
-
-        assert!(rx.try_recv().is_err());
     }
 
     #[test]
     fn test_nostr_only_commands() {
-        let (action_tx, mut action_rx) = mpsc::unbounded_channel();
+        let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
-        let executor = CmdExecutor::new_with_nostr(action_tx, nostr_tx);
+        let executor = CmdExecutor::new_with_nostr(nostr_tx);
 
         // Test ConnectToRelays (NostrService only)
         let cmd = Cmd::ConnectToRelays {

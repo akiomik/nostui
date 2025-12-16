@@ -1,13 +1,12 @@
 use nostui::core::cmd::{Cmd, TuiCommand};
 use nostui::core::cmd_executor::CmdExecutor;
-use nostui::integration::legacy::action::Action;
 use tokio::sync::mpsc;
 
 #[tokio::test]
 async fn cmd_executor_sends_tui_command_when_sender_is_present() {
     // Arrange
-    let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
-    let mut exec = CmdExecutor::new(action_tx);
+    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
+    let mut exec = CmdExecutor::new();
 
     let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
     exec.set_tui_sender(tui_tx);

@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use crate::{
     core::cmd::Cmd, core::cmd_executor::CmdExecutor, core::msg::Msg, core::raw_msg::RawMsg,
     core::state::AppState, core::translator::translate_raw_to_domain, core::update::update,
-    infrastructure::nostr_command::NostrCommand, integration::legacy::action::Action,
+    infrastructure::nostr_command::NostrCommand,
 };
 
 /// Integration point between Elm architecture runtime and existing app
@@ -40,13 +40,10 @@ impl ElmRuntime {
     }
 
     /// Create a new ElmRuntime with command executor
-    pub fn new_with_executor(
-        initial_state: AppState,
-        action_sender: mpsc::UnboundedSender<Action>,
-    ) -> Self {
+    pub fn new_with_executor(initial_state: AppState) -> Self {
         let (msg_tx, msg_rx) = mpsc::unbounded_channel();
         let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
-        let executor = CmdExecutor::new(action_sender);
+        let executor = CmdExecutor::new();
 
         Self {
             state: initial_state,
@@ -64,12 +61,11 @@ impl ElmRuntime {
     /// Create a new ElmRuntime with both Action and NostrCommand support
     pub fn new_with_nostr_executor(
         initial_state: AppState,
-        action_sender: mpsc::UnboundedSender<Action>,
         nostr_sender: mpsc::UnboundedSender<NostrCommand>,
     ) -> Self {
         let (msg_tx, msg_rx) = mpsc::unbounded_channel();
         let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
-        let executor = CmdExecutor::new_with_nostr(action_sender, nostr_sender);
+        let executor = CmdExecutor::new_with_nostr(nostr_sender);
 
         Self {
             state: initial_state,
@@ -85,17 +81,13 @@ impl ElmRuntime {
     }
 
     /// Set command executor (Action only)
-    pub fn set_executor(&mut self, action_sender: mpsc::UnboundedSender<Action>) {
-        self.cmd_executor = Some(CmdExecutor::new(action_sender));
+    pub fn set_executor(&mut self) {
+        self.cmd_executor = Some(CmdExecutor::new());
     }
 
     /// Set command executor with NostrCommand support
-    pub fn set_nostr_executor(
-        &mut self,
-        action_sender: mpsc::UnboundedSender<Action>,
-        nostr_sender: mpsc::UnboundedSender<NostrCommand>,
-    ) {
-        self.cmd_executor = Some(CmdExecutor::new_with_nostr(action_sender, nostr_sender));
+    pub fn set_nostr_executor(&mut self, nostr_sender: mpsc::UnboundedSender<NostrCommand>) {
+        self.cmd_executor = Some(CmdExecutor::new_with_nostr(nostr_sender));
     }
 
     /// Add NostrCommand support to existing executor
@@ -529,8 +521,8 @@ mod tests {
 
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
-        let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+        let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+        let mut runtime = ElmRuntime::new_with_executor(state);
 
         // Check stats show executor is available but no Nostr support
         let stats = runtime.get_stats();
@@ -559,9 +551,9 @@ mod tests {
 
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+        let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
-        let mut runtime = ElmRuntime::new_with_nostr_executor(state, action_tx, nostr_tx);
+        let mut runtime = ElmRuntime::new_with_nostr_executor(state, nostr_tx);
 
         // Check stats show both executor and Nostr support
         let stats = runtime.get_stats();
@@ -603,9 +595,9 @@ mod tests {
 
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let (action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
+        let (_action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
         let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
-        let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+        let mut runtime = ElmRuntime::new_with_executor(state);
 
         // Initially no Nostr support
         assert!(!runtime.get_stats().has_nostr_support);
@@ -655,13 +647,13 @@ mod tests {
         use tokio::sync::mpsc;
 
         let mut runtime = create_test_runtime();
-        let (action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
+        let (_action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
 
         // Initially no executor
         assert!(!runtime.get_stats().has_executor);
 
         // Set executor
-        runtime.set_executor(action_tx);
+        runtime.set_executor();
         assert!(runtime.get_stats().has_executor);
 
         // Should now be able to execute commands
@@ -672,13 +664,9 @@ mod tests {
 
     #[test]
     fn test_execute_pending_commands_empty() {
-        use crate::integration::legacy::action::Action;
-        use tokio::sync::mpsc;
-
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let (action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
-        let mut runtime = ElmRuntime::new_with_executor(state, action_tx);
+        let mut runtime = ElmRuntime::new_with_executor(state);
 
         // No pending commands
         let result = runtime.execute_pending_commands();

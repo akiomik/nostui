@@ -14,12 +14,12 @@ mod elm_home_adapter_tests {
         let mut adapter = ElmHomeAdapter::new();
 
         // ActionチャンネルとElmRuntime設定
-        let (action_tx, _action_rx) = mpsc::unbounded_channel();
+        let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
         let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel();
 
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let runtime = ElmRuntime::new_with_nostr_executor(state, action_tx, nostr_tx);
+        let runtime = ElmRuntime::new_with_nostr_executor(state, nostr_tx);
 
         // ElmRuntimeを設定
         adapter.set_runtime(runtime);
@@ -42,12 +42,12 @@ mod elm_home_adapter_tests {
     #[test]
     fn test_elm_home_adapter_update_action() {
         let mut adapter = ElmHomeAdapter::new();
-        let (action_tx, _action_rx) = mpsc::unbounded_channel();
+        let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
         let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel();
 
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let runtime = ElmRuntime::new_with_nostr_executor(state, action_tx, nostr_tx);
+        let runtime = ElmRuntime::new_with_nostr_executor(state, nostr_tx);
         adapter.set_runtime(runtime);
 
         // Tick actionを送信
