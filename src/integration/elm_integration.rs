@@ -516,12 +516,11 @@ mod tests {
 
     #[test]
     fn test_runtime_with_executor() {
-        use crate::integration::legacy::action::Action;
         use tokio::sync::mpsc;
 
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+        let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
         let mut runtime = ElmRuntime::new_with_executor(state);
 
         // Check stats show executor is available but no Nostr support
@@ -546,12 +545,11 @@ mod tests {
 
     #[test]
     fn test_runtime_with_nostr_executor() {
-        use crate::integration::legacy::action::Action;
         use tokio::sync::mpsc;
 
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+        let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
         let mut runtime = ElmRuntime::new_with_nostr_executor(state, nostr_tx);
 
@@ -590,12 +588,11 @@ mod tests {
 
     #[test]
     fn test_add_nostr_support() {
-        use crate::integration::legacy::action::Action;
         use tokio::sync::mpsc;
 
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let (_action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
+        let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
         let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
         let mut runtime = ElmRuntime::new_with_executor(state);
 
@@ -643,11 +640,10 @@ mod tests {
 
     #[test]
     fn test_set_executor() {
-        use crate::integration::legacy::action::Action;
         use tokio::sync::mpsc;
 
         let mut runtime = create_test_runtime();
-        let (_action_tx, _action_rx) = mpsc::unbounded_channel::<Action>();
+        let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
 
         // Initially no executor
         assert!(!runtime.get_stats().has_executor);

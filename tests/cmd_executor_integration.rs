@@ -10,7 +10,7 @@ use nostui::{
         state::AppState,
         translator::translate_raw_to_domain,
     },
-    integration::{elm_integration::ElmRuntime, legacy::action::Action},
+    integration::elm_integration::ElmRuntime,
 };
 use tokio::sync::mpsc;
 
@@ -76,7 +76,7 @@ fn create_test_event() -> Event {
 fn test_complete_elm_to_action_workflow() -> Result<()> {
     // Set up the pipeline: ElmRuntime -> CmdExecutor -> Actions
     let state = create_test_state_with_config();
-    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
     let mut runtime = ElmRuntime::new_with_executor(state);
 
     // Simulate user input: like a post
@@ -130,7 +130,7 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
 #[test]
 fn test_text_note_submission_workflow() -> Result<()> {
     let state = create_test_state();
-    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
     let mut runtime = ElmRuntime::new_with_executor(state);
 
     // Simulate text note submission workflow
@@ -162,7 +162,7 @@ fn test_text_note_submission_workflow() -> Result<()> {
 #[test]
 fn test_reply_workflow_with_tags() -> Result<()> {
     let state = create_test_state();
-    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
     let mut runtime = ElmRuntime::new_with_executor(state);
 
     let target_event = create_test_event();
@@ -190,7 +190,7 @@ fn test_reply_workflow_with_tags() -> Result<()> {
 #[test]
 fn test_multiple_commands_in_sequence() -> Result<()> {
     let state = create_test_state();
-    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+    let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
     let mut runtime = ElmRuntime::new_with_executor(state);
 
     let event1 = create_test_event();
@@ -278,7 +278,7 @@ fn test_batch_command_execution() -> Result<()> {
 #[test]
 fn test_error_handling_in_execution() -> Result<()> {
     let state = create_test_state();
-    let (_action_tx, action_rx) = mpsc::unbounded_channel::<Action>();
+    let (_action_tx, action_rx) = mpsc::unbounded_channel::<()>();
     let mut runtime = ElmRuntime::new_with_executor(state);
 
     // Drop the action receiver to simulate a closed channel
@@ -309,7 +309,7 @@ fn test_error_handling_in_execution() -> Result<()> {
 #[test]
 fn test_translator_integration_with_executor() -> Result<()> {
     let mut state = create_test_state_with_config();
-    let (_action_tx, mut _action_rx) = mpsc::unbounded_channel::<Action>();
+    let (_action_tx, mut _action_rx) = mpsc::unbounded_channel::<()>();
     let mut runtime = ElmRuntime::new_with_executor(state.clone());
 
     // Add an event and select it
