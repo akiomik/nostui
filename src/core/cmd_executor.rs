@@ -264,7 +264,6 @@ impl CmdName for Cmd {
 
 #[cfg(test)]
 mod tests {
-    use crate::integration::legacy::action::Action;
 
     use super::*;
     use nostr_sdk::prelude::*;
@@ -507,7 +506,7 @@ mod tests {
 
     #[test]
     fn test_nostr_only_commands() {
-        let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+        let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
         let executor = CmdExecutor::new_with_nostr(nostr_tx);
 
