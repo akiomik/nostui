@@ -6,4 +6,3 @@
 
 pub mod app_runner;
 pub mod elm_integration;
-pub mod legacy;
