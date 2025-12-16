@@ -1,5 +1,4 @@
 #![deny(warnings)]
-#![allow(dead_code)]
 
 // use clap::Parser; // Not directly needed, used via Cli
 use color_eyre::eyre::Result;

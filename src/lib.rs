@@ -50,7 +50,6 @@
 //! - [`infrastructure::config`] - Configuration management
 
 #![deny(warnings)]
-#![allow(dead_code)]
 
 // Core Elm architecture modules
 pub mod core;

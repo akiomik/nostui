@@ -16,9 +16,6 @@ use crate::{
 pub struct AppRunner<'a> {
     /* lifetime used by ElmHome */
     headless: bool,
-    config: Config,
-    tick_rate: f64,
-    frame_rate: f64,
     runtime: ElmRuntime,
     render_req_rx: mpsc::UnboundedReceiver<()>,
     // NOTE: In tests or non-interactive environments, TUI can be absent.
@@ -95,9 +92,6 @@ impl<'a> AppRunner<'a> {
 
         Ok(Self {
             headless,
-            config,
-            tick_rate,
-            frame_rate,
             runtime,
             render_req_rx,
             tui,

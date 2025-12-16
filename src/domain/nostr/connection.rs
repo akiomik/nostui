@@ -8,7 +8,6 @@ use nostr_sdk::prelude::*;
 const DEFAULT_CONTACT_LIST_TIMEOUT_SECS: u64 = 10;
 
 pub struct Connection {
-    keys: Keys,
     client: Client,
 }
 
@@ -21,7 +20,7 @@ impl Connection {
         }
         client.connect().await;
 
-        Ok(Self { keys, client })
+        Ok(Self { client })
     }
 
     pub async fn subscribe_timeline(
