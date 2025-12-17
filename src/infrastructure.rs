@@ -13,4 +13,5 @@ pub mod fps_service;
 pub mod nostr_command;
 pub mod nostr_service;
 pub mod tui;
+pub mod tui_event_source;
 pub mod tui_service;
