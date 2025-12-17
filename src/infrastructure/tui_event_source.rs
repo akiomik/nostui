@@ -37,12 +37,12 @@ impl From<tui::Event> for TuiEvent {
 }
 
 pub enum EventSource {
-    Real(std::sync::Arc<tokio::sync::Mutex<tui::Tui>>),
+    Real(std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>),
     Test(VecDeque<TuiEvent>),
 }
 
 impl EventSource {
-    pub fn real(tui: std::sync::Arc<tokio::sync::Mutex<tui::Tui>>) -> Self {
+    pub fn real(tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>) -> Self {
         EventSource::Real(tui)
     }
     pub fn test(events: impl IntoIterator<Item = TuiEvent>) -> Self {

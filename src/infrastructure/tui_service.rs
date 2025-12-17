@@ -93,9 +93,10 @@ impl TuiService {
     {
         if let Some(inner) = &self.inner {
             let mut tui = inner.lock().await;
-            tui.draw(|f| {
+            let mut closure = |f: &mut ratatui::Frame<'_>| {
                 draw(f);
-            })?;
+            };
+            tui.draw(&mut closure)?;
         }
         Ok(())
     }

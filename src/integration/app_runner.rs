@@ -284,7 +284,7 @@ impl<'a> AppRunner<'a> {
         }
         if let Some(tui) = &mut self.tui {
             let mut guard = tui.lock().await;
-            guard.draw(|f| {
+            let mut draw = |f: &mut ratatui::Frame<'_>| {
                 let area = f.area();
                 // Home timeline and input overlay
                 self.home.render(f, area, &state);
@@ -292,7 +292,8 @@ impl<'a> AppRunner<'a> {
                 let _ = self.status_bar.draw(&state, f, area);
                 // FPS indicator (top line overlay)
                 let _ = self.fps.draw(&state, f, area);
-            })?;
+            };
+            guard.draw(&mut draw)?;
         }
         Ok(())
     }

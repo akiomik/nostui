@@ -71,18 +71,17 @@ impl TuiLike for TestTui {
         Ok(())
     }
 
-    fn draw<F>(&mut self, f: F) -> Result<()>
-    where
-        F: FnOnce(&mut Frame<'_>),
-    {
-        self.draw_impl(f)
+    fn draw(&mut self, f: &mut dyn FnMut(&mut Frame<'_>)) -> Result<()> {
+        self.term.draw(|frame| f(frame))?;
+        self.draws += 1;
+        Ok(())
     }
 
     fn resize(&mut self, area: ratatui::prelude::Rect) -> Result<()> {
         self.resize_impl(area)
     }
 
-    fn next<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Option<Event>> + Send + 'a>> {
+    fn next(&mut self) -> Pin<Box<dyn Future<Output = Option<Event>> + Send + '_>> {
         let ev = self.events.pop_front();
         Box::pin(future::ready(ev))
     }
