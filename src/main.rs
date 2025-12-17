@@ -29,7 +29,7 @@ async fn tokio_main() -> Result<()> {
         use std::sync::Arc;
         use tokio::sync::Mutex;
         let tui = Arc::new(Mutex::new(
-            nostui::infrastructure::tui::Tui::new()?
+            nostui::infrastructure::tui::RealTui::new()?
                 .tick_rate(tick_rate)
                 .frame_rate(frame_rate),
         ));

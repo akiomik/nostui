@@ -15,8 +15,6 @@ use crossterm::{
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::CrosstermBackend as Backend;
 
-// Re-export for backward compatibility during migration
-pub type Tui = RealTui;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
