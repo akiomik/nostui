@@ -14,6 +14,9 @@ use crossterm::{
 };
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::CrosstermBackend as Backend;
+
+// Re-export for backward compatibility during migration
+pub type Tui = RealTui;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
@@ -55,7 +58,9 @@ pub trait TuiLike: Send {
     fn next<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Option<Event>> + Send + 'a>>;
 }
 
-pub struct Tui {
+pub struct RealTui {
+    // NOTE: keep CrosstermBackend alias local to RealTui implementation
+    // to avoid leaking concrete backend type outside.
     pub terminal: ratatui::Terminal<Backend<IO>>,
     pub task: JoinHandle<()>,
     pub cancellation_token: CancellationToken,
@@ -67,7 +72,12 @@ pub struct Tui {
     pub paste: bool,
 }
 
-impl Tui {
+impl RealTui {
+    pub fn resize(&mut self, area: ratatui::prelude::Rect) -> Result<()> {
+        self.terminal.resize(area)?;
+        Ok(())
+    }
+
     pub fn new() -> Result<Self> {
         let tick_rate = 4.0;
         let frame_rate = 60.0;
@@ -240,7 +250,7 @@ impl Tui {
     }
 }
 
-impl Deref for Tui {
+impl Deref for RealTui {
     type Target = ratatui::Terminal<Backend<IO>>;
 
     fn deref(&self) -> &Self::Target {
@@ -248,13 +258,35 @@ impl Deref for Tui {
     }
 }
 
-impl DerefMut for Tui {
+impl DerefMut for RealTui {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.terminal
     }
 }
 
-impl Drop for Tui {
+impl TuiLike for RealTui {
+    fn enter(&mut self) -> Result<()> {
+        RealTui::enter(self)
+    }
+    fn exit(&mut self) -> Result<()> {
+        RealTui::exit(self)
+    }
+    fn draw<F>(&mut self, f: F) -> Result<()>
+    where
+        F: FnOnce(&mut Frame<'_>),
+    {
+        self.terminal.draw(f)?;
+        Ok(())
+    }
+    fn resize(&mut self, area: ratatui::prelude::Rect) -> Result<()> {
+        RealTui::resize(self, area)
+    }
+    fn next<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Option<Event>> + Send + 'a>> {
+        Box::pin(RealTui::next(self))
+    }
+}
+
+impl Drop for RealTui {
     fn drop(&mut self) {
         self.exit().unwrap();
     }
