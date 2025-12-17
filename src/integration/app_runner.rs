@@ -54,18 +54,6 @@ impl<'a> AppRunner<'a> {
         self.event_source = Some(src);
     }
 
-    pub fn set_tui_for_tests(
-        &mut self,
-        tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
-    ) {
-        self.tui = tui.clone();
-        self.event_source = Some(EventSource::real(tui));
-    }
-
-    pub async fn render_for_tests(&mut self) -> Result<()> {
-        self.render().await
-    }
-
     pub async fn run_one_cycle_for_tests(&mut self) -> Result<()> {
         // Drain Nostr events
         while let Ok(ev) = self.nostr_event_rx.try_recv() {
@@ -92,6 +80,7 @@ impl<'a> AppRunner<'a> {
         let _ = self.runtime.run_update_cycle();
         Ok(())
     }
+
     /// Create a new AppRunner with ElmRuntime and infrastructure initialized.
     pub async fn new_with_config(
         config: Config,
