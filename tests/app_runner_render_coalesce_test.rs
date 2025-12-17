@@ -1,8 +1,7 @@
 use color_eyre::eyre::Result;
 use nostr_sdk::prelude::*;
 use nostui::infrastructure::config::Config;
-use nostui::infrastructure::test_terminal::TestTerminal;
-use nostui::infrastructure::tui_event_source::{EventSource, TuiEvent};
+use nostui::infrastructure::test_tui::TestTui;
 use nostui::integration::app_runner::AppRunner;
 
 #[tokio::test]
@@ -17,13 +16,11 @@ async fn test_render_coalesce_with_test_terminal() -> Result<()> {
     // Create runner (headless)
     let mut runner = AppRunner::new_with_config(cfg, 10.0, 30.0, true).await?;
 
-    // Inject TestTerminal and Test EventSource
-    runner.set_test_terminal_for_tests(TestTerminal::new(80, 24)?);
-    runner.set_event_source_for_tests(EventSource::test(vec![
-        TuiEvent::Render,
-        TuiEvent::Render,
-        TuiEvent::Render,
-    ]));
+    // Inject TestTui
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    let test_tui = Arc::new(Mutex::new(TestTui::new(80, 24)?));
+    runner.set_tui_for_tests(test_tui.clone());
 
     // Emulate render request channel: send multiple requests in one logical loop
     // Using run_one_cycle_for_tests doesn't drive coalesce in main loop, so directly call render
@@ -33,11 +30,10 @@ async fn test_render_coalesce_with_test_terminal() -> Result<()> {
     runner.render_for_tests().await?;
     runner.render_for_tests().await?;
 
-    // With TestTerminal, draw_count reflects the number of frames drawn
-    // We expect exactly 2 frames (once per "loop"), regardless of multiple Render events queued.
-    // Since we directly called render twice, assert 2.
-    // draw count via helper
-    assert_eq!(runner.test_terminal_draw_count_for_tests(), Some(2));
+    // With TestTui, draw_count reflects the number of frames drawn.
+    // We expect exactly 2 frames (once per "loop").
+    let count = test_tui.lock().await.draw_count();
+    assert_eq!(count, 2);
 
     Ok(())
 }

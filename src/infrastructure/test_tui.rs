@@ -29,7 +29,11 @@ impl TestTui {
         })
     }
 
-    pub fn with_events(width: u16, height: u16, events: impl IntoIterator<Item = Event>) -> Result<Self> {
+    pub fn with_events(
+        width: u16,
+        height: u16,
+        events: impl IntoIterator<Item = Event>,
+    ) -> Result<Self> {
         let mut this = Self::new(width, height)?;
         this.events.extend(events);
         Ok(this)
@@ -43,15 +47,6 @@ impl TestTui {
     /// Enqueue a single event for tests.
     pub fn enqueue_event(&mut self, ev: Event) {
         self.events.push_back(ev);
-    }
-
-    fn draw_impl<F>(&mut self, f: F) -> Result<()>
-    where
-        F: FnOnce(&mut Frame<'_>),
-    {
-        self.term.draw(f)?;
-        self.draws += 1;
-        Ok(())
     }
 
     fn resize_impl(&mut self, area: ratatui::prelude::Rect) -> Result<()> {
