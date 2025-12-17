@@ -4,7 +4,13 @@ use tokio::sync::mpsc;
 
 use crate::{
     core::{raw_msg::RawMsg, state::AppState},
-    infrastructure::{config::Config, fps_service::FpsService, nostr_service::NostrService, tui},
+    infrastructure::{
+        config::Config,
+        fps_service::FpsService,
+        nostr_service::NostrService,
+        tui,
+        tui_event_source::{EventSource, TuiEvent},
+    },
     integration::elm_integration::ElmRuntime,
     presentation::components::{
         elm_fps::ElmFpsCounter, elm_home::ElmHome, elm_status_bar::ElmStatusBar,
@@ -23,6 +29,7 @@ pub struct AppRunner<'a> {
     // rather than using Option. This avoids conditional logic in the runner and
     // makes dependencies explicit at the composition root.
     tui: Option<std::sync::Arc<tokio::sync::Mutex<tui::Tui>>>,
+    event_source: Option<EventSource>,
     // Presentation components (stateless/pure rendering)
     home: ElmHome<'a>,
     status_bar: ElmStatusBar,
@@ -41,6 +48,41 @@ impl<'a> AppRunner<'a> {
     }
     pub fn runtime_mut(&mut self) -> &mut ElmRuntime {
         &mut self.runtime
+    }
+
+    // Test helper: inject a custom event source (e.g., EventSource::Test)
+    pub fn set_event_source_for_tests(
+        &mut self,
+        src: crate::infrastructure::tui_event_source::EventSource,
+    ) {
+        self.event_source = Some(src);
+    }
+
+    pub async fn run_one_cycle_for_tests(&mut self) -> Result<()> {
+        // Drain Nostr events
+        while let Ok(ev) = self.nostr_event_rx.try_recv() {
+            self.runtime.send_raw_msg(RawMsg::ReceiveEvent(ev));
+        }
+        // Pull one TUI event if available from injected event source
+        if let Some(src) = &mut self.event_source {
+            if let Some(e) = src.next().await {
+                match e {
+                    TuiEvent::Quit => self.runtime.send_raw_msg(RawMsg::Quit),
+                    TuiEvent::Tick => {
+                        self.runtime.send_raw_msg(RawMsg::Tick);
+                        self.fps_service.on_app_tick();
+                    }
+                    TuiEvent::Render => {
+                        // coalesce: mark render request; actual draw is skipped in tests
+                    }
+                    TuiEvent::Resize(w, h) => self.runtime.send_raw_msg(RawMsg::Resize(w, h)),
+                    TuiEvent::Key(k) => self.runtime.send_raw_msg(RawMsg::Key(k)),
+                    _ => {}
+                }
+            }
+        }
+        let _ = self.runtime.run_update_cycle();
+        Ok(())
     }
     /// Create a new AppRunner with ElmRuntime and infrastructure initialized.
     pub async fn new_with_config(
@@ -90,11 +132,14 @@ impl<'a> AppRunner<'a> {
         // Route TUI commands from CmdExecutor
         let _ = runtime.add_tui_sender(tui_cmd_tx);
 
+        let event_source = tui.as_ref().map(|t| EventSource::real(t.clone()));
+
         Ok(Self {
             headless,
             runtime,
             render_req_rx,
             tui,
+            event_source,
             // Keep service for future direct Cmd::Tui execution
             // (currently CmdExecutor falls back to Action until wiring is complete)
             home: ElmHome::new(),
@@ -127,43 +172,43 @@ impl<'a> AppRunner<'a> {
                 self.runtime.send_raw_msg(RawMsg::ReceiveEvent(ev));
             }
 
-            if !self.headless {
-                if let Some(tui) = &mut self.tui {
-                    let e_opt = {
-                        let mut guard = tui.lock().await;
-                        guard.next().await
-                    };
-                    if let Some(e) = e_opt {
-                        match e {
-                            tui::Event::Quit => {
-                                self.runtime.send_raw_msg(RawMsg::Quit);
-                            }
-                            tui::Event::Tick => {
-                                self.runtime.send_raw_msg(RawMsg::Tick);
-                                // Count app tick for FPS based on TUI tick cadence
-                                self.fps_service.on_app_tick();
-                            }
-                            tui::Event::Render => {
-                                // Coalesce render request; actual render happens once per loop
-                                should_render = true;
-                            }
-                            tui::Event::Resize(w, h) => {
-                                self.runtime.send_raw_msg(RawMsg::Resize(w, h));
-                            }
-                            tui::Event::Key(key) => {
-                                self.runtime.send_raw_msg(RawMsg::Key(key));
-                            }
-                            tui::Event::FocusGained => {}
-                            tui::Event::FocusLost => {}
-                            tui::Event::Paste(s) => {
-                                // Paste not yet supported in Elm translator; can be forwarded via RawMsg::Error for now
-                                let _ = s; // suppress unused warning
-                            }
-                            tui::Event::Mouse(_m) => {}
-                            tui::Event::Init => {}
-                            tui::Event::Error => {}
-                            tui::Event::Closed => {}
+            if !self.headless && self.tui.is_some() {
+                let e_opt = if let Some(src) = &mut self.event_source {
+                    src.next().await
+                } else {
+                    None
+                };
+
+                if let Some(e) = e_opt {
+                    match e {
+                        TuiEvent::Quit => {
+                            self.runtime.send_raw_msg(RawMsg::Quit);
                         }
+                        TuiEvent::Tick => {
+                            self.runtime.send_raw_msg(RawMsg::Tick);
+                            // Count app tick for FPS based on TUI tick cadence
+                            self.fps_service.on_app_tick();
+                        }
+                        TuiEvent::Render => {
+                            // Coalesce render request; actual render happens once per loop
+                            should_render = true;
+                        }
+                        TuiEvent::Resize(w, h) => {
+                            self.runtime.send_raw_msg(RawMsg::Resize(w, h));
+                        }
+                        TuiEvent::Key(key) => {
+                            self.runtime.send_raw_msg(RawMsg::Key(key));
+                        }
+                        TuiEvent::FocusGained => {}
+                        TuiEvent::FocusLost => {}
+                        TuiEvent::Paste(s) => {
+                            // Paste not yet supported in Elm translator; can be forwarded via RawMsg::Error for now
+                            let _ = s; // suppress unused warning
+                        }
+                        TuiEvent::Mouse(_m) => {}
+                        TuiEvent::Init => {}
+                        TuiEvent::Error => {}
+                        TuiEvent::Closed => {}
                     }
                 }
             }
