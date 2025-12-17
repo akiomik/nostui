@@ -6,24 +6,24 @@ use crate::infrastructure::tui;
 
 /// Thin facade around the TUI backend to execute rendering-related commands.
 /// When no TUI is available (headless), methods are no-ops.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct TuiService {
-    inner: Option<Arc<Mutex<dyn tui::TuiLike + Send>>>,
+    inner: Arc<Mutex<dyn tui::TuiLike + Send>>,
 }
 
 impl TuiService {
-    pub fn new(inner: Option<Arc<Mutex<dyn tui::TuiLike + Send>>>) -> Self {
+    pub fn new(inner: Arc<Mutex<dyn tui::TuiLike + Send>>) -> Self {
         Self { inner }
     }
 
-    pub fn from_shared(inner: Option<Arc<Mutex<dyn tui::TuiLike + Send>>>) -> Self {
+    pub fn from_shared(inner: Arc<Mutex<dyn tui::TuiLike + Send>>) -> Self {
         Self { inner }
     }
 
     /// Create a channel-driven TuiService like NostrService pattern.
     /// Returns (command_sender, service).
     pub fn new_with_channel(
-        inner: Option<Arc<Mutex<dyn tui::TuiLike + Send>>>,
+        inner: Arc<Mutex<dyn tui::TuiLike + Send>>,
     ) -> (
         tokio::sync::mpsc::UnboundedSender<crate::core::cmd::TuiCommand>,
         tokio::sync::mpsc::UnboundedReceiver<crate::core::cmd::TuiCommand>,
@@ -43,10 +43,8 @@ impl TuiService {
             while let Some(cmd) = rx.recv().await {
                 match cmd {
                     TuiCommand::Resize { width, height } => {
-                        if let Some(inner) = &self.inner {
-                            let mut tui = inner.lock().await;
-                            let _ = tui.resize(ratatui::prelude::Rect::new(0, 0, width, height));
-                        }
+                        let mut tui = self.inner.lock().await;
+                        let _ = tui.resize(ratatui::prelude::Rect::new(0, 0, width, height));
                     }
                     TuiCommand::Render => {
                         // Rendering stays orchestrated by AppRunner; ignore here.
@@ -56,55 +54,39 @@ impl TuiService {
         })
     }
 
-    pub fn is_available(&self) -> bool {
-        self.inner.is_some()
-    }
-
     pub async fn enter(&self) -> Result<()> {
-        if let Some(inner) = &self.inner {
-            let mut tui = inner.lock().await;
-            tui.enter()?;
-        }
+        let mut tui = self.inner.lock().await;
+        tui.enter()?;
         Ok(())
     }
 
     pub async fn exit(&self) -> Result<()> {
-        if let Some(inner) = &self.inner {
-            let mut tui = inner.lock().await;
-            tui.exit()?;
-        }
+        let mut tui = self.inner.lock().await;
+        tui.exit()?;
         Ok(())
     }
 
     pub async fn next_event(&self) -> Option<tui::Event> {
-        if let Some(inner) = &self.inner {
-            let mut tui = inner.lock().await;
-            tui.next().await
-        } else {
-            None
-        }
+        let mut tui = self.inner.lock().await;
+        tui.next().await
     }
 
     pub async fn render<F>(&self, mut draw: F) -> Result<()>
     where
         F: FnMut(&mut ratatui::Frame<'_>) + Send + 'static,
     {
-        if let Some(inner) = &self.inner {
-            let mut tui = inner.lock().await;
-            let mut closure = |f: &mut ratatui::Frame<'_>| {
-                draw(f);
-            };
-            tui.draw(&mut closure)?;
-        }
+        let mut tui = self.inner.lock().await;
+        let mut closure = |f: &mut ratatui::Frame<'_>| {
+            draw(f);
+        };
+        tui.draw(&mut closure)?;
         Ok(())
     }
 
     pub async fn resize(&self, width: u16, height: u16) -> Result<()> {
-        if let Some(inner) = &self.inner {
-            let mut tui = inner.lock().await;
-            use ratatui::prelude::Rect;
-            tui.resize(Rect::new(0, 0, width, height))?;
-        }
+        let mut tui = self.inner.lock().await;
+        use ratatui::prelude::Rect;
+        tui.resize(Rect::new(0, 0, width, height))?;
         Ok(())
     }
 }
