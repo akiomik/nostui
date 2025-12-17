@@ -2,8 +2,8 @@ use nostr_sdk::ToBech32;
 use nostui::core::raw_msg::RawMsg;
 use nostui::integration::app_runner::AppRunner;
 
-// Note: This test exercises headless mode. It avoids opening a real TUI and
-// network side effects are contained within NostrService which we won't drive far.
+// Note: This test avoids opening a real interactive TUI by injecting a TestTui when needed.
+// Network side effects are contained within NostrService which we won't drive far.
 
 #[tokio::test]
 async fn test_app_runner_headless_initialization() {
@@ -16,7 +16,12 @@ async fn test_app_runner_headless_initialization() {
         ..Default::default()
     };
 
-    let runner = AppRunner::new_with_config(cfg, 10.0, 30.0, true)
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    let tui = Arc::new(Mutex::new(
+        nostui::infrastructure::test_tui::TestTui::new(80, 24).expect("failed to create TestTui"),
+    ));
+    let runner = AppRunner::new_with_config(cfg, 10.0, 30.0, tui)
         .await
         .expect("failed to create AppRunner");
 
@@ -37,7 +42,12 @@ async fn test_app_runner_headless_one_loop_quit() {
         ..Default::default()
     };
 
-    let mut runner = AppRunner::new_with_config(cfg, 10.0, 30.0, true)
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    let tui = Arc::new(Mutex::new(
+        nostui::infrastructure::test_tui::TestTui::new(80, 24).expect("failed to create TestTui"),
+    ));
+    let mut runner = AppRunner::new_with_config(cfg, 10.0, 30.0, tui)
         .await
         .expect("failed to create AppRunner");
 

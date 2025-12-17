@@ -13,14 +13,11 @@ async fn test_render_coalesce_with_test_terminal() -> Result<()> {
         ..Default::default()
     };
 
-    // Create runner (headless)
-    let mut runner = AppRunner::new_with_config(cfg, 10.0, 30.0, true).await?;
-
-    // Inject TestTui
+    // Create runner with TestTui to avoid TTY requirements
     use std::sync::Arc;
     use tokio::sync::Mutex;
     let test_tui = Arc::new(Mutex::new(TestTui::new(80, 24)?));
-    runner.set_tui_for_tests(test_tui.clone());
+    let mut runner = AppRunner::new_with_config(cfg, 10.0, 30.0, test_tui.clone()).await?;
 
     // Emulate render request channel: send multiple requests in one logical loop
     // Using run_one_cycle_for_tests doesn't drive coalesce in main loop, so directly call render
