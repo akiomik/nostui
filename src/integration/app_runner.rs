@@ -40,6 +40,8 @@ pub struct AppRunner<'a> {
     nostr_event_rx: mpsc::UnboundedReceiver<Event>,
     // FPS service sending RawMsg updates
     fps_service: FpsService,
+    // Optional test terminal (ratatui TestBackend). When present, rendering uses this instead of Tui.
+    test_terminal: Option<crate::infrastructure::test_terminal::TestTerminal>,
 }
 
 impl<'a> AppRunner<'a> {
@@ -56,6 +58,21 @@ impl<'a> AppRunner<'a> {
         src: crate::infrastructure::tui_event_source::EventSource,
     ) {
         self.event_source = Some(src);
+    }
+
+    pub fn set_test_terminal_for_tests(
+        &mut self,
+        term: crate::infrastructure::test_terminal::TestTerminal,
+    ) {
+        self.test_terminal = Some(term);
+    }
+
+    pub fn test_terminal_draw_count_for_tests(&self) -> Option<usize> {
+        self.test_terminal.as_ref().map(|t| t.draws)
+    }
+
+    pub async fn render_for_tests(&mut self) -> Result<()> {
+        self.render().await
     }
 
     pub async fn run_one_cycle_for_tests(&mut self) -> Result<()> {
@@ -148,6 +165,7 @@ impl<'a> AppRunner<'a> {
             nostr_terminate_tx,
             nostr_event_rx,
             fps_service,
+            test_terminal: None,
         })
     }
 
@@ -251,6 +269,19 @@ impl<'a> AppRunner<'a> {
 
     async fn render(&mut self) -> Result<()> {
         let state = self.runtime.state().clone();
+        // Prefer test terminal when injected (for unit tests)
+        if let Some(test_term) = &mut self.test_terminal {
+            test_term.draw(|f| {
+                let area = f.area();
+                // Home timeline and input overlay
+                self.home.render(f, area, &state);
+                // Status bar overlays bottom lines
+                let _ = self.status_bar.draw(&state, f, area);
+                // FPS indicator (top line overlay)
+                let _ = self.fps.draw(&state, f, area);
+            })?;
+            return Ok(());
+        }
         if let Some(tui) = &mut self.tui {
             let mut guard = tui.lock().await;
             guard.draw(|f| {

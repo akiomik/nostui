@@ -12,6 +12,7 @@ pub mod config;
 pub mod fps_service;
 pub mod nostr_command;
 pub mod nostr_service;
+pub mod test_terminal;
 pub mod tui;
 pub mod tui_event_source;
 pub mod tui_service;
