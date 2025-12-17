@@ -16,10 +16,6 @@ impl TuiService {
         Self { inner }
     }
 
-    pub fn from_shared(inner: Arc<Mutex<dyn tui::TuiLike + Send>>) -> Self {
-        Self { inner }
-    }
-
     /// Create a channel-driven TuiService like NostrService pattern.
     /// Returns (command_sender, service).
     pub fn new_with_channel(
