@@ -10,8 +10,13 @@ async fn test_app_runner_event_source_injection_and_processing() {
         ..Default::default()
     };
 
-    // Create runner headless
-    let mut runner = AppRunner::new_with_config(cfg, 10.0, 30.0, true)
+    // Create runner with TestTui to avoid TTY requirements on CI
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    let tui = Arc::new(Mutex::new(
+        nostui::infrastructure::test_tui::TestTui::new(80, 24).expect("failed to create TestTui"),
+    ));
+    let mut runner = AppRunner::new_with_config(cfg, 10.0, 30.0, tui)
         .await
         .expect("failed to create AppRunner");
 

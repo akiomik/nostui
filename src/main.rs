@@ -25,8 +25,16 @@ async fn tokio_main() -> Result<()> {
     let frame_rate = args.frame_rate;
 
     // Initialize and run the new Elm AppRunner
-    let mut runner =
-        AppRunner::new_with_config(config.clone(), tick_rate, frame_rate, false).await?;
+    let mut runner = {
+        use std::sync::Arc;
+        use tokio::sync::Mutex;
+        let tui = Arc::new(Mutex::new(
+            nostui::infrastructure::tui::Tui::new()?
+                .tick_rate(tick_rate)
+                .frame_rate(frame_rate),
+        ));
+        AppRunner::new_with_config(config.clone(), tick_rate, frame_rate, tui).await?
+    };
     runner.run().await?;
 
     Ok(())

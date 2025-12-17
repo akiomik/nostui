@@ -21,14 +21,10 @@ use crate::{
 /// This is introduced alongside the legacy runner and is not yet wired to main().
 pub struct AppRunner<'a> {
     /* lifetime used by ElmHome */
-    headless: bool,
     runtime: ElmRuntime,
     render_req_rx: mpsc::UnboundedReceiver<()>,
     // NOTE: In tests or non-interactive environments, TUI can be absent.
-    // TODO: Prefer injecting a concrete TUI implementation (e.g., real or test backend)
-    // rather than using Option. This avoids conditional logic in the runner and
-    // makes dependencies explicit at the composition root.
-    tui: Option<std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>>,
+    tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
     event_source: Option<EventSource>,
     // Presentation components (stateless/pure rendering)
     home: ElmHome<'a>,
@@ -62,8 +58,8 @@ impl<'a> AppRunner<'a> {
         &mut self,
         tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
     ) {
-        self.tui = Some(tui);
-        self.event_source = self.tui.as_ref().map(|t| EventSource::real(t.clone()));
+        self.tui = tui.clone();
+        self.event_source = Some(EventSource::real(tui));
     }
 
     pub async fn render_for_tests(&mut self) -> Result<()> {
@@ -99,9 +95,9 @@ impl<'a> AppRunner<'a> {
     /// Create a new AppRunner with ElmRuntime and infrastructure initialized.
     pub async fn new_with_config(
         config: Config,
-        tick_rate: f64,
-        frame_rate: f64,
-        headless: bool,
+        _tick_rate: f64,
+        _frame_rate: f64,
+        tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
     ) -> Result<Self> {
         let keys = Keys::parse(&config.privatekey)?;
 
@@ -128,26 +124,19 @@ impl<'a> AppRunner<'a> {
         let (render_req_tx, render_req_rx) = mpsc::unbounded_channel::<()>();
         let _ = runtime.add_render_request_sender(render_req_tx);
 
-        // Initialize TUI only when interactive
-        let tui: Option<std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>> = if headless {
-            None
-        } else {
-            Some(std::sync::Arc::new(tokio::sync::Mutex::new(
-                tui::Tui::new()?.tick_rate(tick_rate).frame_rate(frame_rate),
-            )))
-        };
+        // TUI is injected by caller (RealTui for interactive, TestTui for tests)
+        let tui = tui;
         // Wire TuiService with channel (Nostr-like pattern)
         let (tui_cmd_tx, tui_cmd_rx, tui_service) =
-            crate::infrastructure::tui_service::TuiService::new_with_channel(tui.clone());
+            crate::infrastructure::tui_service::TuiService::new_with_channel(Some(tui.clone()));
         // Start TuiService background loop
         let _tui_handle = tui_service.clone().run(tui_cmd_rx);
         // Route TUI commands from CmdExecutor
         let _ = runtime.add_tui_sender(tui_cmd_tx);
 
-        let event_source = tui.as_ref().map(|t| EventSource::real(t.clone()));
+        let event_source = Some(EventSource::real(tui.clone()));
 
         Ok(Self {
-            headless,
             runtime,
             render_req_rx,
             tui,
@@ -165,11 +154,9 @@ impl<'a> AppRunner<'a> {
 
     /// Run the main loop: handle TUI events, Nostr events, update Elm state and render.
     pub async fn run(&mut self) -> Result<()> {
-        if !self.headless {
-            if let Some(tui) = &mut self.tui {
-                let mut guard = tui.lock().await;
-                guard.enter()?;
-            }
+        {
+            let mut guard = self.tui.lock().await;
+            guard.enter()?;
         }
 
         loop {
@@ -184,7 +171,7 @@ impl<'a> AppRunner<'a> {
                 self.runtime.send_raw_msg(RawMsg::ReceiveEvent(ev));
             }
 
-            if !self.headless && self.tui.is_some() {
+            {
                 let e_opt = if let Some(src) = &mut self.event_source {
                     src.next().await
                 } else {
@@ -225,11 +212,6 @@ impl<'a> AppRunner<'a> {
                 }
             }
 
-            if self.headless {
-                // In headless mode, yield briefly to avoid a busy loop
-                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
-            }
-
             // Process Elm update cycle and execute commands
             if let Err(e) = self.runtime.run_update_cycle() {
                 log::error!("ElmRuntime error: {}", e);
@@ -239,7 +221,7 @@ impl<'a> AppRunner<'a> {
             }
 
             // Execute coalesced render if requested
-            if should_render && !self.headless {
+            if should_render {
                 self.render().await?;
                 self.fps_service.on_render();
             }
@@ -252,11 +234,9 @@ impl<'a> AppRunner<'a> {
 
         // Shutdown services and exit TUI
         let _ = self.nostr_terminate_tx.send(());
-        if !self.headless {
-            if let Some(tui) = &mut self.tui {
-                let mut guard = tui.lock().await;
-                guard.exit()?;
-            }
+        {
+            let mut guard = self.tui.lock().await;
+            guard.exit()?;
         }
         Ok(())
     }
@@ -264,8 +244,8 @@ impl<'a> AppRunner<'a> {
     async fn render(&mut self) -> Result<()> {
         let state = self.runtime.state().clone();
         // Prefer test terminal when injected (for unit tests)
-        if let Some(tui) = &mut self.tui {
-            let mut guard = tui.lock().await;
+        {
+            let mut guard = self.tui.lock().await;
             let mut draw = |f: &mut ratatui::Frame<'_>| {
                 let area = f.area();
                 // Home timeline and input overlay
