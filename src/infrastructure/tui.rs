@@ -15,6 +15,8 @@ use crossterm::{
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::CrosstermBackend as Backend;
 use serde::{Deserialize, Serialize};
+use std::future::Future;
+use std::pin::Pin;
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
@@ -41,6 +43,16 @@ pub enum Event {
     Key(KeyEvent),
     Mouse(MouseEvent),
     Resize(u16, u16),
+}
+
+pub trait TuiLike: Send {
+    fn enter(&mut self) -> Result<()>;
+    fn exit(&mut self) -> Result<()>;
+    fn draw<F>(&mut self, f: F) -> Result<()>
+    where
+        F: FnOnce(&mut Frame<'_>);
+    fn resize(&mut self, area: ratatui::prelude::Rect) -> Result<()>;
+    fn next<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Option<Event>> + Send + 'a>>;
 }
 
 pub struct Tui {
