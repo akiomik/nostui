@@ -8,24 +8,22 @@ use crate::infrastructure::tui;
 /// When no TUI is available (headless), methods are no-ops.
 #[derive(Clone, Default)]
 pub struct TuiService {
-    inner: Option<Arc<Mutex<tui::Tui>>>,
+    inner: Option<Arc<Mutex<dyn tui::TuiLike + Send>>>,
 }
 
 impl TuiService {
-    pub fn new(inner: Option<tui::Tui>) -> Self {
-        Self {
-            inner: inner.map(|t| Arc::new(Mutex::new(t))),
-        }
+    pub fn new(inner: Option<Arc<Mutex<dyn tui::TuiLike + Send>>>) -> Self {
+        Self { inner }
     }
 
-    pub fn from_shared(inner: Option<Arc<Mutex<tui::Tui>>>) -> Self {
+    pub fn from_shared(inner: Option<Arc<Mutex<dyn tui::TuiLike + Send>>>) -> Self {
         Self { inner }
     }
 
     /// Create a channel-driven TuiService like NostrService pattern.
     /// Returns (command_sender, service).
     pub fn new_with_channel(
-        inner: Option<Arc<Mutex<tui::Tui>>>,
+        inner: Option<Arc<Mutex<dyn tui::TuiLike + Send>>>,
     ) -> (
         tokio::sync::mpsc::UnboundedSender<crate::core::cmd::TuiCommand>,
         tokio::sync::mpsc::UnboundedReceiver<crate::core::cmd::TuiCommand>,
