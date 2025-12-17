@@ -51,11 +51,9 @@ pub enum Event {
 pub trait TuiLike: Send {
     fn enter(&mut self) -> Result<()>;
     fn exit(&mut self) -> Result<()>;
-    fn draw<F>(&mut self, f: F) -> Result<()>
-    where
-        F: FnOnce(&mut Frame<'_>);
+    fn draw(&mut self, f: &mut dyn FnMut(&mut Frame<'_>)) -> Result<()>;
     fn resize(&mut self, area: ratatui::prelude::Rect) -> Result<()>;
-    fn next<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Option<Event>> + Send + 'a>>;
+    fn next(&mut self) -> Pin<Box<dyn Future<Output = Option<Event>> + Send + '_>>;
 }
 
 pub struct RealTui {
@@ -271,17 +269,14 @@ impl TuiLike for RealTui {
     fn exit(&mut self) -> Result<()> {
         RealTui::exit(self)
     }
-    fn draw<F>(&mut self, f: F) -> Result<()>
-    where
-        F: FnOnce(&mut Frame<'_>),
-    {
-        self.terminal.draw(f)?;
+    fn draw(&mut self, f: &mut dyn FnMut(&mut Frame<'_>)) -> Result<()> {
+        self.terminal.draw(|frame| f(frame))?;
         Ok(())
     }
     fn resize(&mut self, area: ratatui::prelude::Rect) -> Result<()> {
         RealTui::resize(self, area)
     }
-    fn next<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Option<Event>> + Send + 'a>> {
+    fn next(&mut self) -> Pin<Box<dyn Future<Output = Option<Event>> + Send + '_>> {
         Box::pin(RealTui::next(self))
     }
 }
