@@ -6,17 +6,17 @@ use nostui::{
     core::translator::translate_raw_to_domain,
     core::update::update,
     infrastructure::fps_service::FpsService,
-    presentation::components::elm_fps::ElmFpsCounter,
+    presentation::components::fps::FpsCounter,
 };
 use tokio::sync::mpsc;
 
 /// Test FPS counter integration with Elm architecture
 #[test]
-fn test_elm_fps_counter_stateless() {
-    let fps1 = ElmFpsCounter::new();
-    let fps2 = ElmFpsCounter;
+fn test_fps_counter_stateless() {
+    let fps1 = FpsCounter::new();
+    let fps2 = FpsCounter;
 
-    // ElmFpsCounter should be completely stateless
+    // FpsCounter should be completely stateless
     // Since it's a unit struct, all instances are equivalent
     assert_eq!(format!("{:?}", fps1), format!("{:?}", fps2));
 }
@@ -96,8 +96,8 @@ async fn test_fps_integration_full_flow() {
     assert_eq!(state.system.fps_data.app_frames, 1);
     assert_eq!(state.system.fps_data.render_frames, 1);
 
-    // Test ElmFpsCounter can access the state
-    let _elm_fps = ElmFpsCounter::new();
+    // Test FpsCounter can access the state
+    let _fps = FpsCounter::new();
 
     // The component should be able to access FPS data from state
     // (Actual rendering test would require a terminal backend mock)
@@ -133,7 +133,7 @@ fn test_fps_service_independence() {
 
 /// Test comparison with legacy FPS counter behavior
 #[test]
-fn test_elm_vs_legacy_fps_approach() {
+fn test_new_vs_legacy_fps_approach() {
     let keys = Keys::generate();
     let state = AppState::new(keys.public_key());
 
@@ -145,8 +145,8 @@ fn test_elm_vs_legacy_fps_approach() {
     test_state.system.fps_data.app_fps = 30.0;
     test_state.system.fps_data.render_fps = 60.0;
 
-    // ElmFpsCounter can render any state passed to it
-    let _elm_fps = ElmFpsCounter::new();
+    // FpsCounter can render any state passed to it
+    let _new_fps = FpsCounter::new();
 
     // Component is stateless - same instance can render different states
     assert_eq!(test_state.system.fps_data.app_fps, 30.0);
