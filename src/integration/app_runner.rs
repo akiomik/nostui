@@ -249,3 +249,75 @@ impl<'a> AppRunner<'a> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::test_tui::TestTui;
+    use crate::infrastructure::tui_event_source::EventSource as TestEventSource;
+    use crate::infrastructure::tui_event_source::TuiEvent;
+
+    fn make_test_config() -> Config {
+        let keys = Keys::generate();
+        Config {
+            privatekey: keys.secret_key().to_bech32().unwrap(),
+            relays: vec!["wss://example.com".into()],
+            ..Default::default()
+        }
+    }
+
+    async fn make_runner_with_test_tui() -> AppRunner<'static> {
+        use std::sync::Arc;
+        use tokio::sync::Mutex;
+        let tui = Arc::new(Mutex::new(
+            TestTui::new(80, 24).expect("failed to create TestTui"),
+        ));
+        AppRunner::new_with_config(make_test_config(), 10.0, 30.0, tui)
+            .await
+            .expect("failed to create AppRunner")
+    }
+
+    #[tokio::test]
+    async fn app_runner_one_cycle_quit_sets_should_quit() {
+        let mut runner = make_runner_with_test_tui().await;
+        // Inject test event source that yields a single Quit
+        runner.set_event_source_for_tests(TestEventSource::test([TuiEvent::Quit]));
+
+        // Run one lightweight cycle
+        runner
+            .run_one_cycle_for_tests()
+            .await
+            .expect("run_one_cycle_for_tests should succeed");
+
+        assert!(runner.runtime().state().system.should_quit);
+    }
+
+    #[tokio::test]
+    async fn app_runner_render_happens_on_render_event_then_quit() {
+        use std::sync::Arc;
+        use tokio::sync::Mutex;
+
+        // Prepare TestTui to observe draw count
+        let test_tui = Arc::new(Mutex::new(
+            TestTui::new(80, 24).expect("failed to create TestTui"),
+        ));
+        let draw_counter_handle = test_tui.clone();
+
+        // Create runner with the same TestTui instance
+        let mut runner = AppRunner::new_with_config(make_test_config(), 10.0, 30.0, test_tui)
+            .await
+            .expect("failed to create AppRunner");
+
+        // Drive the loop with events: Render -> Quit
+        runner
+            .set_event_source_for_tests(TestEventSource::test([TuiEvent::Render, TuiEvent::Quit]));
+
+        // Run the main loop; it should finish quickly due to Quit
+        let res = tokio::time::timeout(std::time::Duration::from_millis(200), runner.run()).await;
+        assert!(res.is_ok(), "runner.run() should complete promptly");
+
+        // Verify at least one draw happened due to Render coalescing
+        let draws = draw_counter_handle.lock().await.draw_count();
+        assert!(draws >= 1, "expected at least one render, got {}", draws);
+    }
+}
