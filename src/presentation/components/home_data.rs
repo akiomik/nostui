@@ -195,7 +195,7 @@ impl HomeData {
     /// Check if user can interact with timeline
     /// Pure function based on app state
     pub fn can_interact_with_timeline(state: &AppState) -> bool {
-        !state.ui.show_input && !state.timeline.notes.is_empty()
+        !state.ui.is_composing() && !state.timeline.notes.is_empty()
     }
 
     /// Get display name for a public key
@@ -394,11 +394,11 @@ mod tests {
         assert!(HomeData::can_interact_with_timeline(&state));
 
         // Cannot interact when input is shown
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         assert!(!HomeData::can_interact_with_timeline(&state));
 
         // Cannot interact when no notes (even if input hidden)
-        state.ui.show_input = false;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
         state.timeline.notes.clear();
         assert!(!HomeData::can_interact_with_timeline(&state));
     }

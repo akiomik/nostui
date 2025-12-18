@@ -28,7 +28,7 @@
 //! let (new_state, commands) = update(Msg::Ui(UiMsg::ShowNewNote), initial_state);
 //!
 //! // State is now updated and commands contain side effects to execute
-//! assert!(new_state.ui.show_input);
+//! assert!(new_state.ui.is_composing());
 //! ```
 //!
 //! ## Key Features

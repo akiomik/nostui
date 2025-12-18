@@ -111,8 +111,8 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
     // Debug: Print execution log
     println!("Execution log: {:?}", execution_log);
     println!(
-        "Runtime state: show_input={}, selected_index={:?}",
-        runtime.state().ui.show_input,
+        "Runtime state: input_mode={}, selected_index={:?}",
+        runtime.state().ui.is_composing(),
         runtime.state().timeline.selected_index
     );
     println!("Timeline length: {}", runtime.state().timeline_len());
@@ -340,7 +340,7 @@ fn test_translator_integration_with_executor() -> Result<()> {
 
     // Should have triggered ShowReply message (no command)
     // The actual reply submission would happen when user presses Enter
-    assert!(runtime.state().ui.show_input);
+    assert!(runtime.state().ui.is_composing());
     assert!(runtime.state().ui.reply_to.is_some());
 
     Ok(())

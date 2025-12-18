@@ -84,7 +84,7 @@ mod tests {
         let state = AppState::default();
 
         assert_eq!(state.timeline.notes.len(), 0);
-        assert!(!state.ui.show_input);
+        assert!(!state.ui.is_composing());
         assert!(!state.system.should_quit);
         assert!(state.system.is_loading);
     }

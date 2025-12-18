@@ -58,7 +58,7 @@ fn translate_key_event(key: crossterm::event::KeyEvent, state: &AppState) -> Vec
     }
 
     // Context-sensitive key bindings
-    if state.ui.show_input {
+    if state.ui.is_composing() {
         translate_input_mode_keys(key, state)
     } else {
         translate_normal_mode_keys(key, state)
@@ -80,7 +80,7 @@ fn translate_input_mode_keys(key: crossterm::event::KeyEvent, state: &AppState) 
             code: KeyCode::Esc, ..
         } => {
             // In input mode, always cancel input
-            if state.ui.show_input {
+            if state.ui.is_composing() {
                 vec![Msg::Ui(UiMsg::CancelInput)]
             } else {
                 // In normal mode, use keybinding configuration
@@ -132,7 +132,7 @@ fn translate_action_to_msg(action: &Action, state: &AppState) -> Vec<Msg> {
         Action::Suspend => vec![Msg::System(SystemMsg::Suspend)],
         Action::SubmitTextNote => {
             // Only process submit in input mode
-            if state.ui.show_input {
+            if state.ui.is_composing() {
                 vec![Msg::Ui(UiMsg::SubmitNote)]
             } else {
                 vec![]
@@ -241,7 +241,9 @@ fn translate_repost_key(state: &AppState) -> Vec<Msg> {
 
 /// Helper: Check if user can interact with timeline
 fn can_interact_with_timeline(state: &AppState) -> bool {
-    !state.ui.show_input && state.timeline.selected_index.is_some() && !state.timeline_is_empty()
+    !state.ui.is_composing()
+        && state.timeline.selected_index.is_some()
+        && !state.timeline_is_empty()
 }
 
 /// Helper: Check if user has already reacted to a note
@@ -481,7 +483,7 @@ mod tests {
     #[test]
     fn test_translate_input_mode_keys() {
         let mut state = create_test_state();
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
 
         // Test Ctrl+P in input mode (submit)
         let key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
@@ -618,7 +620,7 @@ mod tests {
         let mut state = create_test_state();
 
         // Cannot reply when in input mode - 'r' should be delegated to TextArea
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         state.ui.input_content = "Hello".to_string();
         state.timeline.selected_index = Some(0);
         let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
@@ -626,7 +628,7 @@ mod tests {
         assert_eq!(result, vec![Msg::Ui(UiMsg::ProcessTextAreaInput(key))]);
 
         // Cannot reply when no note selected
-        state.ui.show_input = false;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
         state.timeline.selected_index = None;
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result.len(), 1);
@@ -724,12 +726,12 @@ mod tests {
         let mut state = create_test_state();
 
         // Cannot interact when input is showing
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         state.timeline.selected_index = Some(0);
         assert!(!can_interact_with_timeline(&state));
 
         // Cannot interact when no note selected
-        state.ui.show_input = false;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
         state.timeline.selected_index = None;
         assert!(!can_interact_with_timeline(&state));
 

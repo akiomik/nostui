@@ -22,8 +22,8 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
 
         // Timeline messages (delegated to TimelineState)
         Msg::Timeline(timeline_msg) => {
-            // When input is shown, ignore scroll-related timeline msgs
-            if state.ui.show_input {
+            // When composing, ignore scroll-related timeline msgs
+            if state.ui.is_composing() {
                 match timeline_msg {
                     TimelineMsg::ScrollUp
                     | TimelineMsg::ScrollDown
@@ -74,7 +74,7 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
                     }
                 }
                 UiMsg::ProcessTextAreaInput(key) => {
-                    if state.ui.show_input {
+                    if state.ui.is_composing() {
                         state.ui.pending_input_keys.push(key);
                         let textarea_state = crate::presentation::components::home_input::HomeInput::process_pending_keys(&mut state);
                         textarea_state.apply_to_ui_state(&mut state.ui);
@@ -161,7 +161,7 @@ mod tests {
         let state = create_test_state();
         let (new_state, cmds) = update(Msg::Ui(UiMsg::ShowNewNote), state);
 
-        assert!(new_state.ui.show_input);
+        assert!(new_state.ui.is_composing());
         assert!(new_state.ui.reply_to.is_none());
         assert!(new_state.ui.input_content.is_empty());
         assert!(cmds.is_empty());
@@ -173,7 +173,7 @@ mod tests {
         let target_event = create_test_event();
         let (new_state, cmds) = update(Msg::Ui(UiMsg::ShowReply(target_event.clone())), state);
 
-        assert!(new_state.ui.show_input);
+        assert!(new_state.ui.is_composing());
         assert_eq!(new_state.ui.reply_to, Some(target_event));
         assert!(new_state.ui.input_content.is_empty());
         assert!(cmds.is_empty());
@@ -182,13 +182,13 @@ mod tests {
     #[test]
     fn test_update_cancel_input() {
         let mut state = create_test_state();
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         state.ui.input_content = "test".to_string();
         state.ui.reply_to = Some(create_test_event());
 
         let (new_state, cmds) = update(Msg::Ui(UiMsg::CancelInput), state);
 
-        assert!(!new_state.ui.show_input);
+        assert!(new_state.ui.is_normal());
         assert!(new_state.ui.reply_to.is_none());
         assert!(new_state.ui.input_content.is_empty());
         assert!(cmds.is_empty());
@@ -198,7 +198,7 @@ mod tests {
     fn test_ui_cancel_input_delegates_to_timeline_and_keeps_status_message() {
         let mut state = create_test_state();
         // Prepare UI state to be reset by CancelInput
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         state.ui.input_content = "typing...".into();
         state.ui.reply_to = Some(create_test_event());
         // Prepare timeline selection and a system status message
@@ -208,7 +208,7 @@ mod tests {
         let (new_state, cmds) = update(Msg::Ui(UiMsg::CancelInput), state);
 
         // UiState was reset by UiState::update
-        assert!(!new_state.ui.show_input);
+        assert!(new_state.ui.is_normal());
         assert!(new_state.ui.reply_to.is_none());
         assert!(new_state.ui.input_content.is_empty());
 

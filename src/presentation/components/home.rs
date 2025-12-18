@@ -43,7 +43,7 @@ impl<'a> Home<'a> {
         }
 
         // Render input area as overlay if needed (like original implementation home.rs:265-270)
-        if state.ui.show_input {
+        if state.ui.is_composing() {
             // Calculate overlay input area exactly like original implementation
             let mut input_area = frame.area();
             input_area.height /= 2;
@@ -79,7 +79,7 @@ impl<'a> Home<'a> {
 
     /// Check if we can perform interactions with the currently selected note
     pub fn can_interact(&self, state: &AppState) -> bool {
-        !state.ui.show_input && state.timeline.selected_index.is_some()
+        !state.ui.is_composing() && state.timeline.selected_index.is_some()
     }
 
     /// Get the currently selected note for interactions
@@ -94,7 +94,7 @@ impl<'a> Home<'a> {
 
     /// Check if input is in a valid state for submission
     pub fn can_submit_input(&self, state: &AppState) -> bool {
-        state.ui.show_input && !state.ui.input_content.trim().is_empty()
+        state.ui.can_submit_input()
     }
 
     /// Reset the component to initial state
@@ -111,7 +111,7 @@ impl<'a> Home<'a> {
     pub fn get_available_actions(&self, state: &AppState) -> Vec<HomeAction> {
         let mut actions = Vec::new();
 
-        if state.ui.show_input {
+        if state.ui.is_composing() {
             actions.push(HomeAction::SubmitNote);
             actions.push(HomeAction::CancelInput);
         } else {
@@ -133,7 +133,7 @@ impl<'a> Home<'a> {
 
     /// Get contextual help text based on current state
     pub fn get_help_text(&self, state: &AppState) -> String {
-        if state.ui.show_input {
+        if state.ui.is_composing() {
             if state.ui.reply_to.is_some() {
                 "Enter: Send reply | Esc: Cancel".to_string()
             } else {
@@ -153,7 +153,7 @@ impl<'a> Home<'a> {
         HomeStatusInfo {
             timeline_count: state.timeline_len(),
             selected_index: state.timeline.selected_index,
-            input_mode: state.ui.show_input,
+            input_mode: state.ui.is_composing(),
             reply_mode: state.ui.reply_to.is_some(),
             can_interact: self.can_interact(state),
         }
@@ -211,16 +211,16 @@ mod tests {
         let mut state = create_test_state();
 
         // Cannot interact when input is showing
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         assert!(!home.can_interact(&state));
 
         // Cannot interact when no note is selected
-        state.ui.show_input = false;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
         state.timeline.selected_index = None;
         assert!(!home.can_interact(&state));
 
         // Can interact when not in input mode and note is selected
-        state.ui.show_input = false;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
         state.timeline.selected_index = Some(0);
         assert!(home.can_interact(&state));
     }
@@ -240,11 +240,11 @@ mod tests {
         let mut state = create_test_state();
 
         // Cannot submit when input is not showing
-        state.ui.show_input = false;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
         assert!(!home.can_submit_input(&state));
 
         // Check when input is showing (depends on input component implementation)
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         state.ui.input_content = "test content".to_string();
         // Result depends on input validation logic
     }
@@ -255,13 +255,13 @@ mod tests {
         let mut state = create_test_state();
 
         // Actions when in input mode
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         let actions = home.get_available_actions(&state);
         assert!(actions.contains(&HomeAction::SubmitNote));
         assert!(actions.contains(&HomeAction::CancelInput));
 
         // Actions when in normal mode with empty timeline
-        state.ui.show_input = false;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
         state.timeline.selected_index = None;
         let actions = home.get_available_actions(&state);
         assert!(actions.contains(&HomeAction::ShowNewNote));
@@ -274,13 +274,13 @@ mod tests {
         let mut state = create_test_state();
 
         // Help text for input mode
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         let help = home.get_help_text(&state);
         assert!(help.contains("Enter"));
         assert!(help.contains("Esc"));
 
         // Help text for empty timeline
-        state.ui.show_input = false;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
         let help = home.get_help_text(&state);
         assert!(help.contains("New note"));
     }
@@ -298,7 +298,7 @@ mod tests {
         assert!(!status.can_interact);
 
         // Change state and verify status updates
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         state.ui.reply_to = Some(create_test_event());
         let status = home.get_status_info(&state);
         assert!(status.input_mode);

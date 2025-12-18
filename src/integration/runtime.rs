@@ -270,7 +270,7 @@ impl Runtime {
             queued_commands: self.cmd_queue.len(),
             timeline_notes_count: self.state.timeline_len(),
             profiles_count: self.state.user.profiles.len(),
-            is_input_shown: self.state.ui.show_input,
+            is_input_shown: self.state.ui.is_composing(),
             selected_note_index: self.state.timeline.selected_index,
             has_executor: self.cmd_executor.is_some(),
             has_nostr_support,
@@ -395,7 +395,7 @@ mod tests {
 
         // Start new post
         runtime.process_message(Msg::Ui(UiMsg::ShowNewNote));
-        assert!(runtime.state().ui.show_input);
+        assert!(runtime.state().ui.is_composing());
         assert!(runtime.state().ui.reply_to.is_none());
 
         // Update input content
@@ -418,7 +418,7 @@ mod tests {
         }
 
         // Check if UI is reset
-        assert!(!runtime.state().ui.show_input);
+        assert!(runtime.state().ui.is_normal());
         assert!(runtime.state().ui.input_content.is_empty());
     }
 
@@ -429,12 +429,12 @@ mod tests {
 
         // Start reply
         runtime.process_message(Msg::Ui(UiMsg::ShowReply(target_event.clone())));
-        assert!(runtime.state().ui.show_input);
+        assert!(runtime.state().ui.is_composing());
         assert_eq!(runtime.state().ui.reply_to, Some(target_event));
 
         // Cancel input
         runtime.process_message(Msg::Ui(UiMsg::CancelInput));
-        assert!(!runtime.state().ui.show_input);
+        assert!(runtime.state().ui.is_normal());
         assert!(runtime.state().ui.reply_to.is_none());
     }
 
@@ -481,13 +481,13 @@ mod tests {
             .unwrap();
 
         // Not processed yet
-        assert!(!runtime.state().ui.show_input);
+        assert!(runtime.state().ui.is_normal());
 
         // Process all messages
         let commands = runtime.process_all_messages();
 
         // State has been updated
-        assert!(runtime.state().ui.show_input);
+        assert!(runtime.state().ui.is_composing());
         assert_eq!(runtime.state().ui.input_content, "test");
         assert!(commands.is_empty());
     }
