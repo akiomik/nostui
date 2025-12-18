@@ -2,13 +2,11 @@ use crate::core::msg::ui::UiMsg;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
 
+use crate::core::state::ui::SubmitData;
 use crate::{
-    core::msg::Msg,
-    core::raw_msg::RawMsg,
-    core::state::AppState,
-    core::translator::translate_raw_to_domain,
-    core::update::update,
-    presentation::components::home_input::{HomeInput, SubmitData},
+    core::msg::Msg, core::raw_msg::RawMsg, core::state::AppState,
+    core::translator::translate_raw_to_domain, core::update::update,
+    presentation::components::home_input::HomeInput,
 };
 
 /// Test helper for TextArea and HomeInput integration testing
@@ -216,13 +214,16 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Assert submit data is available and return it
     pub fn assert_submit_data(&self) -> SubmitData {
-        HomeInput::get_submit_data(&self.state).expect("Expected submit data to be available")
+        self.state
+            .ui
+            .prepare_submit_data()
+            .expect("Expected submit data to be available")
     }
 
     /// Assert submit data is not available
     pub fn assert_no_submit_data(&self) {
         assert!(
-            HomeInput::get_submit_data(&self.state).is_none(),
+            self.state.ui.prepare_submit_data().is_none(),
             "Expected no submit data to be available"
         );
     }

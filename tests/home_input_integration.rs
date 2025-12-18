@@ -1,10 +1,7 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    core::msg::Msg,
-    core::state::AppState,
-    core::update::update,
-    presentation::components::home_input::{HomeInput, SubmitData},
-    test_helpers::TextAreaTestHelper,
+    core::msg::Msg, core::state::AppState, core::update::update,
+    presentation::components::home_input::HomeInput, test_helpers::TextAreaTestHelper,
 };
 
 /// Test Home input layer integration with Elm architecture
@@ -125,7 +122,7 @@ fn test_submission_with_reply_tags() {
 
     // Should be submittable with reply tags
     assert!(HomeInput::can_submit(&state));
-    let submit_data = HomeInput::get_submit_data(&state).unwrap();
+    let submit_data = state.ui.prepare_submit_data().unwrap();
     assert_eq!(submit_data.content, "This is a reply");
     assert!(!submit_data.tags.is_empty()); // Should have reply tags
 }
@@ -235,15 +232,15 @@ fn test_mode_transitions() {
 
 #[test]
 fn test_submit_data_equality() {
-    let data1 = SubmitData {
+    let data1 = nostui::core::state::ui::SubmitData {
         content: "Hello".to_string(),
         tags: vec![],
     };
-    let data2 = SubmitData {
+    let data2 = nostui::core::state::ui::SubmitData {
         content: "Hello".to_string(),
         tags: vec![],
     };
-    let data3 = SubmitData {
+    let data3 = nostui::core::state::ui::SubmitData {
         content: "World".to_string(),
         tags: vec![],
     };

@@ -87,11 +87,6 @@ impl<'a> Home<'a> {
         state.selected_note()
     }
 
-    /// Get input validation and submission data
-    pub fn get_input_submit_data(&self, state: &AppState) -> Option<super::home_input::SubmitData> {
-        HomeInput::get_submit_data(state)
-    }
-
     /// Check if input is in a valid state for submission
     pub fn can_submit_input(&self, state: &AppState) -> bool {
         state.ui.can_submit_input()

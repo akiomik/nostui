@@ -241,24 +241,6 @@ impl<'a> HomeInput<'a> {
         state.ui.can_submit_input()
     }
 
-    /// Get submit data for creating a note
-    /// Pure function that extracts all data needed for submission
-    pub fn get_submit_data(state: &AppState) -> Option<SubmitData> {
-        if !Self::can_submit(state) {
-            return None;
-        }
-
-        let content = state.ui.input_content.clone();
-        let tags = if let Some(ref reply_to) = state.ui.reply_to {
-            // Use the same reply tag building logic as original
-            crate::domain::nostr::nip10::ReplyTagsBuilder::build(reply_to.clone())
-        } else {
-            vec![]
-        };
-
-        Some(SubmitData { content, tags })
-    }
-
     /// Get current input statistics
     /// Pure function for UI display (character count, line count, etc.)
     pub fn get_input_stats(state: &AppState) -> InputStats {
@@ -401,13 +383,6 @@ impl<'a> Default for HomeInput<'a> {
     }
 }
 
-/// Data required for submitting a note
-#[derive(Debug, Clone, PartialEq)]
-pub struct SubmitData {
-    pub content: String,
-    pub tags: Vec<nostr_sdk::Tag>,
-}
-
 /// Statistics about current input content
 #[derive(Debug, Clone, PartialEq)]
 pub struct InputStats {
@@ -421,14 +396,6 @@ pub struct InputStats {
 mod tests {
     use super::*;
     use nostr_sdk::prelude::*;
-
-    fn create_test_state_with_input() -> AppState {
-        let keys = Keys::generate();
-        let mut state = AppState::new(keys.public_key());
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
-        state.ui.input_content = "Test content".to_string();
-        state
-    }
 
     fn create_test_event() -> Event {
         let keys = Keys::generate();
@@ -465,31 +432,6 @@ mod tests {
         // Can submit with actual content
         state.ui.input_content = "Hello, Nostr!".to_string();
         assert!(HomeInput::can_submit(&state));
-    }
-
-    #[test]
-    fn test_get_submit_data() {
-        let mut state = create_test_state_with_input();
-
-        // Basic submission (new note)
-        state.ui.input_content = "Hello, Nostr!".to_string();
-        let submit_data = HomeInput::get_submit_data(&state);
-        assert!(submit_data.is_some());
-        let data = submit_data.unwrap();
-        assert_eq!(data.content, "Hello, Nostr!");
-        assert!(data.tags.is_empty()); // No reply tags
-
-        // Reply submission
-        state.ui.reply_to = Some(create_test_event());
-        let submit_data = HomeInput::get_submit_data(&state);
-        assert!(submit_data.is_some());
-        let data = submit_data.unwrap();
-        assert!(!data.tags.is_empty()); // Should have reply tags
-
-        // Cannot submit when input hidden
-        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
-        let submit_data = HomeInput::get_submit_data(&state);
-        assert!(submit_data.is_none());
     }
 
     #[test]
@@ -560,25 +502,6 @@ mod tests {
         // Reply mode
         state.ui.reply_to = Some(create_test_event());
         assert_eq!(HomeInput::get_input_mode_description(&state), "Reply mode");
-    }
-
-    #[test]
-    fn test_submit_data_equality() {
-        let data1 = SubmitData {
-            content: "Hello".to_string(),
-            tags: vec![],
-        };
-        let data2 = SubmitData {
-            content: "Hello".to_string(),
-            tags: vec![],
-        };
-        let data3 = SubmitData {
-            content: "World".to_string(),
-            tags: vec![],
-        };
-
-        assert_eq!(data1, data2);
-        assert_ne!(data1, data3);
     }
 
     #[test]

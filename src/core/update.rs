@@ -54,44 +54,25 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
         }
 
         // New UI path (delegates to existing behavior for now)
-        Msg::Ui(ui_msg) => {
-            match ui_msg {
-                UiMsg::SubmitNote => {
-                    if let Some(submit_data) =
-                        crate::presentation::components::home_input::HomeInput::get_submit_data(
-                            &state,
-                        )
-                    {
-                        // Reset UiState through its update to centralize behavior
-                        let mut cmds = state.ui.update(UiMsg::CancelInput);
-                        cmds.push(Cmd::SendTextNote {
-                            content: submit_data.content,
-                            tags: submit_data.tags,
-                        });
-                        (state, cmds)
-                    } else {
-                        (state, vec![])
-                    }
+        Msg::Ui(ui_msg) => match ui_msg {
+            UiMsg::ProcessTextAreaInput(key) => {
+                if state.ui.is_composing() {
+                    state.ui.pending_input_keys.push(key);
+                    let textarea_state = crate::presentation::components::home_input::HomeInput::process_pending_keys(&mut state);
+                    textarea_state.apply_to_ui_state(&mut state.ui);
                 }
-                UiMsg::ProcessTextAreaInput(key) => {
-                    if state.ui.is_composing() {
-                        state.ui.pending_input_keys.push(key);
-                        let textarea_state = crate::presentation::components::home_input::HomeInput::process_pending_keys(&mut state);
-                        textarea_state.apply_to_ui_state(&mut state.ui);
-                    }
-                    (state, vec![])
-                }
-                ref other => {
-                    let cancel = matches!(other, UiMsg::CancelInput);
-                    let mut cmds = state.ui.update(other.clone());
-                    if cancel {
-                        let tl_cmds = state.timeline.update(TimelineMsg::DeselectNote);
-                        cmds.extend(tl_cmds);
-                    }
-                    (state, cmds)
-                }
+                (state, vec![])
             }
-        }
+            ref other => {
+                let cancel = matches!(other, UiMsg::CancelInput);
+                let mut cmds = state.ui.update(other.clone());
+                if cancel {
+                    let tl_cmds = state.timeline.update(TimelineMsg::DeselectNote);
+                    cmds.extend(tl_cmds);
+                }
+                (state, cmds)
+            }
+        },
 
         // Legacy user messages (backward compatibility - to be phased out)
         Msg::UpdateProfile(pubkey, profile) => {
