@@ -21,7 +21,7 @@ async fn test_app_runner_headless_initialization() {
     let tui = Arc::new(Mutex::new(
         nostui::infrastructure::test_tui::TestTui::new(80, 24).expect("failed to create TestTui"),
     ));
-    let runner = AppRunner::new_with_config(cfg, 10.0, 30.0, tui)
+    let runner = AppRunner::new_with_config(cfg, tui)
         .await
         .expect("failed to create AppRunner");
 
@@ -47,7 +47,7 @@ async fn test_app_runner_headless_one_loop_quit() {
     let tui = Arc::new(Mutex::new(
         nostui::infrastructure::test_tui::TestTui::new(80, 24).expect("failed to create TestTui"),
     ));
-    let mut runner = AppRunner::new_with_config(cfg, 10.0, 30.0, tui)
+    let mut runner = AppRunner::new_with_config(cfg, tui)
         .await
         .expect("failed to create AppRunner");
 
