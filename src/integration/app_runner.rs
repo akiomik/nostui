@@ -36,6 +36,8 @@ pub struct AppRunner<'a> {
     nostr_event_rx: mpsc::UnboundedReceiver<Event>,
     // FPS service sending RawMsg updates
     fps_service: FpsService,
+    // Coalesced pending resize (last-only within a loop)
+    pending_resize: Option<(u16, u16)>,
 }
 
 impl<'a> AppRunner<'a> {
@@ -111,6 +113,7 @@ impl<'a> AppRunner<'a> {
             nostr_terminate_tx,
             nostr_event_rx,
             fps_service,
+            pending_resize: None,
         })
     }
 
@@ -127,6 +130,19 @@ impl<'a> AppRunner<'a> {
     #[inline]
     pub(crate) fn decide_render(queued_render_reqs: usize, saw_tui_render: bool) -> bool {
         queued_render_reqs > 0 || saw_tui_render
+    }
+
+    /// Pure decision function: coalesce multiple resizes into last-only
+    #[inline]
+    pub(crate) fn decide_resize(
+        last_seen: Option<(u16, u16)>,
+        events: &[(u16, u16)],
+    ) -> Option<(u16, u16)> {
+        if let Some((w, h)) = events.last().cloned() {
+            Some((w, h))
+        } else {
+            last_seen
+        }
     }
 
     /// Drain all pending Nostr events and forward to runtime as RawMsg
@@ -152,7 +168,8 @@ impl<'a> AppRunner<'a> {
                 *should_render = true;
             }
             TuiEvent::Resize(w, h) => {
-                self.runtime.send_raw_msg(RawMsg::Resize(w, h));
+                // Coalesce last-only using pure decision helper
+                self.pending_resize = Self::decide_resize(self.pending_resize, &[(w, h)]);
             }
             TuiEvent::Key(key) => {
                 self.runtime.send_raw_msg(RawMsg::Key(key));
@@ -171,6 +188,10 @@ impl<'a> AppRunner<'a> {
 
     /// Process Elm update cycle and handle errors by emitting RawMsg::Error
     fn process_update_cycle(&mut self) {
+        // Apply coalesced resize (last-only) before running update cycle
+        if let Some((w, h)) = self.pending_resize.take() {
+            self.runtime.send_raw_msg(RawMsg::Resize(w, h));
+        }
         if let Err(e) = self.runtime.run_update_cycle() {
             log::error!("ElmRuntime error: {}", e);
             // Fall back to showing error via RawMsg to avoid tight loop
@@ -204,6 +225,9 @@ impl<'a> AppRunner<'a> {
     }
 
     async fn poll_next_tui_event(&mut self) -> Option<TuiEvent> {
+        // Note: For Resize coalescing, we only poll one event per loop.
+        // If multiple Resize events arrive, last one wins across loops via pending_resize.
+
         if let Some(src) = &mut self.event_source {
             src.next().await
         } else {
@@ -359,6 +383,38 @@ mod tests {
         // Render event sets the flag but does not render yet
         runner.handle_tui_event(TuiEvent::Render, &mut sr);
         assert!(sr);
+    }
+
+    #[test]
+    fn decide_render_table_tests() {
+        // false when nothing queued and no TUI render seen
+        assert!(!AppRunner::decide_render(0, false));
+        // true when queued > 0
+        assert!(AppRunner::decide_render(1, false));
+        assert!(AppRunner::decide_render(2, false));
+        // true when TUI render seen even if queue == 0
+        assert!(AppRunner::decide_render(0, true));
+        // true when both conditions
+        assert!(AppRunner::decide_render(3, true));
+    }
+
+    #[test]
+    fn decide_resize_last_only_table_tests() {
+        // none + empty -> none
+        assert_eq!(AppRunner::decide_resize(None, &[]), None);
+        // last-only from events
+        assert_eq!(AppRunner::decide_resize(None, &[(10, 10)]), Some((10, 10)));
+        assert_eq!(
+            AppRunner::decide_resize(None, &[(10, 10), (20, 30)]),
+            Some((20, 30))
+        );
+        // prefer events over last_seen when events present
+        assert_eq!(
+            AppRunner::decide_resize(Some((5, 5)), &[(100, 200)]),
+            Some((100, 200))
+        );
+        // fallback to last_seen when no new events
+        assert_eq!(AppRunner::decide_resize(Some((5, 5)), &[]), Some((5, 5)));
     }
 
     #[tokio::test]
