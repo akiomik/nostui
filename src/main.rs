@@ -33,7 +33,7 @@ async fn tokio_main() -> Result<()> {
                 .tick_rate(tick_rate)
                 .frame_rate(frame_rate),
         ));
-        AppRunner::new_with_config(config.clone(), tui).await?
+        AppRunner::new_with_real(config.clone(), tui).await?
     };
     runner.run().await?;
 
