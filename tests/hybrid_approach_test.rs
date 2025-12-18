@@ -3,7 +3,7 @@ use nostr_sdk::prelude::*;
 use nostui::{
     core::msg::Msg,
     core::raw_msg::RawMsg,
-    core::state::{AppState, CursorPosition},
+    core::state::{ui::CursorPosition, AppState},
     core::translator::translate_raw_to_domain,
     core::update::update,
     test_helpers::TextAreaTestHelper,
