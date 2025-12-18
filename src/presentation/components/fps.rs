@@ -7,9 +7,9 @@ use crate::{core::state::AppState, infrastructure::tui::Frame};
 /// This component is purely functional - it receives state and renders FPS data
 /// No internal state management or time calculations
 #[derive(Debug, Clone)]
-pub struct ElmFpsCounter;
+pub struct FpsCounter;
 
-impl ElmFpsCounter {
+impl FpsCounter {
     pub fn new() -> Self {
         Self
     }
@@ -40,7 +40,7 @@ impl ElmFpsCounter {
     }
 }
 
-impl Default for ElmFpsCounter {
+impl Default for FpsCounter {
     fn default() -> Self {
         Self::new()
     }
@@ -59,9 +59,9 @@ mod tests {
     }
 
     #[test]
-    fn test_elm_fps_counter_creation() {
-        let fps_counter = ElmFpsCounter::new();
-        let default_fps_counter = ElmFpsCounter;
+    fn test_fps_counter_creation() {
+        let fps_counter = FpsCounter::new();
+        let default_fps_counter = FpsCounter;
 
         // Both should be equivalent (stateless)
         assert_eq!(
@@ -72,8 +72,8 @@ mod tests {
 
     #[test]
     fn test_fps_counter_is_stateless() {
-        let fps1 = ElmFpsCounter::new();
-        let fps2 = ElmFpsCounter::new();
+        let fps1 = FpsCounter::new();
+        let fps2 = FpsCounter::new();
 
         // Since it's stateless, all instances should be equivalent
         assert_eq!(format!("{:?}", fps1), format!("{:?}", fps2));
