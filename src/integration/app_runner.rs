@@ -5,11 +5,8 @@ use tokio::sync::mpsc;
 use crate::{
     core::{raw_msg::RawMsg, state::AppState},
     infrastructure::{
-        config::Config,
-        fps_service::FpsService,
-        nostr_service::NostrService,
-        tui,
-        tui::event_source::{EventSource, TuiEvent},
+        config::Config, fps_service::FpsService, nostr_service::NostrService, tui,
+        tui::event_source::EventSource,
     },
     integration::renderer::Renderer,
     integration::{
@@ -128,36 +125,36 @@ impl<'a> AppRunner<'a> {
     }
 
     /// Handle a single TUI event and update should_render flag accordingly
-    fn handle_tui_event(&mut self, e: TuiEvent, should_render: &mut bool) {
+    fn handle_tui_event(&mut self, e: tui::Event, should_render: &mut bool) {
         match e {
-            TuiEvent::Quit => {
+            tui::Event::Quit => {
                 self.runtime.send_raw_msg(RawMsg::Quit);
             }
-            TuiEvent::Tick => {
+            tui::Event::Tick => {
                 self.runtime.send_raw_msg(RawMsg::Tick);
                 // Count app tick for FPS based on TUI tick cadence
                 self.fps_service.on_app_tick();
             }
-            TuiEvent::Render => {
+            tui::Event::Render => {
                 // Coalesce render request; actual render happens once per loop
                 *should_render = true;
             }
-            TuiEvent::Resize(w, h) => {
+            tui::Event::Resize(w, h) => {
                 // Coalesce last-only using pure decision helper
                 self.pending_resize = Coalescer::decide_resize(self.pending_resize, &[(w, h)]);
             }
-            TuiEvent::Key(key) => {
+            tui::Event::Key(key) => {
                 self.runtime.send_raw_msg(RawMsg::Key(key));
             }
-            TuiEvent::FocusGained => {}
-            TuiEvent::FocusLost => {}
-            TuiEvent::Paste(_s) => {
+            tui::Event::FocusGained => {}
+            tui::Event::FocusLost => {}
+            tui::Event::Paste(_s) => {
                 // Paste not yet supported in Elm translator
             }
-            TuiEvent::Mouse(_m) => {}
-            TuiEvent::Init => {}
-            TuiEvent::Error => {}
-            TuiEvent::Closed => {}
+            tui::Event::Mouse(_m) => {}
+            tui::Event::Init => {}
+            tui::Event::Error => {}
+            tui::Event::Closed => {}
         }
     }
 
@@ -185,7 +182,7 @@ impl<'a> AppRunner<'a> {
         self.runtime.state().system.should_quit
     }
 
-    async fn poll_next_tui_event(&mut self) -> Option<TuiEvent> {
+    async fn poll_next_tui_event(&mut self) -> Option<tui::Event> {
         // Note: For Resize coalescing, we only poll one event per loop.
         // If multiple Resize events arrive, last one wins across loops via pending_resize.
 
@@ -214,7 +211,7 @@ impl<'a> AppRunner<'a> {
 
             // 3) Poll one TUI event and handle it
             if let Some(e) = self.poll_next_tui_event().await {
-                if let TuiEvent::Render = e {
+                if let tui::Event::Render = e {
                     render_flag = true;
                 }
                 self.handle_tui_event(e, &mut render_flag);
@@ -249,8 +246,8 @@ impl<'a> AppRunner<'a> {
 mod tests {
     // Unit tests for the extracted helpers
     use super::*;
+    use crate::infrastructure::tui;
     use crate::infrastructure::tui::event_source::EventSource as TestEventSource;
-    use crate::infrastructure::tui::event_source::TuiEvent;
     use crate::infrastructure::tui::test::TestTui;
 
     fn make_test_config() -> Config {
@@ -277,14 +274,14 @@ mod tests {
     async fn app_runner_one_cycle_quit_sets_should_quit() {
         let mut runner = make_runner_with_test_tui().await;
         // Inject test event source that yields a single Quit
-        runner.set_event_source_for_tests(TestEventSource::test([TuiEvent::Quit]));
+        runner.set_event_source_for_tests(TestEventSource::test([tui::Event::Quit]));
 
         // Manually perform one logical cycle using extracted helpers
         let _queued = runner.drain_render_req_count();
         let mut render_flag = false;
         runner.drain_nostr_events();
         if let Some(e) = runner.poll_next_tui_event().await {
-            if let TuiEvent::Render = e {
+            if let tui::Event::Render = e {
                 render_flag = true;
             }
             runner.handle_tui_event(e, &mut render_flag);
@@ -313,7 +310,7 @@ mod tests {
             // and validate false, then manually push should_render via TuiEvent::Render handled function.
             assert_eq!(runner.drain_render_req_count(), 0);
             let mut sr = false;
-            runner.handle_tui_event(TuiEvent::Render, &mut sr);
+            runner.handle_tui_event(tui::Event::Render, &mut sr);
             assert!(sr);
         });
     }
@@ -323,15 +320,15 @@ mod tests {
         use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
         let mut runner = make_runner_with_test_tui().await;
         let mut sr = false;
-        runner.handle_tui_event(TuiEvent::Resize(120, 50), &mut sr);
+        runner.handle_tui_event(tui::Event::Resize(120, 50), &mut sr);
         runner.handle_tui_event(
-            TuiEvent::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            tui::Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
             &mut sr,
         );
         // Process update to move raw queue through translator without assertions here, just ensure no panic
         let _ = runner.runtime_mut().run_update_cycle();
         // Render event sets the flag but does not render yet
-        runner.handle_tui_event(TuiEvent::Render, &mut sr);
+        runner.handle_tui_event(tui::Event::Render, &mut sr);
         assert!(sr);
     }
 
@@ -352,8 +349,10 @@ mod tests {
             .expect("failed to create AppRunner");
 
         // Drive the loop with events: Render -> Quit
-        runner
-            .set_event_source_for_tests(TestEventSource::test([TuiEvent::Render, TuiEvent::Quit]));
+        runner.set_event_source_for_tests(TestEventSource::test([
+            tui::Event::Render,
+            tui::Event::Quit,
+        ]));
 
         // Run the main loop; it should finish quickly due to Quit
         let res = tokio::time::timeout(std::time::Duration::from_millis(200), runner.run()).await;
