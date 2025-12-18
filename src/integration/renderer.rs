@@ -5,13 +5,13 @@ use tokio::sync::Mutex;
 use crate::{
     core::state::AppState,
     infrastructure::tui,
-    presentation::components::{elm_home::ElmHome, elm_status_bar::ElmStatusBar, fps::FpsCounter},
+    presentation::components::{elm_home::ElmHome, fps::FpsCounter, status_bar::StatusBar},
 };
 
 #[derive(Debug, Default)]
 pub struct Renderer<'a> {
     home: ElmHome<'a>,
-    status_bar: ElmStatusBar,
+    status_bar: StatusBar,
     fps: FpsCounter,
 }
 
@@ -19,7 +19,7 @@ impl<'a> Renderer<'a> {
     pub fn new() -> Self {
         Self {
             home: ElmHome::new(),
-            status_bar: ElmStatusBar::new(),
+            status_bar: StatusBar::new(),
             fps: FpsCounter::new(),
         }
     }

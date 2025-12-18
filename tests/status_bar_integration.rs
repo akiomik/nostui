@@ -4,16 +4,16 @@ use nostui::{
     core::state::AppState,
     core::update::update,
     domain::nostr::Profile,
-    presentation::components::elm_status_bar::ElmStatusBar,
+    presentation::components::status_bar::StatusBar,
 };
 
 /// Test StatusBar integration with Elm architecture
 #[test]
-fn test_elm_status_bar_stateless() {
-    let status1 = ElmStatusBar::new();
-    let status2 = ElmStatusBar;
+fn test_status_bar_stateless() {
+    let status1 = StatusBar::new();
+    let status2 = StatusBar;
 
-    // ElmStatusBar should be completely stateless
+    // StatusBar should be completely stateless
     assert_eq!(format!("{:?}", status1), format!("{:?}", status2));
 }
 
@@ -21,7 +21,7 @@ fn test_elm_status_bar_stateless() {
 fn test_status_bar_display_name_flow() {
     let keys = Keys::generate();
     let state = AppState::new(keys.public_key());
-    let status_bar = ElmStatusBar::new();
+    let status_bar = StatusBar::new();
 
     // Initially should show shortened public key
     let initial_name = status_bar.get_display_name(&state);
@@ -51,18 +51,18 @@ fn test_connection_status_helper() {
 
     // Loading state
     state.system.is_loading = true;
-    let status = ElmStatusBar::get_connection_status(&state);
+    let status = StatusBar::get_connection_status(&state);
     assert_eq!(status, "Connecting...");
 
     // Active state with message
     state.system.is_loading = false;
     state.system.status_message = Some("Connected".to_string());
-    let status = ElmStatusBar::get_connection_status(&state);
+    let status = StatusBar::get_connection_status(&state);
     assert_eq!(status, "Active");
 
     // Ready state
     state.system.status_message = None;
-    let status = ElmStatusBar::get_connection_status(&state);
+    let status = StatusBar::get_connection_status(&state);
     assert_eq!(status, "Ready");
 }
 
@@ -72,8 +72,8 @@ fn test_profile_helpers() {
     let mut state = AppState::new(keys.public_key());
 
     // Initially no profile
-    assert!(!ElmStatusBar::has_profile_data(&state));
-    assert!(ElmStatusBar::get_profile_timestamp(&state).is_none());
+    assert!(!StatusBar::has_profile_data(&state));
+    assert!(StatusBar::get_profile_timestamp(&state).is_none());
 
     // Add profile
     let metadata = Metadata::new().name("Test User");
@@ -82,8 +82,8 @@ fn test_profile_helpers() {
     state.user.profiles.insert(keys.public_key(), profile);
 
     // Now has profile data
-    assert!(ElmStatusBar::has_profile_data(&state));
-    assert_eq!(ElmStatusBar::get_profile_timestamp(&state), Some(timestamp));
+    assert!(StatusBar::has_profile_data(&state));
+    assert_eq!(StatusBar::get_profile_timestamp(&state), Some(timestamp));
 }
 
 #[test]
@@ -108,7 +108,7 @@ fn test_multiple_users_scenario() {
         .profiles
         .insert(user2_keys.public_key(), profile2);
 
-    let status_bar = ElmStatusBar::new();
+    let status_bar = StatusBar::new();
 
     // Should show current user (User One), not User Two
     let display_name = status_bar.get_display_name(&state);
@@ -122,11 +122,11 @@ fn test_multiple_users_scenario() {
 async fn test_status_bar_integration_full_flow() {
     let keys = Keys::generate();
     let initial_state = AppState::new(keys.public_key());
-    let status_bar = ElmStatusBar::new();
+    let status_bar = StatusBar::new();
 
     // 1. Initial state - loading, no profile, no message
     assert!(initial_state.system.is_loading);
-    assert!(!ElmStatusBar::has_profile_data(&initial_state));
+    assert!(!StatusBar::has_profile_data(&initial_state));
     assert!(initial_state.system.status_message.is_none());
 
     let initial_name = status_bar.get_display_name(&initial_state);
@@ -142,7 +142,7 @@ async fn test_status_bar_integration_full_flow() {
     );
 
     assert!(!state.system.is_loading);
-    assert_eq!(ElmStatusBar::get_connection_status(&state), "Active");
+    assert_eq!(StatusBar::get_connection_status(&state), "Active");
 
     // 3. Receive profile metadata
     let metadata = Metadata::new()
@@ -153,7 +153,7 @@ async fn test_status_bar_integration_full_flow() {
         nostui::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata);
     let (state, _) = update(Msg::UpdateProfile(keys.public_key(), profile), state);
 
-    assert!(ElmStatusBar::has_profile_data(&state));
+    assert!(StatusBar::has_profile_data(&state));
     let updated_name = status_bar.get_display_name(&state);
     assert_eq!(updated_name, "ITest User");
 
@@ -169,11 +169,11 @@ async fn test_status_bar_integration_full_flow() {
     let (final_state, _) = update(Msg::System(SystemMsg::ClearStatusMessage), state);
 
     assert!(final_state.system.status_message.is_none());
-    assert_eq!(ElmStatusBar::get_connection_status(&final_state), "Ready");
+    assert_eq!(StatusBar::get_connection_status(&final_state), "Ready");
 
     // Final verification: all state managed through Elm architecture
     assert!(!final_state.system.is_loading);
-    assert!(ElmStatusBar::has_profile_data(&final_state));
+    assert!(StatusBar::has_profile_data(&final_state));
     assert!(final_state.system.status_message.is_none());
 
     let final_name = status_bar.get_display_name(&final_state);
@@ -188,8 +188,8 @@ fn test_status_bar_vs_legacy_approach() {
     // Legacy approach: StatusBar manages its own profile, message, loading state
     // New approach: All state comes from AppState
 
-    // ElmStatusBar can render any state configuration
-    let status_bar = ElmStatusBar::new();
+    // StatusBar can render any state configuration
+    let status_bar = StatusBar::new();
 
     // Test different state configurations
     let mut test_state = state;
@@ -197,18 +197,18 @@ fn test_status_bar_vs_legacy_approach() {
     // Configuration 1: Loading state
     test_state.system.is_loading = true;
     test_state.system.status_message = None;
-    let status = ElmStatusBar::get_connection_status(&test_state);
+    let status = StatusBar::get_connection_status(&test_state);
     assert_eq!(status, "Connecting...");
 
     // Configuration 2: Active state
     test_state.system.is_loading = false;
     test_state.system.status_message = Some("Active connection".to_string());
-    let status = ElmStatusBar::get_connection_status(&test_state);
+    let status = StatusBar::get_connection_status(&test_state);
     assert_eq!(status, "Active");
 
     // Configuration 3: Ready state
     test_state.system.status_message = None;
-    let status = ElmStatusBar::get_connection_status(&test_state);
+    let status = StatusBar::get_connection_status(&test_state);
     assert_eq!(status, "Ready");
 
     // Same component instance handles all configurations
