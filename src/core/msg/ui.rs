@@ -41,8 +41,8 @@ impl UiMsg {
 }
 
 // Adapters between canonical UI types and current state types (row/col)
-impl From<crate::core::state::CursorPosition> for CursorPosition {
-    fn from(v: crate::core::state::CursorPosition) -> Self {
+impl From<crate::core::state::ui::CursorPosition> for CursorPosition {
+    fn from(v: crate::core::state::ui::CursorPosition) -> Self {
         CursorPosition {
             line: v.row,
             column: v.col,
@@ -50,17 +50,17 @@ impl From<crate::core::state::CursorPosition> for CursorPosition {
     }
 }
 
-impl From<CursorPosition> for crate::core::state::CursorPosition {
+impl From<CursorPosition> for crate::core::state::ui::CursorPosition {
     fn from(v: CursorPosition) -> Self {
-        crate::core::state::CursorPosition {
+        crate::core::state::ui::CursorPosition {
             row: v.line,
             col: v.column,
         }
     }
 }
 
-impl From<crate::core::state::TextSelection> for TextSelection {
-    fn from(v: crate::core::state::TextSelection) -> Self {
+impl From<crate::core::state::ui::TextSelection> for TextSelection {
+    fn from(v: crate::core::state::ui::TextSelection) -> Self {
         TextSelection {
             start: v.start.into(),
             end: v.end.into(),
@@ -68,9 +68,9 @@ impl From<crate::core::state::TextSelection> for TextSelection {
     }
 }
 
-impl From<TextSelection> for crate::core::state::TextSelection {
+impl From<TextSelection> for crate::core::state::ui::TextSelection {
     fn from(v: TextSelection) -> Self {
-        crate::core::state::TextSelection {
+        crate::core::state::ui::TextSelection {
             start: v.start.into(),
             end: v.end.into(),
         }
@@ -83,26 +83,26 @@ mod tests {
 
     #[test]
     fn cursor_adapter_roundtrip() {
-        let s = crate::core::state::CursorPosition { row: 3, col: 7 };
+        let s = crate::core::state::ui::CursorPosition { row: 3, col: 7 };
         let u: CursorPosition = s.clone().into();
         assert_eq!(u.line, 3);
         assert_eq!(u.column, 7);
-        let s2: crate::core::state::CursorPosition = u.into();
+        let s2: crate::core::state::ui::CursorPosition = u.into();
         assert_eq!(s, s2);
     }
 
     #[test]
     fn text_selection_adapter_roundtrip() {
-        let s = crate::core::state::TextSelection {
-            start: crate::core::state::CursorPosition { row: 1, col: 2 },
-            end: crate::core::state::CursorPosition { row: 3, col: 4 },
+        let s = crate::core::state::ui::TextSelection {
+            start: crate::core::state::ui::CursorPosition { row: 1, col: 2 },
+            end: crate::core::state::ui::CursorPosition { row: 3, col: 4 },
         };
         let u: TextSelection = s.clone().into();
         assert_eq!(u.start.line, 1);
         assert_eq!(u.start.column, 2);
         assert_eq!(u.end.line, 3);
         assert_eq!(u.end.column, 4);
-        let s2: crate::core::state::TextSelection = u.into();
+        let s2: crate::core::state::ui::TextSelection = u.into();
         assert_eq!(s, s2);
     }
 

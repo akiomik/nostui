@@ -1,8 +1,63 @@
+use nostr_sdk::prelude::*;
+
 use crate::core::cmd::Cmd;
 use crate::core::msg::ui::UiMsg;
-use crate::core::state::UiState;
+
+/// High-level UI mode for keybindings and view switching
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum UiMode {
+    #[default]
+    Normal,
+    Composing,
+}
+
+/// Cursor position in text
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct CursorPosition {
+    pub row: usize,
+    pub col: usize,
+}
+
+/// Text selection range
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TextSelection {
+    pub start: CursorPosition,
+    pub end: CursorPosition,
+}
+
+/// UI-related state
+#[derive(Debug, Clone, Default)]
+pub struct UiState {
+    pub show_input: bool, // TODO: Remove after migrating all checks to UiMode
+    pub input_content: String,
+    pub reply_to: Option<Event>,
+    pub current_mode: UiMode,
+    pub cursor_position: CursorPosition,
+    pub selection: Option<TextSelection>,
+    pub pending_input_keys: Vec<crossterm::event::KeyEvent>, // Queue for stateless TextArea processing
+}
 
 impl UiState {
+    pub fn is_input_shown(&self) -> bool {
+        self.show_input
+    }
+
+    pub fn is_reply(&self) -> bool {
+        self.reply_to.is_some()
+    }
+
+    pub fn reply_target(&self) -> Option<&Event> {
+        self.reply_to.as_ref()
+    }
+
+    pub fn input_length(&self) -> usize {
+        self.input_content.len()
+    }
+
+    pub fn has_input_content(&self) -> bool {
+        !self.input_content.is_empty()
+    }
+
     /// UiState-specific update function performing pure state transitions
     /// and returning generated commands (currently none; coordinator emits commands)
     pub fn update(&mut self, msg: UiMsg) -> Vec<Cmd> {
@@ -10,7 +65,7 @@ impl UiState {
             UiMsg::ShowNewNote => {
                 self.reply_to = None;
                 self.show_input = true; // TODO: migrate callers to UiMode and remove this flag
-                self.current_mode = crate::core::state::UiMode::Composing;
+                self.current_mode = UiMode::Composing;
                 self.input_content.clear();
                 self.cursor_position = Default::default();
                 self.selection = None;
@@ -19,7 +74,7 @@ impl UiState {
             UiMsg::ShowReply(target_event) => {
                 self.reply_to = Some(target_event);
                 self.show_input = true; // TODO: migrate callers to UiMode and remove this flag
-                self.current_mode = crate::core::state::UiMode::Composing;
+                self.current_mode = UiMode::Composing;
                 self.input_content.clear();
                 self.cursor_position = Default::default();
                 self.selection = None;
@@ -27,7 +82,7 @@ impl UiState {
             }
             UiMsg::CancelInput => {
                 self.show_input = false; // TODO: migrate callers to UiMode and remove this flag
-                self.current_mode = crate::core::state::UiMode::Normal;
+                self.current_mode = UiMode::Normal;
                 self.reply_to = None;
                 self.input_content.clear();
                 self.cursor_position = Default::default();
@@ -67,7 +122,6 @@ impl UiState {
 mod tests {
     use super::*;
     use crate::core::state::UiState;
-    use nostr_sdk::prelude::*;
 
     fn create_event() -> Event {
         let keys = Keys::generate();
