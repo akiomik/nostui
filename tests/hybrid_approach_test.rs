@@ -1,11 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
 use nostui::{
-    core::msg::Msg,
-    core::raw_msg::RawMsg,
-    core::state::{ui::CursorPosition, AppState},
-    core::translator::translate_raw_to_domain,
-    core::update::update,
+    core::msg::Msg, core::raw_msg::RawMsg, core::state::AppState,
+    core::translator::translate_raw_to_domain, core::update::update, domain::ui::CursorPosition,
     test_helpers::TextAreaTestHelper,
 };
 
@@ -103,7 +100,7 @@ fn test_pending_keys_basic_functionality() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.show_input = true;
     state.ui.input_content = "test".to_string();
-    state.ui.cursor_position = CursorPosition { row: 0, col: 4 };
+    state.ui.cursor_position = CursorPosition { line: 0, column: 4 };
 
     // Add character at cursor position
     let char_key = KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE);
@@ -115,7 +112,7 @@ fn test_pending_keys_basic_functionality() {
     // Verify content was updated and pending_keys was processed
     assert_eq!(new_state.ui.input_content, "test!");
     assert!(new_state.ui.pending_input_keys.is_empty());
-    assert_eq!(new_state.ui.cursor_position.col, 5);
+    assert_eq!(new_state.ui.cursor_position.column, 5);
 }
 
 #[test]
@@ -123,7 +120,7 @@ fn test_pending_keys_navigation_functionality() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.show_input = true;
     state.ui.input_content = "hello world".to_string();
-    state.ui.cursor_position = CursorPosition { row: 0, col: 5 }; // At space
+    state.ui.cursor_position = CursorPosition { line: 0, column: 5 }; // At space
 
     // Test left arrow navigation
     let left_key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
@@ -134,7 +131,7 @@ fn test_pending_keys_navigation_functionality() {
 
     // Verify cursor moved left but content unchanged
     assert_eq!(new_state.ui.input_content, "hello world");
-    assert_eq!(new_state.ui.cursor_position.col, 4); // Moved to 'o'
+    assert_eq!(new_state.ui.cursor_position.column, 4); // Moved to 'o'
     assert!(new_state.ui.pending_input_keys.is_empty());
 }
 
@@ -143,7 +140,7 @@ fn test_pending_keys_multiple_operations() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.show_input = true;
     state.ui.input_content = "test".to_string();
-    state.ui.cursor_position = CursorPosition { row: 0, col: 4 };
+    state.ui.cursor_position = CursorPosition { line: 0, column: 4 };
 
     // First operation: move left
     let left_key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
@@ -161,7 +158,7 @@ fn test_pending_keys_multiple_operations() {
 
     // Verify final state: "tes!t" with cursor after '!'
     assert_eq!(final_state.ui.input_content, "tes!t");
-    assert_eq!(final_state.ui.cursor_position.col, 4);
+    assert_eq!(final_state.ui.cursor_position.column, 4);
     assert!(final_state.ui.pending_input_keys.is_empty());
 }
 
@@ -170,7 +167,7 @@ fn test_pending_keys_home_end_navigation() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.show_input = true;
     state.ui.input_content = "hello world".to_string();
-    state.ui.cursor_position = CursorPosition { row: 0, col: 5 };
+    state.ui.cursor_position = CursorPosition { line: 0, column: 5 };
 
     // Test Home key
     let home_key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
@@ -178,7 +175,7 @@ fn test_pending_keys_home_end_navigation() {
         Msg::Ui(nostui::core::msg::ui::UiMsg::ProcessTextAreaInput(home_key)),
         state,
     );
-    assert_eq!(state.ui.cursor_position.col, 0);
+    assert_eq!(state.ui.cursor_position.column, 0);
 
     // Test End key
     let end_key = KeyEvent::new(KeyCode::End, KeyModifiers::NONE);
@@ -186,7 +183,7 @@ fn test_pending_keys_home_end_navigation() {
         Msg::Ui(nostui::core::msg::ui::UiMsg::ProcessTextAreaInput(end_key)),
         state,
     );
-    assert_eq!(final_state.ui.cursor_position.col, 11); // End of "hello world"
+    assert_eq!(final_state.ui.cursor_position.column, 11); // End of "hello world"
 }
 
 #[test]
@@ -194,7 +191,7 @@ fn test_pending_keys_maintains_state_consistency() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.show_input = true;
     state.ui.input_content = "test content".to_string();
-    state.ui.cursor_position = CursorPosition { row: 0, col: 4 };
+    state.ui.cursor_position = CursorPosition { line: 0, column: 4 };
 
     // Verify AppState is always the single source of truth
     let backspace_key = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
@@ -207,7 +204,7 @@ fn test_pending_keys_maintains_state_consistency() {
 
     // Content should be updated and cursor moved back
     assert_eq!(new_state.ui.input_content, "tes content");
-    assert_eq!(new_state.ui.cursor_position.col, 3);
+    assert_eq!(new_state.ui.cursor_position.column, 3);
     assert!(new_state.ui.pending_input_keys.is_empty());
 }
 

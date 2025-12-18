@@ -12,17 +12,17 @@ pub struct TextAreaState {
     /// The complete text content
     pub content: String,
     /// Current cursor position within the text
-    pub cursor_position: crate::core::state::ui::CursorPosition,
+    pub cursor_position: crate::domain::ui::CursorPosition,
     /// Active text selection range, if any
-    pub selection: Option<crate::core::state::ui::TextSelection>,
+    pub selection: Option<crate::domain::ui::TextSelection>,
 }
 
 impl TextAreaState {
     /// Create new TextAreaState
     pub fn new(
         content: String,
-        cursor_position: crate::core::state::ui::CursorPosition,
-        selection: Option<crate::core::state::ui::TextSelection>,
+        cursor_position: crate::domain::ui::CursorPosition,
+        selection: Option<crate::domain::ui::TextSelection>,
     ) -> Self {
         Self {
             content,
@@ -35,7 +35,7 @@ impl TextAreaState {
     pub fn from_ui_state(ui_state: &crate::core::state::UiState) -> Self {
         Self::new(
             ui_state.input_content.clone(),
-            ui_state.cursor_position.clone(),
+            ui_state.cursor_position,
             ui_state.selection.clone(),
         )
     }
@@ -43,7 +43,7 @@ impl TextAreaState {
     /// Apply this TextAreaState to AppState's UI state
     pub fn apply_to_ui_state(&self, ui_state: &mut crate::core::state::UiState) {
         ui_state.input_content = self.content.clone();
-        ui_state.cursor_position = self.cursor_position.clone();
+        ui_state.cursor_position = self.cursor_position;
         ui_state.selection = self.selection.clone();
     }
 
@@ -51,7 +51,7 @@ impl TextAreaState {
     pub fn empty() -> Self {
         Self::new(
             String::new(),
-            crate::core::state::ui::CursorPosition { row: 0, col: 0 },
+            crate::domain::ui::CursorPosition { line: 0, column: 0 },
             None,
         )
     }
@@ -203,27 +203,30 @@ impl<'a> HomeInput<'a> {
     }
 
     /// Get current cursor position from TextArea
-    pub fn get_cursor_position(&self) -> crate::core::state::ui::CursorPosition {
+    pub fn get_cursor_position(&self) -> crate::domain::ui::CursorPosition {
         let (row, col) = self.textarea.cursor();
-        crate::core::state::ui::CursorPosition { row, col }
+        crate::domain::ui::CursorPosition {
+            line: row,
+            column: col,
+        }
     }
 
     /// Get current selection from TextArea
-    pub fn get_selection(&self) -> Option<crate::core::state::ui::TextSelection> {
+    pub fn get_selection(&self) -> Option<crate::domain::ui::TextSelection> {
         Self::extract_selection(&self.textarea)
     }
 
     /// Set cursor position in TextArea from AppState
-    pub fn set_cursor_position(&mut self, pos: &crate::core::state::ui::CursorPosition) {
+    pub fn set_cursor_position(&mut self, pos: &crate::domain::ui::CursorPosition) {
         // TextArea's move_cursor method allows setting cursor position
         self.textarea.move_cursor(tui_textarea::CursorMove::Jump(
-            pos.row as u16,
-            pos.col as u16,
+            pos.line as u16,
+            pos.column as u16,
         ));
     }
 
     /// Apply selection to TextArea from AppState
-    pub fn set_selection(&mut self, selection: &Option<crate::core::state::ui::TextSelection>) {
+    pub fn set_selection(&mut self, selection: &Option<crate::domain::ui::TextSelection>) {
         if let Some(selection) = selection {
             Self::restore_selection(&mut self.textarea, selection);
         } else {
@@ -329,8 +332,8 @@ impl<'a> HomeInput<'a> {
         // Restore cursor position directly from AppState (single source of truth)
         // AppState cursor position should always be valid as it's maintained by the update cycle
         textarea.move_cursor(tui_textarea::CursorMove::Jump(
-            state.ui.cursor_position.row as u16,
-            state.ui.cursor_position.col as u16,
+            state.ui.cursor_position.line as u16,
+            state.ui.cursor_position.column as u16,
         ));
 
         // Restore selection range if present
@@ -342,40 +345,43 @@ impl<'a> HomeInput<'a> {
     /// Extract cursor position from TextArea
     fn extract_cursor_position(
         textarea: &tui_textarea::TextArea,
-    ) -> crate::core::state::ui::CursorPosition {
+    ) -> crate::domain::ui::CursorPosition {
         let (row, col) = textarea.cursor();
-        crate::core::state::ui::CursorPosition { row, col }
+        crate::domain::ui::CursorPosition {
+            line: row,
+            column: col,
+        }
     }
 
     /// Extract selection from TextArea
     fn extract_selection(
         textarea: &tui_textarea::TextArea,
-    ) -> Option<crate::core::state::ui::TextSelection> {
+    ) -> Option<crate::domain::ui::TextSelection> {
         textarea
             .selection_range()
-            .map(|((start_row, start_col), (end_row, end_col))| {
-                crate::core::state::ui::TextSelection {
-                    start: crate::core::state::ui::CursorPosition {
-                        row: start_row,
-                        col: start_col,
+            .map(
+                |((start_row, start_col), (end_row, end_col))| crate::domain::ui::TextSelection {
+                    start: crate::domain::ui::CursorPosition {
+                        line: start_row,
+                        column: start_col,
                     },
-                    end: crate::core::state::ui::CursorPosition {
-                        row: end_row,
-                        col: end_col,
+                    end: crate::domain::ui::CursorPosition {
+                        line: end_row,
+                        column: end_col,
                     },
-                }
-            })
+                },
+            )
     }
 
     /// Restore selection range to TextArea from AppState
     fn restore_selection(
         textarea: &mut tui_textarea::TextArea,
-        selection: &crate::core::state::ui::TextSelection,
+        selection: &crate::domain::ui::TextSelection,
     ) {
         // First, position cursor at selection start
         textarea.move_cursor(tui_textarea::CursorMove::Jump(
-            selection.start.row as u16,
-            selection.start.col as u16,
+            selection.start.line as u16,
+            selection.start.column as u16,
         ));
 
         // Start selection
@@ -383,8 +389,8 @@ impl<'a> HomeInput<'a> {
 
         // Move cursor to selection end
         textarea.move_cursor(tui_textarea::CursorMove::Jump(
-            selection.end.row as u16,
-            selection.end.col as u16,
+            selection.end.line as u16,
+            selection.end.column as u16,
         ));
     }
 }

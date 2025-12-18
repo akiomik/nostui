@@ -11,19 +11,7 @@ pub enum UiMode {
     Composing,
 }
 
-/// Cursor position in text
-#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
-pub struct CursorPosition {
-    pub row: usize,
-    pub col: usize,
-}
-
-/// Text selection range
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct TextSelection {
-    pub start: CursorPosition,
-    pub end: CursorPosition,
-}
+use crate::domain::ui::{CursorPosition, TextSelection};
 
 /// UI-related state
 #[derive(Debug, Clone, Default)]
@@ -97,15 +85,15 @@ impl UiState {
             }
             UiMsg::UpdateInputContentWithCursor(content, pos) => {
                 self.input_content = content;
-                self.cursor_position = pos.into();
+                self.cursor_position = pos;
                 vec![]
             }
             UiMsg::UpdateCursorPosition(pos) => {
-                self.cursor_position = pos.into();
+                self.cursor_position = pos;
                 vec![]
             }
             UiMsg::UpdateSelection(sel) => {
-                self.selection = sel.map(Into::into);
+                self.selection = sel;
                 vec![]
             }
 
@@ -182,20 +170,20 @@ mod tests {
     fn test_update_cursor_and_selection() {
         let mut ui = UiState::default();
         let _ = ui.update(UiMsg::UpdateCursorPosition(
-            crate::core::msg::ui::CursorPosition { line: 1, column: 2 },
+            crate::domain::ui::CursorPosition { line: 1, column: 2 },
         ));
-        assert_eq!(ui.cursor_position.row, 1);
-        assert_eq!(ui.cursor_position.col, 2);
+        assert_eq!(ui.cursor_position.line, 1);
+        assert_eq!(ui.cursor_position.column, 2);
 
-        let sel = crate::core::msg::ui::TextSelection {
-            start: crate::core::msg::ui::CursorPosition { line: 0, column: 1 },
-            end: crate::core::msg::ui::CursorPosition { line: 2, column: 3 },
+        let sel = crate::domain::ui::TextSelection {
+            start: crate::domain::ui::CursorPosition { line: 0, column: 1 },
+            end: crate::domain::ui::CursorPosition { line: 2, column: 3 },
         };
         let _ = ui.update(UiMsg::UpdateSelection(Some(sel)));
         let s = ui.selection.unwrap();
-        assert_eq!(s.start.row, 0);
-        assert_eq!(s.start.col, 1);
-        assert_eq!(s.end.row, 2);
-        assert_eq!(s.end.col, 3);
+        assert_eq!(s.start.line, 0);
+        assert_eq!(s.start.column, 1);
+        assert_eq!(s.end.line, 2);
+        assert_eq!(s.end.column, 3);
     }
 }
