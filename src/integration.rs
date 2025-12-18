@@ -5,4 +5,6 @@
 //! - Legacy code (for gradual removal)
 
 pub mod app_runner;
+pub mod coalescer;
 pub mod elm_integration;
+pub mod update_executor;
