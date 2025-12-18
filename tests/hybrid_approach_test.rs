@@ -11,7 +11,7 @@ use nostui::{
 #[test]
 fn test_hybrid_special_keys_preserved() {
     let mut state = AppState::new(Keys::generate().public_key());
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
 
     // Ctrl+P should still submit
     let ctrl_p = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
@@ -33,7 +33,7 @@ fn test_hybrid_special_keys_preserved() {
 #[test]
 fn test_hybrid_textarea_delegation() {
     let mut state = AppState::new(Keys::generate().public_key());
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
 
     // Regular keys should delegate to ProcessTextAreaInput
     let char_key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
@@ -98,7 +98,7 @@ fn test_hybrid_terminal_keybinds() {
 #[test]
 fn test_pending_keys_basic_functionality() {
     let mut state = AppState::new(Keys::generate().public_key());
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
     state.ui.input_content = "test".to_string();
     state.ui.cursor_position = CursorPosition { line: 0, column: 4 };
 
@@ -118,7 +118,7 @@ fn test_pending_keys_basic_functionality() {
 #[test]
 fn test_pending_keys_navigation_functionality() {
     let mut state = AppState::new(Keys::generate().public_key());
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
     state.ui.input_content = "hello world".to_string();
     state.ui.cursor_position = CursorPosition { line: 0, column: 5 }; // At space
 
@@ -138,7 +138,7 @@ fn test_pending_keys_navigation_functionality() {
 #[test]
 fn test_pending_keys_multiple_operations() {
     let mut state = AppState::new(Keys::generate().public_key());
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
     state.ui.input_content = "test".to_string();
     state.ui.cursor_position = CursorPosition { line: 0, column: 4 };
 
@@ -165,7 +165,7 @@ fn test_pending_keys_multiple_operations() {
 #[test]
 fn test_pending_keys_home_end_navigation() {
     let mut state = AppState::new(Keys::generate().public_key());
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
     state.ui.input_content = "hello world".to_string();
     state.ui.cursor_position = CursorPosition { line: 0, column: 5 };
 
@@ -189,7 +189,7 @@ fn test_pending_keys_home_end_navigation() {
 #[test]
 fn test_pending_keys_maintains_state_consistency() {
     let mut state = AppState::new(Keys::generate().public_key());
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
     state.ui.input_content = "test content".to_string();
     state.ui.cursor_position = CursorPosition { line: 0, column: 4 };
 
@@ -211,7 +211,7 @@ fn test_pending_keys_maintains_state_consistency() {
 #[test]
 fn test_pending_keys_empty_queue_after_processing() {
     let mut state = AppState::new(Keys::generate().public_key());
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
 
     // Multiple key presses should all be processed
     let char_a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
@@ -234,7 +234,7 @@ fn test_pending_keys_empty_queue_after_processing() {
 #[test]
 fn test_hybrid_no_circular_updates() {
     let mut state = AppState::new(Keys::generate().public_key());
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
     state.ui.input_content = "test".to_string();
 
     // Process a character through the hybrid approach
@@ -254,7 +254,7 @@ fn test_hybrid_no_circular_updates() {
 #[test]
 fn test_hybrid_input_mode_only() {
     let mut state = AppState::new(Keys::generate().public_key());
-    state.ui.show_input = false; // Not in input mode
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Normal; // Not in input mode
 
     // ProcessTextAreaInput should do nothing when not in input mode
     let char_key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);

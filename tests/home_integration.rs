@@ -112,7 +112,7 @@ fn test_home_input_workflow() -> Result<()> {
     let mut state = create_test_state();
 
     // Start new note
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
     state.ui.input_content = "Hello, Nostr!".to_string();
 
     // Check input mode status
@@ -141,7 +141,7 @@ fn test_home_reply_workflow() -> Result<()> {
     let target_event = create_test_event();
 
     // Setup reply mode
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
     state.ui.reply_to = Some(target_event.clone());
     state.ui.input_content = "Great point!".to_string();
 
@@ -183,7 +183,7 @@ fn test_home_key_processing() -> Result<()> {
     );
 
     // Test input mode key processing
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
     state.ui.input_content = "test".to_string();
     let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
     let msgs = home.process_key(key, &state);
@@ -215,7 +215,7 @@ fn test_home_advanced_interaction_validation() -> Result<()> {
     assert!(home.get_selected_note(&state).is_some());
 
     // Test interaction blocked by input mode
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
     assert!(!home.can_interact(&state));
 
     Ok(())
@@ -336,7 +336,7 @@ fn test_home_help_text_contextual() -> Result<()> {
     assert!(help.contains("Repost"));
 
     // Input mode
-    state.ui.show_input = true;
+    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
     let help = home.get_help_text(&state);
     assert!(help.contains("Send note"));
     assert!(help.contains("Cancel"));

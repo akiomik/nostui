@@ -57,14 +57,14 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Activate input mode
     pub fn activate_input(&mut self) -> &mut Self {
-        self.state.ui.show_input = true;
+        self.state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         self.sync_state();
         self
     }
 
     /// Deactivate input mode
     pub fn deactivate_input(&mut self) -> &mut Self {
-        self.state.ui.show_input = false;
+        self.state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
         self.sync_state();
         self
     }

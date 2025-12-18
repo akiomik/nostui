@@ -20,7 +20,7 @@ fn test_library_basic_flow() {
         Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote),
         initial_state,
     );
-    assert!(state.ui.show_input);
+    assert!(state.ui.is_composing());
     assert!(cmds.is_empty());
 
     // Test input handling
@@ -35,7 +35,7 @@ fn test_library_basic_flow() {
 
     // Test submission
     let (state, cmds) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote), state);
-    assert!(!state.ui.show_input);
+    assert!(state.ui.is_normal());
     assert_eq!(cmds.len(), 1);
 
     match &cmds[0] {
@@ -57,7 +57,7 @@ fn test_elm_runtime_integration() {
     runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote));
     let commands = runtime.process_all_messages();
 
-    assert!(runtime.state().ui.show_input);
+    assert!(runtime.state().ui.is_composing());
     assert!(commands.is_empty());
 
     // Test statistics
@@ -103,7 +103,7 @@ fn test_complex_workflow() {
 
     // Verification
     assert_eq!(runtime.state().timeline_len(), 1);
-    assert!(!runtime.state().ui.show_input);
+    assert!(runtime.state().ui.is_normal());
     assert!(runtime.state().ui.input_content.is_empty());
 
     // Two commands should be generated (reaction + reply)
@@ -193,7 +193,7 @@ async fn test_async_message_handling() {
     }
 
     // Check if UI is reset
-    assert!(!runtime.state().ui.show_input);
+    assert!(runtime.state().ui.is_normal());
 }
 
 /// Performance test

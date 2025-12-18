@@ -217,7 +217,7 @@ fn test_elm_architecture_compliance() {
 
     // State as single source of truth
     let state = helper.state();
-    assert!(!state.ui.show_input);
+    assert!(!state.ui.is_composing());
     assert_eq!(state.ui.input_content, "");
     assert_eq!(state.ui.cursor_position.line, 0);
     assert_eq!(state.ui.cursor_position.column, 0);

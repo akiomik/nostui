@@ -84,7 +84,7 @@ impl<'a> HomeInput<'a> {
     /// Render input area from AppState
     /// Synchronizes internal TextArea with AppState and renders
     pub fn draw(&mut self, state: &AppState, f: &mut Frame<'_>, area: Rect) -> Result<()> {
-        if !state.ui.show_input {
+        if !state.ui.is_composing() {
             return Ok(());
         }
 
@@ -238,7 +238,7 @@ impl<'a> HomeInput<'a> {
     /// Calculate if submit is possible
     /// Pure function to determine if current state allows submission
     pub fn can_submit(state: &AppState) -> bool {
-        state.ui.show_input && !state.ui.input_content.trim().is_empty()
+        state.ui.can_submit_input()
     }
 
     /// Get submit data for creating a note
@@ -279,13 +279,13 @@ impl<'a> HomeInput<'a> {
     /// Check if input area is active
     /// Pure function to determine if input should capture key events
     pub fn is_input_active(state: &AppState) -> bool {
-        state.ui.show_input
+        state.ui.is_composing()
     }
 
     /// Get input mode description
     /// Pure function that returns user-friendly description of current input mode
     pub fn get_input_mode_description(state: &AppState) -> String {
-        if !state.ui.show_input {
+        if !state.ui.is_composing() {
             "Navigation mode".to_string()
         } else if state.ui.reply_to.is_some() {
             "Reply mode".to_string()
@@ -425,7 +425,7 @@ mod tests {
     fn create_test_state_with_input() -> AppState {
         let keys = Keys::generate();
         let mut state = AppState::new(keys.public_key());
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         state.ui.input_content = "Test content".to_string();
         state
     }
@@ -455,7 +455,7 @@ mod tests {
         assert!(!HomeInput::can_submit(&state));
 
         // Cannot submit when input shown but empty
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         assert!(!HomeInput::can_submit(&state));
 
         // Cannot submit with only whitespace
@@ -487,7 +487,7 @@ mod tests {
         assert!(!data.tags.is_empty()); // Should have reply tags
 
         // Cannot submit when input hidden
-        state.ui.show_input = false;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
         let submit_data = HomeInput::get_submit_data(&state);
         assert!(submit_data.is_none());
     }
@@ -532,11 +532,11 @@ mod tests {
         assert!(!HomeInput::is_input_active(&state));
 
         // Active when input shown
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         assert!(HomeInput::is_input_active(&state));
 
         // Not active when hidden again
-        state.ui.show_input = false;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
         assert!(!HomeInput::is_input_active(&state));
     }
 
@@ -551,7 +551,7 @@ mod tests {
         );
 
         // Compose mode
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         assert_eq!(
             HomeInput::get_input_mode_description(&state),
             "Compose mode"

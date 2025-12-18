@@ -16,7 +16,6 @@ use crate::domain::ui::{CursorPosition, TextSelection};
 /// UI-related state
 #[derive(Debug, Clone, Default)]
 pub struct UiState {
-    pub show_input: bool, // TODO: Remove after migrating all checks to UiMode
     pub input_content: String,
     pub reply_to: Option<Event>,
     pub current_mode: UiMode,
@@ -26,8 +25,16 @@ pub struct UiState {
 }
 
 impl UiState {
-    pub fn is_input_shown(&self) -> bool {
-        self.show_input
+    pub fn is_composing(&self) -> bool {
+        self.current_mode == UiMode::Composing
+    }
+
+    pub fn is_normal(&self) -> bool {
+        self.current_mode == UiMode::Normal
+    }
+
+    pub fn can_submit_input(&self) -> bool {
+        self.is_composing() && self.has_input_content()
     }
 
     pub fn is_reply(&self) -> bool {
@@ -43,7 +50,7 @@ impl UiState {
     }
 
     pub fn has_input_content(&self) -> bool {
-        !self.input_content.is_empty()
+        !self.input_content.trim().is_empty()
     }
 
     /// UiState-specific update function performing pure state transitions
@@ -52,7 +59,6 @@ impl UiState {
         match msg {
             UiMsg::ShowNewNote => {
                 self.reply_to = None;
-                self.show_input = true; // TODO: migrate callers to UiMode and remove this flag
                 self.current_mode = UiMode::Composing;
                 self.input_content.clear();
                 self.cursor_position = Default::default();
@@ -61,7 +67,6 @@ impl UiState {
             }
             UiMsg::ShowReply(target_event) => {
                 self.reply_to = Some(target_event);
-                self.show_input = true; // TODO: migrate callers to UiMode and remove this flag
                 self.current_mode = UiMode::Composing;
                 self.input_content.clear();
                 self.cursor_position = Default::default();
@@ -69,7 +74,6 @@ impl UiState {
                 vec![]
             }
             UiMsg::CancelInput => {
-                self.show_input = false; // TODO: migrate callers to UiMode and remove this flag
                 self.current_mode = UiMode::Normal;
                 self.reply_to = None;
                 self.input_content.clear();
@@ -125,7 +129,7 @@ mod tests {
         };
         let cmds = ui.update(UiMsg::ShowNewNote);
         assert!(cmds.is_empty());
-        assert!(ui.show_input);
+        assert!(ui.is_composing());
         assert!(ui.reply_to.is_none());
         assert!(ui.input_content.is_empty());
         assert_eq!(ui.cursor_position, Default::default());
@@ -138,7 +142,7 @@ mod tests {
         let ev = create_event();
         let ev_id = ev.id;
         let _ = ui.update(UiMsg::ShowReply(ev));
-        assert!(ui.show_input);
+        assert!(ui.is_composing());
         assert!(ui.reply_to.as_ref().is_some());
         assert_eq!(ui.reply_to.as_ref().unwrap().id, ev_id);
         assert!(ui.input_content.is_empty());
@@ -147,13 +151,13 @@ mod tests {
     #[test]
     fn test_cancel_input_hides_and_resets() {
         let mut ui = UiState {
-            show_input: true,
+            current_mode: UiMode::Composing,
             input_content: "x".into(),
             reply_to: Some(create_event()),
             ..Default::default()
         };
         let _ = ui.update(UiMsg::CancelInput);
-        assert!(!ui.show_input);
+        assert!(ui.is_normal());
         assert!(ui.reply_to.is_none());
         assert!(ui.input_content.is_empty());
         assert!(ui.selection.is_none());

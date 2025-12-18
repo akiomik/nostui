@@ -144,7 +144,7 @@ impl HomeList {
     /// Check if timeline is scrollable
     /// Pure function to determine if scrolling operations are valid
     pub fn is_scrollable(state: &AppState) -> bool {
-        !state.ui.show_input && !state.timeline.notes.is_empty()
+        !state.ui.is_composing() && !state.timeline.notes.is_empty()
     }
 
     /// Get currently selected item information
@@ -282,11 +282,11 @@ mod tests {
         assert!(HomeList::is_scrollable(&state));
 
         // Input shown - not scrollable
-        state.ui.show_input = true;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
         assert!(!HomeList::is_scrollable(&state));
 
         // Empty timeline - not scrollable
-        state.ui.show_input = false;
+        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
         state.timeline.notes.clear();
         assert!(!HomeList::is_scrollable(&state));
     }
