@@ -11,11 +11,11 @@ use crate::{
 /// This component handles pure UI operations: scrolling, selection, and list rendering
 /// No internal state management - all UI state comes from AppState
 #[derive(Debug, Clone)]
-pub struct ElmHomeList {
+pub struct HomeList {
     data: ElmHomeData,
 }
 
-impl ElmHomeList {
+impl HomeList {
     pub fn new() -> Self {
         Self {
             data: ElmHomeData::new(),
@@ -163,7 +163,7 @@ impl ElmHomeList {
     }
 }
 
-impl Default for ElmHomeList {
+impl Default for HomeList {
     fn default() -> Self {
         Self::new()
     }
@@ -205,9 +205,9 @@ mod tests {
     }
 
     #[test]
-    fn test_elm_home_list_creation() {
-        let list = ElmHomeList::new();
-        let default_list = ElmHomeList::default();
+    fn test_home_list_creation() {
+        let list = HomeList::new();
+        let default_list = HomeList::default();
 
         // Should be equivalent (stateless)
         assert_eq!(format!("{:?}", list), format!("{:?}", default_list));
@@ -216,30 +216,27 @@ mod tests {
     #[test]
     fn test_calculate_valid_scroll_position() {
         // Empty timeline
-        assert_eq!(
-            ElmHomeList::calculate_valid_scroll_position(Some(0), 0),
-            None
-        );
-        assert_eq!(ElmHomeList::calculate_valid_scroll_position(None, 0), None);
+        assert_eq!(HomeList::calculate_valid_scroll_position(Some(0), 0), None);
+        assert_eq!(HomeList::calculate_valid_scroll_position(None, 0), None);
 
         // Valid positions
         assert_eq!(
-            ElmHomeList::calculate_valid_scroll_position(Some(0), 5),
+            HomeList::calculate_valid_scroll_position(Some(0), 5),
             Some(0)
         );
         assert_eq!(
-            ElmHomeList::calculate_valid_scroll_position(Some(4), 5),
+            HomeList::calculate_valid_scroll_position(Some(4), 5),
             Some(4)
         );
-        assert_eq!(ElmHomeList::calculate_valid_scroll_position(None, 5), None);
+        assert_eq!(HomeList::calculate_valid_scroll_position(None, 5), None);
 
         // Out of bounds
         assert_eq!(
-            ElmHomeList::calculate_valid_scroll_position(Some(10), 5),
+            HomeList::calculate_valid_scroll_position(Some(10), 5),
             Some(4)
         );
         assert_eq!(
-            ElmHomeList::calculate_valid_scroll_position(Some(5), 5),
+            HomeList::calculate_valid_scroll_position(Some(5), 5),
             Some(4)
         );
     }
@@ -247,34 +244,34 @@ mod tests {
     #[test]
     fn test_scroll_up_position() {
         // Empty timeline
-        assert_eq!(ElmHomeList::scroll_up_position(None, 0), None);
+        assert_eq!(HomeList::scroll_up_position(None, 0), None);
 
         // Normal cases
-        assert_eq!(ElmHomeList::scroll_up_position(None, 5), Some(0));
-        assert_eq!(ElmHomeList::scroll_up_position(Some(0), 5), Some(0));
-        assert_eq!(ElmHomeList::scroll_up_position(Some(3), 5), Some(2));
+        assert_eq!(HomeList::scroll_up_position(None, 5), Some(0));
+        assert_eq!(HomeList::scroll_up_position(Some(0), 5), Some(0));
+        assert_eq!(HomeList::scroll_up_position(Some(3), 5), Some(2));
     }
 
     #[test]
     fn test_scroll_down_position() {
         // Empty timeline
-        assert_eq!(ElmHomeList::scroll_down_position(None, 0), None);
+        assert_eq!(HomeList::scroll_down_position(None, 0), None);
 
         // Normal cases
-        assert_eq!(ElmHomeList::scroll_down_position(None, 5), Some(0));
-        assert_eq!(ElmHomeList::scroll_down_position(Some(0), 5), Some(1));
-        assert_eq!(ElmHomeList::scroll_down_position(Some(4), 5), Some(4)); // At bottom
+        assert_eq!(HomeList::scroll_down_position(None, 5), Some(0));
+        assert_eq!(HomeList::scroll_down_position(Some(0), 5), Some(1));
+        assert_eq!(HomeList::scroll_down_position(Some(4), 5), Some(4)); // At bottom
     }
 
     #[test]
     fn test_scroll_to_positions() {
         // Empty timeline
-        assert_eq!(ElmHomeList::scroll_to_top_position(0), None);
-        assert_eq!(ElmHomeList::scroll_to_bottom_position(0), None);
+        assert_eq!(HomeList::scroll_to_top_position(0), None);
+        assert_eq!(HomeList::scroll_to_bottom_position(0), None);
 
         // Normal timeline
-        assert_eq!(ElmHomeList::scroll_to_top_position(5), Some(0));
-        assert_eq!(ElmHomeList::scroll_to_bottom_position(5), Some(4));
+        assert_eq!(HomeList::scroll_to_top_position(5), Some(0));
+        assert_eq!(HomeList::scroll_to_bottom_position(5), Some(4));
     }
 
     #[test]
@@ -282,16 +279,16 @@ mod tests {
         let mut state = create_test_state_with_timeline(5);
 
         // Normal state - scrollable
-        assert!(ElmHomeList::is_scrollable(&state));
+        assert!(HomeList::is_scrollable(&state));
 
         // Input shown - not scrollable
         state.ui.show_input = true;
-        assert!(!ElmHomeList::is_scrollable(&state));
+        assert!(!HomeList::is_scrollable(&state));
 
         // Empty timeline - not scrollable
         state.ui.show_input = false;
         state.timeline.notes.clear();
-        assert!(!ElmHomeList::is_scrollable(&state));
+        assert!(!HomeList::is_scrollable(&state));
     }
 
     #[test]
@@ -299,7 +296,7 @@ mod tests {
         let mut state = create_test_state_with_timeline(5);
 
         // No selection
-        let info = ElmHomeList::get_selection_info(&state);
+        let info = HomeList::get_selection_info(&state);
         assert_eq!(info.selected_index, None);
         assert_eq!(info.timeline_length, 5);
         assert!(!info.has_selection);
@@ -308,7 +305,7 @@ mod tests {
 
         // Select first item
         state.timeline.selected_index = Some(0);
-        let info = ElmHomeList::get_selection_info(&state);
+        let info = HomeList::get_selection_info(&state);
         assert_eq!(info.selected_index, Some(0));
         assert!(info.has_selection);
         assert!(info.is_at_top);
@@ -316,7 +313,7 @@ mod tests {
 
         // Select last item
         state.timeline.selected_index = Some(4);
-        let info = ElmHomeList::get_selection_info(&state);
+        let info = HomeList::get_selection_info(&state);
         assert_eq!(info.selected_index, Some(4));
         assert!(info.has_selection);
         assert!(!info.is_at_top);
@@ -324,7 +321,7 @@ mod tests {
 
         // Select middle item
         state.timeline.selected_index = Some(2);
-        let info = ElmHomeList::get_selection_info(&state);
+        let info = HomeList::get_selection_info(&state);
         assert!(!info.is_at_top);
         assert!(!info.is_at_bottom);
     }
@@ -332,7 +329,7 @@ mod tests {
     #[test]
     fn test_empty_timeline_selection_info() {
         let state = create_test_state_with_timeline(0);
-        let info = ElmHomeList::get_selection_info(&state);
+        let info = HomeList::get_selection_info(&state);
 
         assert_eq!(info.timeline_length, 0);
         assert!(!info.has_selection);
