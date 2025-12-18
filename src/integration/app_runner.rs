@@ -9,16 +9,14 @@ use crate::{
         tui::event_source::EventSource,
     },
     integration::renderer::Renderer,
-    integration::{
-        coalescer::Coalescer, elm_integration::ElmRuntime, update_executor::UpdateExecutor,
-    },
+    integration::{coalescer::Coalescer, runtime::Runtime, update_executor::UpdateExecutor},
 };
 
 /// Experimental runner that drives the Elm architecture directly without legacy App
 /// This is introduced alongside the legacy runner and is not yet wired to main().
 pub struct AppRunner<'a> {
     /* lifetime used by ElmHome */
-    runtime: ElmRuntime,
+    runtime: Runtime,
     render_req_rx: mpsc::UnboundedReceiver<()>,
     // NOTE: In tests or non-interactive environments, TUI can be absent.
     tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
@@ -44,15 +42,15 @@ impl<'a> AppRunner<'a> {
         Self::new_with_config(config, tui, event_source).await
     }
 
-    pub fn runtime(&self) -> &ElmRuntime {
+    pub fn runtime(&self) -> &Runtime {
         &self.runtime
     }
-    pub fn runtime_mut(&mut self) -> &mut ElmRuntime {
+    pub fn runtime_mut(&mut self) -> &mut Runtime {
         &mut self.runtime
     }
 
     // Test helper: inject a custom event source (e.g., EventSource::Test)
-    /// Create a new AppRunner with ElmRuntime and infrastructure initialized.
+    /// Create a new AppRunner with Runtime and infrastructure initialized.
     pub async fn new_with_config(
         config: Config,
         tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
@@ -60,12 +58,12 @@ impl<'a> AppRunner<'a> {
     ) -> Result<Self> {
         let keys = Keys::parse(&config.privatekey)?;
 
-        // Initialize ElmRuntime with Nostr support
+        // Initialize Runtime with Nostr support
         let initial_state = AppState::new_with_config(keys.public_key(), config.clone());
         // Legacy action channel removed
 
         // Create runtime (without Nostr support yet) to obtain raw_tx for NostrService
-        let mut runtime = ElmRuntime::new_with_executor(initial_state);
+        let mut runtime = Runtime::new_with_executor(initial_state);
         let raw_tx = runtime.get_raw_sender().expect("raw sender must exist");
 
         // Initialize NostrService and start it in background

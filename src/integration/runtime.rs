@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Integration point between Elm architecture runtime and existing app
-pub struct ElmRuntime {
+pub struct Runtime {
     state: AppState,
     msg_queue: VecDeque<Msg>,
     raw_msg_queue: VecDeque<RawMsg>,
@@ -20,8 +20,8 @@ pub struct ElmRuntime {
     cmd_executor: Option<CmdExecutor>,
 }
 
-impl ElmRuntime {
-    /// Create a new ElmRuntime
+impl Runtime {
+    /// Create a new Runtime
     pub fn new(initial_state: AppState) -> Self {
         let (msg_tx, msg_rx) = mpsc::unbounded_channel();
         let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
@@ -39,7 +39,7 @@ impl ElmRuntime {
         }
     }
 
-    /// Create a new ElmRuntime with command executor
+    /// Create a new Runtime with command executor
     pub fn new_with_executor(initial_state: AppState) -> Self {
         let (msg_tx, msg_rx) = mpsc::unbounded_channel();
         let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
@@ -58,7 +58,7 @@ impl ElmRuntime {
         }
     }
 
-    /// Create a new ElmRuntime with both Action and NostrCommand support
+    /// Create a new Runtime with both Action and NostrCommand support
     pub fn new_with_nostr_executor(
         initial_state: AppState,
         nostr_sender: mpsc::UnboundedSender<NostrCommand>,
@@ -258,14 +258,14 @@ impl ElmRuntime {
     }
 
     /// Get runtime statistics
-    pub fn get_stats(&self) -> ElmRuntimeStats {
+    pub fn get_stats(&self) -> RuntimeStats {
         let has_nostr_support = self
             .cmd_executor
             .as_ref()
             .map(|executor| executor.get_stats().has_nostr_sender)
             .unwrap_or(false);
 
-        ElmRuntimeStats {
+        RuntimeStats {
             queued_messages: self.msg_queue.len(),
             queued_commands: self.cmd_queue.len(),
             timeline_notes_count: self.state.timeline_len(),
@@ -280,7 +280,7 @@ impl ElmRuntime {
 
 /// Runtime statistics
 #[derive(Debug, Clone)]
-pub struct ElmRuntimeStats {
+pub struct RuntimeStats {
     pub queued_messages: usize,
     pub queued_commands: usize,
     pub timeline_notes_count: usize,
@@ -299,10 +299,10 @@ mod tests {
     use crate::core::msg::Msg;
     use nostr_sdk::prelude::*;
 
-    fn create_test_runtime() -> ElmRuntime {
+    fn create_test_runtime() -> Runtime {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        ElmRuntime::new(state)
+        Runtime::new(state)
     }
 
     fn create_test_event() -> Event {
@@ -521,7 +521,7 @@ mod tests {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
         let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
-        let mut runtime = ElmRuntime::new_with_executor(state);
+        let mut runtime = Runtime::new_with_executor(state);
 
         // Check stats show executor is available but no Nostr support
         let stats = runtime.get_stats();
@@ -551,7 +551,7 @@ mod tests {
         let state = AppState::new(keys.public_key());
         let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
-        let mut runtime = ElmRuntime::new_with_nostr_executor(state, nostr_tx);
+        let mut runtime = Runtime::new_with_nostr_executor(state, nostr_tx);
 
         // Check stats show both executor and Nostr support
         let stats = runtime.get_stats();
@@ -594,7 +594,7 @@ mod tests {
         let state = AppState::new(keys.public_key());
         let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
         let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
-        let mut runtime = ElmRuntime::new_with_executor(state);
+        let mut runtime = Runtime::new_with_executor(state);
 
         // Initially no Nostr support
         assert!(!runtime.get_stats().has_nostr_support);
@@ -614,7 +614,7 @@ mod tests {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
         let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
-        let mut runtime = ElmRuntime::new(state);
+        let mut runtime = Runtime::new(state);
 
         // No executor available
         assert!(!runtime.get_stats().has_executor);
@@ -662,7 +662,7 @@ mod tests {
     fn test_execute_pending_commands_empty() {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let mut runtime = ElmRuntime::new_with_executor(state);
+        let mut runtime = Runtime::new_with_executor(state);
 
         // No pending commands
         let result = runtime.execute_pending_commands();
