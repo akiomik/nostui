@@ -90,7 +90,7 @@ impl TuiService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::test_tui::TestTui;
+    use crate::infrastructure::tui::test::TestTui;
 
     fn make_service_with_test_tui(w: u16, h: u16) -> (TuiService, Arc<Mutex<TestTui>>) {
         let tui = TestTui::new(w, h).expect("failed to create TestTui");
