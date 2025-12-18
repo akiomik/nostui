@@ -78,9 +78,7 @@ impl CmdExecutor {
 
             Cmd::SendTextNote { content, tags } => {
                 log::info!(
-                    "CmdExecutor: Processing SendTextNote - content: '{}', tags: {:?}",
-                    content,
-                    tags
+                    "CmdExecutor: Processing SendTextNote - content: '{content}', tags: {tags:?}",
                 );
                 if let Some(nostr_sender) = &self.nostr_sender {
                     log::info!("CmdExecutor: Routing to NostrService");
@@ -160,29 +158,27 @@ impl CmdExecutor {
                         }
                         // No TUI sender configured: drop with warning (no legacy Action fallback)
                         log::warn!(
-                            "CmdExecutor: TUI sender not configured; dropping Resize command {}x{}",
-                            width,
-                            height
+                            "CmdExecutor: TUI sender not configured; dropping Resize command {width}x{height}"
                         );
                     }
                 }
             }
 
             Cmd::LogError { message } => {
-                log::error!("Elm command error: {}", message);
+                log::error!("Elm command error: {message}");
             }
 
             Cmd::LogInfo { message } => {
-                log::info!("Elm command info: {}", message);
+                log::info!("Elm command info: {message}");
             }
 
             Cmd::StartTimer { id, duration_ms } => {
-                log::info!("Start timer {} for {}ms", id, duration_ms);
+                log::info!("Start timer {id} for {duration_ms}ms");
                 // TODO: Implement timer system
             }
 
             Cmd::StopTimer { id } => {
-                log::info!("Stop timer {}", id);
+                log::info!("Stop timer {id}");
                 // TODO: Implement timer system
             }
 
@@ -207,7 +203,7 @@ impl CmdExecutor {
                 }
                 Err(e) => {
                     let error_msg = format!("✗ Failed to execute {}: {}", cmd.name(), e);
-                    log::error!("{}", error_msg);
+                    log::error!("{error_msg}");
                     execution_log.push(error_msg);
                 }
             }

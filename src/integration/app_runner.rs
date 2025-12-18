@@ -364,6 +364,6 @@ mod tests {
 
         // Verify at least one draw happened due to Render coalescing
         let draws = draw_counter_handle.lock().await.draw_count();
-        assert!(draws >= 1, "expected at least one render, got {}", draws);
+        assert!(draws >= 1, "expected at least one render, got {draws}");
     }
 }

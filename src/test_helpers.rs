@@ -191,8 +191,7 @@ impl<'a> TextAreaTestHelper<'a> {
         let actual = HomeInput::get_input_mode_description(&self.state);
         assert_eq!(
             actual, expected,
-            "Expected mode description '{}', got '{}'",
-            expected, actual
+            "Expected mode description '{expected}', got '{actual}'",
         );
     }
 

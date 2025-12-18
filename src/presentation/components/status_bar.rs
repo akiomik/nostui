@@ -136,10 +136,7 @@ mod tests {
         let default_status_bar = StatusBar;
 
         // Both should be equivalent (stateless)
-        assert_eq!(
-            format!("{:?}", status_bar),
-            format!("{:?}", default_status_bar)
-        );
+        assert_eq!(format!("{status_bar:?}"), format!("{default_status_bar:?}"));
     }
 
     #[test]
@@ -148,7 +145,7 @@ mod tests {
         let status2 = StatusBar::new();
 
         // Since it's stateless, all instances should be equivalent
-        assert_eq!(format!("{:?}", status1), format!("{:?}", status2));
+        assert_eq!(format!("{status1:?}"), format!("{status2:?}"));
     }
 
     #[test]

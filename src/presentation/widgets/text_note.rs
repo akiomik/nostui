@@ -162,7 +162,7 @@ impl Widget for TextNote {
             if let Some(TagStandard::Event { event_id, .. }) = tag.as_standardized() {
                 let note1 = event_id.to_bech32().unwrap(); // Infallible
                 text.extend(Text::styled(
-                    format!("Reply to {}", note1),
+                    format!("Reply to {note1}"),
                     Style::default().fg(Color::Cyan),
                 ));
             }

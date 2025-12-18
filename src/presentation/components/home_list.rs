@@ -190,7 +190,7 @@ mod tests {
 
         // Add test notes
         for i in 0..note_count {
-            let event = EventBuilder::text_note(format!("Test note {}", i))
+            let event = EventBuilder::text_note(format!("Test note {i}"))
                 .sign_with_keys(&keys)
                 .unwrap();
 
@@ -210,7 +210,7 @@ mod tests {
         let default_list = HomeList::default();
 
         // Should be equivalent (stateless)
-        assert_eq!(format!("{:?}", list), format!("{:?}", default_list));
+        assert_eq!(format!("{list:?}"), format!("{default_list:?}"));
     }
 
     #[test]

@@ -89,7 +89,7 @@ impl SystemState {
             }
 
             SystemMsg::ShowError(error) => {
-                self.status_message = Some(format!("Error: {}", error));
+                self.status_message = Some(format!("Error: {error}"));
                 vec![]
             }
 
@@ -230,7 +230,7 @@ mod tests {
         assert!(cmds.is_empty());
         assert_eq!(
             system.status_message,
-            Some(format!("Error: {}", error_message))
+            Some(format!("Error: {error_message}"))
         );
     }
 

@@ -99,7 +99,7 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
     // Debug: Test translator directly with updated state
     let translated_msgs =
         nostui::core::translator::translate_raw_to_domain(raw_msg.clone(), runtime.state());
-    println!("Translated messages from 'l' key: {:?}", translated_msgs);
+    println!("Translated messages from 'l' key: {translated_msgs:?}");
 
     runtime.send_raw_msg(raw_msg);
 
@@ -109,7 +109,7 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
         .expect("Command execution should succeed");
 
     // Debug: Print execution log
-    println!("Execution log: {:?}", execution_log);
+    println!("Execution log: {execution_log:?}");
     println!(
         "Runtime state: input_mode={}, selected_index={:?}",
         runtime.state().ui.is_composing(),

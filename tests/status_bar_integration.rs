@@ -14,7 +14,7 @@ fn test_status_bar_stateless() {
     let status2 = StatusBar;
 
     // StatusBar should be completely stateless
-    assert_eq!(format!("{:?}", status1), format!("{:?}", status2));
+    assert_eq!(format!("{status1:?}"), format!("{status2:?}"));
 }
 
 #[test]

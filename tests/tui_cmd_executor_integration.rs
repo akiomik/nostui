@@ -30,6 +30,6 @@ async fn cmd_executor_sends_tui_command_when_sender_is_present() {
             assert_eq!(width, 80);
             assert_eq!(height, 24);
         }
-        other => panic!("expected a Resize command on tui_rx, got: {:?}", other),
+        other => panic!("expected a Resize command on tui_rx, got: {other:?}"),
     }
 }

@@ -87,8 +87,8 @@ mod tests {
             pubkey: Keys::generate().public_key(),
             metadata: nostr_sdk::Metadata::new()
                 .name(name)
-                .display_name(format!("{} Display", name))
-                .about(format!("Bio for {}", name))
+                .display_name(format!("{name} Display"))
+                .about(format!("Bio for {name}"))
                 .picture(
                     format!("https://example.com/{}.jpg", name.to_lowercase())
                         .parse()
@@ -222,7 +222,7 @@ mod tests {
         // Add multiple profiles
         for i in 0..5 {
             let pubkey = Keys::generate().public_key();
-            let profile = create_test_profile(&format!("User{}", i), i);
+            let profile = create_test_profile(&format!("User{i}"), i);
             user.update(UserMsg::UpdateProfile(pubkey, profile));
         }
 

@@ -106,7 +106,7 @@ impl<'a> HomeInput<'a> {
             let name = self.get_reply_target_name(state, reply_to);
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!("Replying to {}: Press ESC to close", name))
+                .title(format!("Replying to {name}: Press ESC to close"))
         } else {
             Block::default()
                 .borders(Borders::ALL)
