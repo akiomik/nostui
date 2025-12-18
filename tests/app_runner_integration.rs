@@ -19,7 +19,7 @@ async fn test_app_runner_headless_initialization() {
     use std::sync::Arc;
     use tokio::sync::Mutex;
     let tui = Arc::new(Mutex::new(
-        nostui::infrastructure::test_tui::TestTui::new(80, 24).expect("failed to create TestTui"),
+        nostui::infrastructure::tui::test::TestTui::new(80, 24).expect("failed to create TestTui"),
     ));
     let runner = AppRunner::new_with_config(cfg, tui)
         .await
@@ -45,7 +45,7 @@ async fn test_app_runner_headless_one_loop_quit() {
     use std::sync::Arc;
     use tokio::sync::Mutex;
     let tui = Arc::new(Mutex::new(
-        nostui::infrastructure::test_tui::TestTui::new(80, 24).expect("failed to create TestTui"),
+        nostui::infrastructure::tui::test::TestTui::new(80, 24).expect("failed to create TestTui"),
     ));
     let mut runner = AppRunner::new_with_config(cfg, tui)
         .await

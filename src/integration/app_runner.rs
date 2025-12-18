@@ -9,7 +9,7 @@ use crate::{
         fps_service::FpsService,
         nostr_service::NostrService,
         tui,
-        tui_event_source::{EventSource, TuiEvent},
+        tui::event_source::{EventSource, TuiEvent},
     },
     integration::renderer::Renderer,
     integration::{
@@ -49,7 +49,7 @@ impl<'a> AppRunner<'a> {
     // Test helper: inject a custom event source (e.g., EventSource::Test)
     pub fn set_event_source_for_tests(
         &mut self,
-        src: crate::infrastructure::tui_event_source::EventSource,
+        src: crate::infrastructure::tui::event_source::EventSource,
     ) {
         self.event_source = Some(src);
     }
@@ -249,9 +249,9 @@ impl<'a> AppRunner<'a> {
 mod tests {
     // Unit tests for the extracted helpers
     use super::*;
-    use crate::infrastructure::test_tui::TestTui;
-    use crate::infrastructure::tui_event_source::EventSource as TestEventSource;
-    use crate::infrastructure::tui_event_source::TuiEvent;
+    use crate::infrastructure::tui::event_source::EventSource as TestEventSource;
+    use crate::infrastructure::tui::event_source::TuiEvent;
+    use crate::infrastructure::tui::test::TestTui;
 
     fn make_test_config() -> Config {
         let keys = Keys::generate();

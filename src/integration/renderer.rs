@@ -46,7 +46,7 @@ impl<'a> Renderer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::test_tui::TestTui;
+    use crate::infrastructure::tui::test::TestTui;
 
     #[tokio::test]
     async fn renderer_renders_with_test_tui() {
