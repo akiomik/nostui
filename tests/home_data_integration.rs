@@ -5,17 +5,17 @@ use nostui::{
         state::AppState,
         update::update,
     },
-    presentation::components::elm_home_data::ElmHomeData,
+    presentation::components::home_data::HomeData,
 };
 use ratatui::{prelude::*, widgets::Padding};
 
 /// Test Home data layer integration with Elm architecture
 #[test]
 fn test_elm_home_data_stateless() {
-    let home1 = ElmHomeData::new();
-    let home2 = ElmHomeData;
+    let home1 = HomeData::new();
+    let home2 = HomeData;
 
-    // ElmHomeData should be completely stateless
+    // HomeData should be completely stateless
     assert_eq!(format!("{:?}", home1), format!("{:?}", home2));
 }
 
@@ -23,11 +23,11 @@ fn test_elm_home_data_stateless() {
 fn test_timeline_note_management_flow() {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
-    let home_data = ElmHomeData::new();
+    let home_data = HomeData::new();
 
     // Initially empty timeline
     assert_eq!(state.timeline.notes.len(), 0);
-    assert!(ElmHomeData::get_selected_note(&state).is_none());
+    assert!(HomeData::get_selected_note(&state).is_none());
 
     // Add first note via domain message
     let event1 = EventBuilder::text_note("First post")
@@ -39,7 +39,7 @@ fn test_timeline_note_management_flow() {
 
     // Verify note was added
     assert_eq!(state.timeline.notes.len(), 1);
-    let note = ElmHomeData::get_note_at_index(&state, 0);
+    let note = HomeData::get_note_at_index(&state, 0);
     assert!(note.is_some());
     assert_eq!(note.unwrap().content, "First post");
 
@@ -66,7 +66,7 @@ fn test_profile_management_flow() {
     let mut state = AppState::new(keys.public_key());
 
     // Initially no profile
-    let display_name = ElmHomeData::get_display_name(&state, &keys.public_key());
+    let display_name = HomeData::get_display_name(&state, &keys.public_key());
     assert!(display_name.contains(":")); // Should be shortened key
 
     // Add profile via domain message
@@ -81,7 +81,7 @@ fn test_profile_management_flow() {
     assert!(cmds.is_empty());
 
     // Now should show display name
-    let display_name = ElmHomeData::get_display_name(&state, &keys.public_key());
+    let display_name = HomeData::get_display_name(&state, &keys.public_key());
     assert_eq!(display_name, "Alice Smith");
 
     // Test with different name (should overwrite previous profile)
@@ -91,7 +91,7 @@ fn test_profile_management_flow() {
     let (new_state, _) = update(Msg::UpdateProfile(keys.public_key(), profile2), state);
     state = new_state;
 
-    let display_name = ElmHomeData::get_display_name(&state, &keys.public_key());
+    let display_name = HomeData::get_display_name(&state, &keys.public_key());
     // The profile might not update due to timestamp comparison in update logic
     // Just verify it returns a valid name
     assert!(!display_name.is_empty());
@@ -115,7 +115,7 @@ fn test_social_engagement_flow() {
     state = new_state;
 
     // Initially no engagement
-    let engagement = ElmHomeData::get_event_engagement(&state, &post_id);
+    let engagement = HomeData::get_event_engagement(&state, &post_id);
     assert_eq!(engagement.reactions_count, 0);
     assert_eq!(engagement.reposts_count, 0);
     assert_eq!(engagement.zaps_count, 0);
@@ -128,7 +128,7 @@ fn test_social_engagement_flow() {
     state = new_state;
 
     // Should have 1 reaction
-    let engagement = ElmHomeData::get_event_engagement(&state, &post_id);
+    let engagement = HomeData::get_event_engagement(&state, &post_id);
     assert_eq!(engagement.reactions_count, 1);
 
     // Add repost
@@ -139,7 +139,7 @@ fn test_social_engagement_flow() {
     state = new_state;
 
     // Should have 1 reaction and 1 repost
-    let engagement = ElmHomeData::get_event_engagement(&state, &post_id);
+    let engagement = HomeData::get_event_engagement(&state, &post_id);
     assert_eq!(engagement.reactions_count, 1);
     assert_eq!(engagement.reposts_count, 1);
 }
@@ -159,24 +159,24 @@ fn test_timeline_selection_flow() {
     }
 
     // Test selection via domain messages
-    assert!(ElmHomeData::get_selected_note(&state).is_none());
+    assert!(HomeData::get_selected_note(&state).is_none());
 
     // Select first note
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::SelectNote(0)), state);
     state = new_state;
-    let selected = ElmHomeData::get_selected_note(&state);
+    let selected = HomeData::get_selected_note(&state);
     assert!(selected.is_some());
     assert!(selected.unwrap().content.contains("Post #"));
 
     // Select invalid note
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::SelectNote(10)), state);
     state = new_state;
-    assert!(ElmHomeData::get_selected_note(&state).is_none());
+    assert!(HomeData::get_selected_note(&state).is_none());
 
     // Deselect
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::DeselectNote), state);
     state = new_state;
-    assert!(ElmHomeData::get_selected_note(&state).is_none());
+    assert!(HomeData::get_selected_note(&state).is_none());
 }
 
 #[test]
@@ -185,7 +185,7 @@ fn test_timeline_interaction_conditions() {
     let mut state = AppState::new(keys.public_key());
 
     // Empty timeline - cannot interact
-    assert!(!ElmHomeData::can_interact_with_timeline(&state));
+    assert!(!HomeData::can_interact_with_timeline(&state));
 
     // Add notes
     let event = EventBuilder::text_note("Test post")
@@ -195,17 +195,17 @@ fn test_timeline_interaction_conditions() {
     state = new_state;
 
     // Now can interact
-    assert!(ElmHomeData::can_interact_with_timeline(&state));
+    assert!(HomeData::can_interact_with_timeline(&state));
 
     // Show input - cannot interact
     let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote), state);
     state = new_state;
-    assert!(!ElmHomeData::can_interact_with_timeline(&state));
+    assert!(!HomeData::can_interact_with_timeline(&state));
 
     // Hide input - can interact again
     let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::CancelInput), state);
     state = new_state;
-    assert!(ElmHomeData::can_interact_with_timeline(&state));
+    assert!(HomeData::can_interact_with_timeline(&state));
 }
 
 #[test]
@@ -248,7 +248,7 @@ fn test_timeline_stats_calculation() {
     state = new_state;
 
     // Calculate stats
-    let stats = ElmHomeData::calculate_timeline_stats(&state);
+    let stats = HomeData::calculate_timeline_stats(&state);
     assert_eq!(stats.total_notes, 2);
     assert_eq!(stats.total_profiles, 2);
     assert_eq!(stats.total_reactions, 1);
@@ -260,7 +260,7 @@ fn test_timeline_stats_calculation() {
 fn test_text_note_creation() {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
-    let home_data = ElmHomeData::new();
+    let home_data = HomeData::new();
 
     // Add note and profile
     let event = EventBuilder::text_note("Test content")
@@ -289,12 +289,12 @@ async fn test_complete_home_data_workflow() {
     let author_keys = Keys::generate();
     let user_keys = Keys::generate();
     let mut state = AppState::new(user_keys.public_key());
-    let home_data = ElmHomeData::new();
+    let home_data = HomeData::new();
 
     // 1. Initial state - empty timeline
-    let stats = ElmHomeData::calculate_timeline_stats(&state);
+    let stats = HomeData::calculate_timeline_stats(&state);
     assert_eq!(stats.total_notes, 0);
-    assert!(!ElmHomeData::can_interact_with_timeline(&state));
+    assert!(!HomeData::can_interact_with_timeline(&state));
 
     // 2. Receive posts
     let post1 = EventBuilder::text_note("Hello Nostr!")
@@ -333,7 +333,7 @@ async fn test_complete_home_data_workflow() {
     state = new_state;
 
     // 5. Verify final state
-    let stats = ElmHomeData::calculate_timeline_stats(&state);
+    let stats = HomeData::calculate_timeline_stats(&state);
     assert_eq!(stats.total_notes, 2);
     assert_eq!(stats.total_profiles, 1);
     assert_eq!(stats.total_reactions, 1);
@@ -346,21 +346,21 @@ async fn test_complete_home_data_workflow() {
     assert_eq!(timeline_items.len(), 2);
 
     // 7. Test interaction capability
-    assert!(ElmHomeData::can_interact_with_timeline(&state));
+    assert!(HomeData::can_interact_with_timeline(&state));
 
     // 8. Test display names
-    let author_name = ElmHomeData::get_display_name(&state, &author_keys.public_key());
+    let author_name = HomeData::get_display_name(&state, &author_keys.public_key());
     assert_eq!(author_name, "Nostr Developer");
 
-    let user_name = ElmHomeData::get_display_name(&state, &user_keys.public_key());
+    let user_name = HomeData::get_display_name(&state, &user_keys.public_key());
     assert!(user_name.contains(":")); // Should be shortened key
 
     // 9. Test engagement
-    let post1_engagement = ElmHomeData::get_event_engagement(&state, &post1.id);
+    let post1_engagement = HomeData::get_event_engagement(&state, &post1.id);
     assert_eq!(post1_engagement.reactions_count, 1);
     assert_eq!(post1_engagement.reposts_count, 0);
 
-    let post2_engagement = ElmHomeData::get_event_engagement(&state, &post2.id);
+    let post2_engagement = HomeData::get_event_engagement(&state, &post2.id);
     assert_eq!(post2_engagement.reactions_count, 0);
     assert_eq!(post2_engagement.reposts_count, 1);
 }
@@ -370,7 +370,7 @@ async fn test_complete_home_data_workflow() {
 fn test_large_timeline_performance() {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
-    let home_data = ElmHomeData::new();
+    let home_data = HomeData::new();
 
     let start = std::time::Instant::now();
 
@@ -404,7 +404,7 @@ fn test_large_timeline_performance() {
 
     // Test stats calculation performance
     let start = std::time::Instant::now();
-    let stats = ElmHomeData::calculate_timeline_stats(&state);
+    let stats = HomeData::calculate_timeline_stats(&state);
     let elapsed = start.elapsed();
 
     println!("Calculated stats in {:?}", elapsed);

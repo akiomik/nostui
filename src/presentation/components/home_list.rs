@@ -4,7 +4,7 @@ use tui_widget_list::{ListBuilder, ListView};
 
 use crate::{
     core::state::AppState, infrastructure::tui::Frame,
-    presentation::components::elm_home_data::ElmHomeData,
+    presentation::components::home_data::HomeData,
 };
 
 /// Elm-architecture compatible list component for Home timeline
@@ -12,13 +12,13 @@ use crate::{
 /// No internal state management - all UI state comes from AppState
 #[derive(Debug, Clone)]
 pub struct HomeList {
-    data: ElmHomeData,
+    data: HomeData,
 }
 
 impl HomeList {
     pub fn new() -> Self {
         Self {
-            data: ElmHomeData::new(),
+            data: HomeData::new(),
         }
     }
 
@@ -27,7 +27,7 @@ impl HomeList {
     pub fn draw(&self, state: &AppState, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         let padding = Padding::new(1, 1, 1, 3);
 
-        // Generate timeline items using ElmHomeData
+        // Generate timeline items using HomeData
         let items = self.data.generate_timeline_items(state, area, padding);
         let item_count = items.len();
 

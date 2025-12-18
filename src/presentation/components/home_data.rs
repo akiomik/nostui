@@ -10,9 +10,9 @@ use crate::{
 /// This component handles pure data operations: note display, profile management, social features
 /// No internal state management - all data comes from AppState
 #[derive(Debug, Clone)]
-pub struct ElmHomeData;
+pub struct HomeData;
 
-impl ElmHomeData {
+impl HomeData {
     pub fn new() -> Self {
         Self
     }
@@ -212,7 +212,7 @@ impl ElmHomeData {
     }
 }
 
-impl Default for ElmHomeData {
+impl Default for HomeData {
     fn default() -> Self {
         Self::new()
     }
@@ -277,9 +277,9 @@ mod tests {
     }
 
     #[test]
-    fn test_elm_home_data_creation() {
-        let home_data = ElmHomeData::new();
-        let default_home_data = ElmHomeData;
+    fn test_home_data_creation() {
+        let home_data = HomeData::new();
+        let default_home_data = HomeData;
 
         // Should be equivalent (stateless)
         assert_eq!(
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn test_generate_timeline_items() {
         let state = create_test_state_with_notes(3);
-        let home_data = ElmHomeData::new();
+        let home_data = HomeData::new();
 
         let area = Rect::new(0, 0, 100, 50);
         let padding = Padding::new(1, 1, 1, 1);
@@ -310,11 +310,11 @@ mod tests {
         let state = create_test_state_with_notes(5);
 
         // Valid index
-        let note = ElmHomeData::get_note_at_index(&state, 0);
+        let note = HomeData::get_note_at_index(&state, 0);
         assert!(note.is_some());
 
         // Invalid index
-        let note = ElmHomeData::get_note_at_index(&state, 10);
+        let note = HomeData::get_note_at_index(&state, 10);
         assert!(note.is_none());
     }
 
@@ -323,17 +323,17 @@ mod tests {
         let mut state = create_test_state_with_notes(3);
 
         // No selection
-        let selected = ElmHomeData::get_selected_note(&state);
+        let selected = HomeData::get_selected_note(&state);
         assert!(selected.is_none());
 
         // Valid selection
         state.timeline.selected_index = Some(1);
-        let selected = ElmHomeData::get_selected_note(&state);
+        let selected = HomeData::get_selected_note(&state);
         assert!(selected.is_some());
 
         // Invalid selection
         state.timeline.selected_index = Some(10);
-        let selected = ElmHomeData::get_selected_note(&state);
+        let selected = HomeData::get_selected_note(&state);
         assert!(selected.is_none());
     }
 
@@ -354,7 +354,7 @@ mod tests {
         repost_set.insert(repost);
         state.timeline.reposts.insert(event_id, repost_set);
 
-        let stats = ElmHomeData::calculate_timeline_stats(&state);
+        let stats = HomeData::calculate_timeline_stats(&state);
 
         assert_eq!(stats.total_notes, 5);
         assert_eq!(stats.total_profiles, 1);
@@ -369,7 +369,7 @@ mod tests {
         let event_id = state.timeline.notes.iter().next().unwrap().0.event.id;
 
         // Initially no engagement
-        let engagement = ElmHomeData::get_event_engagement(&state, &event_id);
+        let engagement = HomeData::get_event_engagement(&state, &event_id);
         assert_eq!(engagement.reactions_count, 0);
         assert_eq!(engagement.reposts_count, 0);
         assert_eq!(engagement.zaps_count, 0);
@@ -382,7 +382,7 @@ mod tests {
         reaction_set.insert(reaction2);
         state.timeline.reactions.insert(event_id, reaction_set);
 
-        let engagement = ElmHomeData::get_event_engagement(&state, &event_id);
+        let engagement = HomeData::get_event_engagement(&state, &event_id);
         assert_eq!(engagement.reactions_count, 2);
     }
 
@@ -391,16 +391,16 @@ mod tests {
         let mut state = create_test_state_with_notes(1);
 
         // Can interact when input is not shown and notes exist
-        assert!(ElmHomeData::can_interact_with_timeline(&state));
+        assert!(HomeData::can_interact_with_timeline(&state));
 
         // Cannot interact when input is shown
         state.ui.show_input = true;
-        assert!(!ElmHomeData::can_interact_with_timeline(&state));
+        assert!(!HomeData::can_interact_with_timeline(&state));
 
         // Cannot interact when no notes (even if input hidden)
         state.ui.show_input = false;
         state.timeline.notes.clear();
-        assert!(!ElmHomeData::can_interact_with_timeline(&state));
+        assert!(!HomeData::can_interact_with_timeline(&state));
     }
 
     #[test]
@@ -409,12 +409,12 @@ mod tests {
         let pubkey = state.user.current_user_pubkey;
 
         // Should return profile display name
-        let display_name = ElmHomeData::get_display_name(&state, &pubkey);
+        let display_name = HomeData::get_display_name(&state, &pubkey);
         assert_eq!(display_name, "Test Display");
 
         // Test with unknown pubkey - should return shortened key
         let unknown_keys = Keys::generate();
-        let unknown_name = ElmHomeData::get_display_name(&state, &unknown_keys.public_key());
+        let unknown_name = HomeData::get_display_name(&state, &unknown_keys.public_key());
         assert!(!unknown_name.is_empty());
     }
 
@@ -425,20 +425,20 @@ mod tests {
         let state_without_profile = AppState::new(keys.public_key());
 
         // Should have profile data for test user
-        assert!(ElmHomeData::has_profile_data(
+        assert!(HomeData::has_profile_data(
             &state_with_profile,
             &state_with_profile.user.current_user_pubkey
         ));
 
         // Should not have profile data for unknown user
         let unknown_keys = Keys::generate();
-        assert!(!ElmHomeData::has_profile_data(
+        assert!(!HomeData::has_profile_data(
             &state_with_profile,
             &unknown_keys.public_key()
         ));
 
         // Empty state should not have any profiles
-        assert!(!ElmHomeData::has_profile_data(
+        assert!(!HomeData::has_profile_data(
             &state_without_profile,
             &keys.public_key()
         ));
@@ -451,7 +451,7 @@ mod tests {
         let mut state = AppState::new(keys1.public_key());
 
         // Initially no authors
-        let authors = ElmHomeData::get_timeline_authors(&state);
+        let authors = HomeData::get_timeline_authors(&state);
         assert_eq!(authors.len(), 0);
 
         // Add notes from different authors
@@ -474,7 +474,7 @@ mod tests {
         state.timeline.notes.find_or_insert(Reverse(sortable3));
 
         // Should have 2 unique authors
-        let authors = ElmHomeData::get_timeline_authors(&state);
+        let authors = HomeData::get_timeline_authors(&state);
         assert_eq!(authors.len(), 2);
         assert!(authors.contains(&keys1.public_key()));
         assert!(authors.contains(&keys2.public_key()));
@@ -483,7 +483,7 @@ mod tests {
     #[test]
     fn test_create_text_note() {
         let state = create_test_state_with_notes(1);
-        let home_data = ElmHomeData::new();
+        let home_data = HomeData::new();
         let event = state.timeline.notes.iter().next().unwrap().0.event.clone();
 
         let area = Rect::new(0, 0, 100, 50);
