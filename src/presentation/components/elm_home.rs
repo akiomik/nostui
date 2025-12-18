@@ -4,13 +4,13 @@ use ratatui::Frame;
 
 use crate::{core::cmd::Cmd, core::msg::Msg, core::state::AppState};
 
-use super::{elm_home_data::ElmHomeData, elm_home_input::ElmHomeInput, elm_home_list::ElmHomeList};
+use super::{elm_home_data::ElmHomeData, elm_home_input::ElmHomeInput, home_list::HomeList};
 
 /// Complete Elm-style Home component that orchestrates data, list, and input
 #[derive(Debug)]
 pub struct ElmHome<'a> {
     data: ElmHomeData,
-    list: ElmHomeList,
+    list: HomeList,
     input: ElmHomeInput<'a>,
 }
 
@@ -25,7 +25,7 @@ impl<'a> ElmHome<'a> {
     pub fn new() -> Self {
         Self {
             data: ElmHomeData::new(),
-            list: ElmHomeList::new(),
+            list: HomeList::new(),
             input: ElmHomeInput::new(),
         }
     }
@@ -103,7 +103,7 @@ impl<'a> ElmHome<'a> {
     /// Reset the component to initial state
     pub fn reset(&mut self) {
         self.data = ElmHomeData::new();
-        self.list = ElmHomeList::new();
+        self.list = HomeList::new();
         self.input = ElmHomeInput::new();
     }
 }
@@ -204,7 +204,7 @@ mod tests {
     fn test_elm_home_new() {
         let home = ElmHome::new();
         assert!(matches!(home.data, ElmHomeData { .. }));
-        assert!(matches!(home.list, ElmHomeList { .. }));
+        assert!(matches!(home.list, HomeList { .. }));
         assert!(matches!(home.input, ElmHomeInput { .. }));
     }
 
@@ -315,7 +315,7 @@ mod tests {
         // Reset should recreate all components
         home.reset();
         assert!(matches!(home.data, ElmHomeData { .. }));
-        assert!(matches!(home.list, ElmHomeList { .. }));
+        assert!(matches!(home.list, HomeList { .. }));
         assert!(matches!(home.input, ElmHomeInput { .. }));
     }
 }
