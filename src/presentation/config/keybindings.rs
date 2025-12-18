@@ -6,10 +6,10 @@ use derive_deref::{Deref, DerefMut};
 use serde::{de::Deserializer, Deserialize};
 
 #[derive(Clone, Debug, Default, Deref, DerefMut)]
-pub struct KeyBindings(pub HashMap<Vec<KeyEvent>, ElmAction>);
+pub struct KeyBindings(pub HashMap<Vec<KeyEvent>, Action>);
 
 #[derive(Clone, Debug, Deserialize)]
-pub enum ElmAction {
+pub enum Action {
     // Navigation
     ScrollUp,
     ScrollDown,
@@ -34,7 +34,7 @@ impl<'de> Deserialize<'de> for KeyBindings {
     where
         D: Deserializer<'de>,
     {
-        let parsed_map = HashMap::<String, ElmAction>::deserialize(deserializer)?;
+        let parsed_map = HashMap::<String, Action>::deserialize(deserializer)?;
         let keybindings = parsed_map
             .into_iter()
             .map(|(key_str, action)| (parse_key_sequence(&key_str).unwrap(), action))

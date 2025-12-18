@@ -105,32 +105,32 @@ fn translate_normal_mode_keys(key: crossterm::event::KeyEvent, state: &AppState)
 }
 
 /// Convert Action to Msg based on current state
-use crate::presentation::config::keybindings::ElmAction;
+use crate::presentation::config::keybindings::Action;
 
-fn translate_action_to_msg(action: &ElmAction, state: &AppState) -> Vec<Msg> {
+fn translate_action_to_msg(action: &Action, state: &AppState) -> Vec<Msg> {
     match action {
-        ElmAction::ScrollUp => vec![Msg::Timeline(
+        Action::ScrollUp => vec![Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::ScrollUp,
         )],
-        ElmAction::ScrollDown => vec![Msg::Timeline(
+        Action::ScrollDown => vec![Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::ScrollDown,
         )],
-        ElmAction::ScrollToTop => vec![Msg::Timeline(
+        Action::ScrollToTop => vec![Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::ScrollToTop,
         )],
-        ElmAction::ScrollToBottom => vec![Msg::Timeline(
+        Action::ScrollToBottom => vec![Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::ScrollToBottom,
         )],
-        ElmAction::NewTextNote => vec![Msg::Ui(UiMsg::ShowNewNote)],
-        ElmAction::ReplyTextNote => translate_reply_key(state),
-        ElmAction::React => translate_like_key(state),
-        ElmAction::Repost => translate_repost_key(state),
-        ElmAction::Unselect => vec![Msg::Timeline(
+        Action::NewTextNote => vec![Msg::Ui(UiMsg::ShowNewNote)],
+        Action::ReplyTextNote => translate_reply_key(state),
+        Action::React => translate_like_key(state),
+        Action::Repost => translate_repost_key(state),
+        Action::Unselect => vec![Msg::Timeline(
             crate::core::msg::timeline::TimelineMsg::DeselectNote,
         )],
-        ElmAction::Quit => vec![Msg::System(SystemMsg::Quit)],
-        ElmAction::Suspend => vec![Msg::System(SystemMsg::Suspend)],
-        ElmAction::SubmitTextNote => {
+        Action::Quit => vec![Msg::System(SystemMsg::Quit)],
+        Action::Suspend => vec![Msg::System(SystemMsg::Suspend)],
+        Action::SubmitTextNote => {
             // Only process submit in input mode
             if state.ui.show_input {
                 vec![Msg::Ui(UiMsg::SubmitNote)]
@@ -330,7 +330,7 @@ mod tests {
 
     fn create_test_state() -> AppState {
         use crate::infrastructure::config::Config;
-        use crate::presentation::config::keybindings::ElmAction as Action;
+        use crate::presentation::config::keybindings::Action;
         use crate::presentation::config::keybindings::KeyBindings;
         use std::collections::HashMap;
 
