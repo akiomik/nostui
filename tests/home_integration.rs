@@ -8,10 +8,10 @@ use nostui::{
         state::AppState,
         translator::translate_raw_to_domain,
     },
-    presentation::components::elm_home::{ElmHome, HomeAction},
+    presentation::components::home::{Home, HomeAction},
 };
 
-/// Integration tests for ElmHome component
+/// Integration tests for Home component
 fn create_test_state() -> AppState {
     AppState::new(Keys::generate().public_key())
 }
@@ -69,8 +69,8 @@ fn create_test_event() -> Event {
 }
 
 #[test]
-fn test_elm_home_complete_workflow() -> Result<()> {
-    let home = ElmHome::new();
+fn test_home_complete_workflow() -> Result<()> {
+    let home = Home::new();
     let mut state = create_test_state();
 
     // Initial state
@@ -107,8 +107,8 @@ fn test_elm_home_complete_workflow() -> Result<()> {
 }
 
 #[test]
-fn test_elm_home_input_workflow() -> Result<()> {
-    let home = ElmHome::new();
+fn test_home_input_workflow() -> Result<()> {
+    let home = Home::new();
     let mut state = create_test_state();
 
     // Start new note
@@ -135,8 +135,8 @@ fn test_elm_home_input_workflow() -> Result<()> {
 }
 
 #[test]
-fn test_elm_home_reply_workflow() -> Result<()> {
-    let home = ElmHome::new();
+fn test_home_reply_workflow() -> Result<()> {
+    let home = Home::new();
     let mut state = create_test_state();
     let target_event = create_test_event();
 
@@ -158,8 +158,8 @@ fn test_elm_home_reply_workflow() -> Result<()> {
 }
 
 #[test]
-fn test_elm_home_key_processing() -> Result<()> {
-    let mut home = ElmHome::new();
+fn test_home_key_processing() -> Result<()> {
+    let mut home = Home::new();
     let mut state = create_test_state();
 
     // Add event to timeline
@@ -194,8 +194,8 @@ fn test_elm_home_key_processing() -> Result<()> {
 }
 
 #[test]
-fn test_elm_home_advanced_interaction_validation() -> Result<()> {
-    let home = ElmHome::new();
+fn test_home_advanced_interaction_validation() -> Result<()> {
+    let home = Home::new();
     let mut state = create_test_state();
 
     // Test interaction with empty timeline
@@ -222,7 +222,7 @@ fn test_elm_home_advanced_interaction_validation() -> Result<()> {
 }
 
 #[test]
-fn test_elm_home_translator_integration() -> Result<()> {
+fn test_home_translator_integration() -> Result<()> {
     let mut state = create_test_state_with_config();
     let event = create_test_event();
 
@@ -276,7 +276,7 @@ fn test_elm_home_translator_integration() -> Result<()> {
 }
 
 #[test]
-fn test_elm_home_validation_edge_cases() -> Result<()> {
+fn test_home_validation_edge_cases() -> Result<()> {
     let mut state = create_test_state_with_config();
 
     // Test own note repost prevention
@@ -308,8 +308,8 @@ fn test_elm_home_validation_edge_cases() -> Result<()> {
 }
 
 #[test]
-fn test_elm_home_help_text_contextual() -> Result<()> {
-    let home = ElmHome::new();
+fn test_home_help_text_contextual() -> Result<()> {
+    let home = Home::new();
     let mut state = create_test_state();
 
     // Empty timeline help
@@ -350,8 +350,8 @@ fn test_elm_home_help_text_contextual() -> Result<()> {
 }
 
 #[test]
-fn test_elm_home_component_reset() -> Result<()> {
-    let mut home = ElmHome::new();
+fn test_home_component_reset() -> Result<()> {
+    let mut home = Home::new();
     let state = create_test_state();
 
     // Verify initial state
