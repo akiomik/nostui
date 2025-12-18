@@ -4,14 +4,14 @@ use ratatui::Frame;
 
 use crate::{core::cmd::Cmd, core::msg::Msg, core::state::AppState};
 
-use super::{elm_home_input::ElmHomeInput, home_data::HomeData, home_list::HomeList};
+use super::{home_data::HomeData, home_input::HomeInput, home_list::HomeList};
 
 /// Complete Elm-style Home component that orchestrates data, list, and input
 #[derive(Debug)]
 pub struct ElmHome<'a> {
     data: HomeData,
     list: HomeList,
-    input: ElmHomeInput<'a>,
+    input: HomeInput<'a>,
 }
 
 impl<'a> Default for ElmHome<'a> {
@@ -26,7 +26,7 @@ impl<'a> ElmHome<'a> {
         Self {
             data: HomeData::new(),
             list: HomeList::new(),
-            input: ElmHomeInput::new(),
+            input: HomeInput::new(),
         }
     }
 
@@ -88,11 +88,8 @@ impl<'a> ElmHome<'a> {
     }
 
     /// Get input validation and submission data
-    pub fn get_input_submit_data(
-        &self,
-        state: &AppState,
-    ) -> Option<super::elm_home_input::SubmitData> {
-        ElmHomeInput::get_submit_data(state)
+    pub fn get_input_submit_data(&self, state: &AppState) -> Option<super::home_input::SubmitData> {
+        HomeInput::get_submit_data(state)
     }
 
     /// Check if input is in a valid state for submission
@@ -104,7 +101,7 @@ impl<'a> ElmHome<'a> {
     pub fn reset(&mut self) {
         self.data = HomeData::new();
         self.list = HomeList::new();
-        self.input = ElmHomeInput::new();
+        self.input = HomeInput::new();
     }
 }
 
@@ -205,7 +202,7 @@ mod tests {
         let home = ElmHome::new();
         assert!(matches!(home.data, HomeData { .. }));
         assert!(matches!(home.list, HomeList { .. }));
-        assert!(matches!(home.input, ElmHomeInput { .. }));
+        assert!(matches!(home.input, HomeInput { .. }));
     }
 
     #[test]
@@ -316,6 +313,6 @@ mod tests {
         home.reset();
         assert!(matches!(home.data, HomeData { .. }));
         assert!(matches!(home.list, HomeList { .. }));
-        assert!(matches!(home.input, ElmHomeInput { .. }));
+        assert!(matches!(home.input, HomeInput { .. }));
     }
 }

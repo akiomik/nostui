@@ -8,13 +8,13 @@ use crate::{
     core::state::AppState,
     core::translator::translate_raw_to_domain,
     core::update::update,
-    presentation::components::elm_home_input::{ElmHomeInput, SubmitData},
+    presentation::components::home_input::{HomeInput, SubmitData},
 };
 
-/// Test helper for TextArea and ElmHomeInput integration testing
+/// Test helper for TextArea and HomeInput integration testing
 /// Provides a fluent API for common test patterns and reduces boilerplate
 pub struct TextAreaTestHelper<'a> {
-    input: ElmHomeInput<'a>,
+    input: HomeInput<'a>,
     state: AppState,
 }
 
@@ -23,7 +23,7 @@ impl<'a> TextAreaTestHelper<'a> {
     pub fn new() -> Self {
         let dummy_pubkey = Self::create_test_pubkey();
         let state = AppState::new(dummy_pubkey);
-        let input = ElmHomeInput::new();
+        let input = HomeInput::new();
         Self { input, state }
     }
 
@@ -128,7 +128,7 @@ impl<'a> TextAreaTestHelper<'a> {
         self.press_key(key)
     }
 
-    /// Send an Elm message through the update cycle
+    /// Send a message through the update cycle
     pub fn send_message(&mut self, msg: Msg) -> &mut Self {
         let (new_state, _cmds) = update(msg, self.state.clone());
         self.state = new_state;
@@ -175,7 +175,7 @@ impl<'a> TextAreaTestHelper<'a> {
     /// Assert input is active
     pub fn assert_input_active(&self) {
         assert!(
-            ElmHomeInput::is_input_active(&self.state),
+            HomeInput::is_input_active(&self.state),
             "Expected input to be active"
         );
     }
@@ -183,14 +183,14 @@ impl<'a> TextAreaTestHelper<'a> {
     /// Assert input is not active
     pub fn assert_input_not_active(&self) {
         assert!(
-            !ElmHomeInput::is_input_active(&self.state),
+            !HomeInput::is_input_active(&self.state),
             "Expected input to be inactive"
         );
     }
 
     /// Assert input mode description
     pub fn assert_mode_description(&self, expected: &str) {
-        let actual = ElmHomeInput::get_input_mode_description(&self.state);
+        let actual = HomeInput::get_input_mode_description(&self.state);
         assert_eq!(
             actual, expected,
             "Expected mode description '{}', got '{}'",
@@ -201,7 +201,7 @@ impl<'a> TextAreaTestHelper<'a> {
     /// Assert input can be submitted
     pub fn assert_can_submit(&self) {
         assert!(
-            ElmHomeInput::can_submit(&self.state),
+            HomeInput::can_submit(&self.state),
             "Expected input to be submittable"
         );
     }
@@ -209,27 +209,27 @@ impl<'a> TextAreaTestHelper<'a> {
     /// Assert input cannot be submitted
     pub fn assert_cannot_submit(&self) {
         assert!(
-            !ElmHomeInput::can_submit(&self.state),
+            !HomeInput::can_submit(&self.state),
             "Expected input to not be submittable"
         );
     }
 
     /// Assert submit data is available and return it
     pub fn assert_submit_data(&self) -> SubmitData {
-        ElmHomeInput::get_submit_data(&self.state).expect("Expected submit data to be available")
+        HomeInput::get_submit_data(&self.state).expect("Expected submit data to be available")
     }
 
     /// Assert submit data is not available
     pub fn assert_no_submit_data(&self) {
         assert!(
-            ElmHomeInput::get_submit_data(&self.state).is_none(),
+            HomeInput::get_submit_data(&self.state).is_none(),
             "Expected no submit data to be available"
         );
     }
 
     /// Assert character count
     pub fn assert_char_count(&self, expected: usize) {
-        let stats = ElmHomeInput::get_input_stats(&self.state);
+        let stats = HomeInput::get_input_stats(&self.state);
         assert_eq!(
             stats.char_count, expected,
             "Expected char count {}, got {}",
@@ -239,7 +239,7 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Assert line count
     pub fn assert_line_count(&self, expected: usize) {
-        let stats = ElmHomeInput::get_input_stats(&self.state);
+        let stats = HomeInput::get_input_stats(&self.state);
         assert_eq!(
             stats.line_count, expected,
             "Expected line count {}, got {}",
@@ -249,7 +249,7 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Assert word count
     pub fn assert_word_count(&self, expected: usize) {
-        let stats = ElmHomeInput::get_input_stats(&self.state);
+        let stats = HomeInput::get_input_stats(&self.state);
         assert_eq!(
             stats.word_count, expected,
             "Expected word count {}, got {}",
@@ -259,13 +259,13 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Assert content is empty
     pub fn assert_empty(&self) {
-        let stats = ElmHomeInput::get_input_stats(&self.state);
+        let stats = HomeInput::get_input_stats(&self.state);
         assert!(stats.is_empty, "Expected content to be empty");
     }
 
     /// Assert content is not empty
     pub fn assert_not_empty(&self) {
-        let stats = ElmHomeInput::get_input_stats(&self.state);
+        let stats = HomeInput::get_input_stats(&self.state);
         assert!(!stats.is_empty, "Expected content to not be empty");
     }
 
@@ -318,12 +318,12 @@ impl<'a> TextAreaTestHelper<'a> {
     }
 
     /// Get the current input component (for advanced assertions)
-    pub fn input(&self) -> &ElmHomeInput<'a> {
+    pub fn input(&self) -> &HomeInput<'a> {
         &self.input
     }
 
     /// Get mutable access to input component (for advanced testing)
-    pub fn input_mut(&mut self) -> &mut ElmHomeInput<'a> {
+    pub fn input_mut(&mut self) -> &mut HomeInput<'a> {
         &mut self.input
     }
 
