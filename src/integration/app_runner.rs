@@ -57,8 +57,6 @@ impl<'a> AppRunner<'a> {
     /// Create a new AppRunner with ElmRuntime and infrastructure initialized.
     pub async fn new_with_config(
         config: Config,
-        _tick_rate: f64,
-        _frame_rate: f64,
         tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
     ) -> Result<Self> {
         let keys = Keys::parse(&config.privatekey)?;
@@ -270,7 +268,7 @@ mod tests {
         let tui = Arc::new(Mutex::new(
             TestTui::new(80, 24).expect("failed to create TestTui"),
         ));
-        AppRunner::new_with_config(make_test_config(), 10.0, 30.0, tui)
+        AppRunner::new_with_config(make_test_config(), tui)
             .await
             .expect("failed to create AppRunner")
     }
@@ -349,7 +347,7 @@ mod tests {
         let draw_counter_handle = test_tui.clone();
 
         // Create runner with the same TestTui instance
-        let mut runner = AppRunner::new_with_config(make_test_config(), 10.0, 30.0, test_tui)
+        let mut runner = AppRunner::new_with_config(make_test_config(), test_tui)
             .await
             .expect("failed to create AppRunner");
 
