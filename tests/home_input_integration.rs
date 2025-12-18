@@ -3,13 +3,13 @@ use nostui::{
     core::msg::Msg,
     core::state::AppState,
     core::update::update,
-    presentation::components::elm_home_input::{ElmHomeInput, SubmitData},
+    presentation::components::home_input::{HomeInput, SubmitData},
     test_helpers::TextAreaTestHelper,
 };
 
 /// Test Home input layer integration with Elm architecture
 #[test]
-fn test_elm_home_input_creation_and_defaults() {
+fn test_home_input_creation_and_defaults() {
     let helper = TextAreaTestHelper::new();
     helper.assert_input_not_active();
 }
@@ -50,11 +50,8 @@ fn test_reply_mode_activation() {
     );
     state = new_state;
     assert!(cmds.is_empty());
-    assert!(ElmHomeInput::is_input_active(&state));
-    assert_eq!(
-        ElmHomeInput::get_input_mode_description(&state),
-        "Reply mode"
-    );
+    assert!(HomeInput::is_input_active(&state));
+    assert_eq!(HomeInput::get_input_mode_description(&state), "Reply mode");
     assert!(state.ui.reply_to.is_some());
 }
 
@@ -127,8 +124,8 @@ fn test_submission_with_reply_tags() {
     state = new_state;
 
     // Should be submittable with reply tags
-    assert!(ElmHomeInput::can_submit(&state));
-    let submit_data = ElmHomeInput::get_submit_data(&state).unwrap();
+    assert!(HomeInput::can_submit(&state));
+    let submit_data = HomeInput::get_submit_data(&state).unwrap();
     assert_eq!(submit_data.content, "This is a reply");
     assert!(!submit_data.tags.is_empty()); // Should have reply tags
 }
@@ -225,16 +222,13 @@ fn test_mode_transitions() {
         state,
     );
     state = new_state;
-    assert_eq!(
-        ElmHomeInput::get_input_mode_description(&state),
-        "Reply mode"
-    );
+    assert_eq!(HomeInput::get_input_mode_description(&state), "Reply mode");
 
     // Reply → Navigation
     let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::CancelInput), state);
     state = new_state;
     assert_eq!(
-        ElmHomeInput::get_input_mode_description(&state),
+        HomeInput::get_input_mode_description(&state),
         "Navigation mode"
     );
 }
@@ -292,10 +286,7 @@ async fn test_complete_input_workflow() {
         state,
     );
     state = new_state;
-    assert_eq!(
-        ElmHomeInput::get_input_mode_description(&state),
-        "Reply mode"
-    );
+    assert_eq!(HomeInput::get_input_mode_description(&state), "Reply mode");
 
     // 6. Type reply
     let (new_state, _) = update(
@@ -321,7 +312,7 @@ async fn test_complete_input_workflow() {
 
     // 8. Back to navigation
     assert_eq!(
-        ElmHomeInput::get_input_mode_description(&state),
+        HomeInput::get_input_mode_description(&state),
         "Navigation mode"
     );
 }

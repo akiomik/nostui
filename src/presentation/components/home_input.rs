@@ -61,14 +61,14 @@ impl TextAreaState {
 /// This component handles pure input operations: text input, reply management, submission
 /// TextArea state is managed externally in AppState
 #[derive(Debug)]
-pub struct ElmHomeInput<'a> {
+pub struct HomeInput<'a> {
     // We need to maintain a TextArea for rendering, but sync it with AppState
     textarea: TextArea<'a>,
     // Store navigation key that should be processed directly
     pending_navigation_key: Option<crossterm::event::KeyEvent>,
 }
 
-impl<'a> ElmHomeInput<'a> {
+impl<'a> HomeInput<'a> {
     pub fn new() -> Self {
         let textarea = TextArea::default();
 
@@ -136,7 +136,7 @@ impl<'a> ElmHomeInput<'a> {
             if !state.ui.input_content.is_empty() {
                 self.textarea.insert_str(&state.ui.input_content);
                 log::debug!(
-                    "ElmHomeInput::sync_textarea_with_state: Inserted content, cursor now at: {:?}",
+                    "HomeInput::sync_textarea_with_state: Inserted content, cursor now at: {:?}",
                     self.textarea.cursor()
                 );
             }
@@ -147,7 +147,7 @@ impl<'a> ElmHomeInput<'a> {
         if current_cursor != state.ui.cursor_position {
             self.set_cursor_position(&state.ui.cursor_position);
             log::debug!(
-                "ElmHomeInput::sync_textarea_with_state: Updated cursor to {:?}",
+                "HomeInput::sync_textarea_with_state: Updated cursor to {:?}",
                 state.ui.cursor_position
             );
         }
@@ -157,7 +157,7 @@ impl<'a> ElmHomeInput<'a> {
 
         if current_content == state.ui.input_content && current_cursor == state.ui.cursor_position {
             log::debug!(
-                "ElmHomeInput::sync_textarea_with_state: Content and cursor are the same, no update needed"
+                "HomeInput::sync_textarea_with_state: Content and cursor are the same, no update needed"
             );
         }
     }
@@ -389,7 +389,7 @@ impl<'a> ElmHomeInput<'a> {
     }
 }
 
-impl<'a> Default for ElmHomeInput<'a> {
+impl<'a> Default for HomeInput<'a> {
     fn default() -> Self {
         Self::new()
     }
@@ -432,9 +432,9 @@ mod tests {
     }
 
     #[test]
-    fn test_elm_home_input_creation() {
-        let input = ElmHomeInput::new();
-        let default_input = ElmHomeInput::default();
+    fn test_home_input_creation() {
+        let input = HomeInput::new();
+        let default_input = HomeInput::default();
 
         // Should be creatable
         assert!(input.textarea.is_empty());
@@ -446,19 +446,19 @@ mod tests {
         let mut state = AppState::new(Keys::generate().public_key());
 
         // Cannot submit when input not shown
-        assert!(!ElmHomeInput::can_submit(&state));
+        assert!(!HomeInput::can_submit(&state));
 
         // Cannot submit when input shown but empty
         state.ui.show_input = true;
-        assert!(!ElmHomeInput::can_submit(&state));
+        assert!(!HomeInput::can_submit(&state));
 
         // Cannot submit with only whitespace
         state.ui.input_content = "   \n  \t  ".to_string();
-        assert!(!ElmHomeInput::can_submit(&state));
+        assert!(!HomeInput::can_submit(&state));
 
         // Can submit with actual content
         state.ui.input_content = "Hello, Nostr!".to_string();
-        assert!(ElmHomeInput::can_submit(&state));
+        assert!(HomeInput::can_submit(&state));
     }
 
     #[test]
@@ -467,7 +467,7 @@ mod tests {
 
         // Basic submission (new note)
         state.ui.input_content = "Hello, Nostr!".to_string();
-        let submit_data = ElmHomeInput::get_submit_data(&state);
+        let submit_data = HomeInput::get_submit_data(&state);
         assert!(submit_data.is_some());
         let data = submit_data.unwrap();
         assert_eq!(data.content, "Hello, Nostr!");
@@ -475,14 +475,14 @@ mod tests {
 
         // Reply submission
         state.ui.reply_to = Some(create_test_event());
-        let submit_data = ElmHomeInput::get_submit_data(&state);
+        let submit_data = HomeInput::get_submit_data(&state);
         assert!(submit_data.is_some());
         let data = submit_data.unwrap();
         assert!(!data.tags.is_empty()); // Should have reply tags
 
         // Cannot submit when input hidden
         state.ui.show_input = false;
-        let submit_data = ElmHomeInput::get_submit_data(&state);
+        let submit_data = HomeInput::get_submit_data(&state);
         assert!(submit_data.is_none());
     }
 
@@ -491,7 +491,7 @@ mod tests {
         let mut state = AppState::new(Keys::generate().public_key());
 
         // Empty content
-        let stats = ElmHomeInput::get_input_stats(&state);
+        let stats = HomeInput::get_input_stats(&state);
         assert_eq!(stats.char_count, 0);
         assert_eq!(stats.line_count, 1); // At least 1 line
         assert_eq!(stats.word_count, 0);
@@ -499,7 +499,7 @@ mod tests {
 
         // Simple content
         state.ui.input_content = "Hello, world!".to_string();
-        let stats = ElmHomeInput::get_input_stats(&state);
+        let stats = HomeInput::get_input_stats(&state);
         assert_eq!(stats.char_count, 13);
         assert_eq!(stats.line_count, 1);
         assert_eq!(stats.word_count, 2);
@@ -507,13 +507,13 @@ mod tests {
 
         // Multi-line content
         state.ui.input_content = "Line 1\nLine 2\nLine 3".to_string();
-        let stats = ElmHomeInput::get_input_stats(&state);
+        let stats = HomeInput::get_input_stats(&state);
         assert_eq!(stats.line_count, 3);
         assert_eq!(stats.word_count, 6);
 
         // Whitespace only
         state.ui.input_content = "   \n  \t  ".to_string();
-        let stats = ElmHomeInput::get_input_stats(&state);
+        let stats = HomeInput::get_input_stats(&state);
         assert!(stats.is_empty); // Trimmed empty
         assert!(stats.char_count > 0); // But has characters
     }
@@ -523,15 +523,15 @@ mod tests {
         let mut state = AppState::new(Keys::generate().public_key());
 
         // Initially not active
-        assert!(!ElmHomeInput::is_input_active(&state));
+        assert!(!HomeInput::is_input_active(&state));
 
         // Active when input shown
         state.ui.show_input = true;
-        assert!(ElmHomeInput::is_input_active(&state));
+        assert!(HomeInput::is_input_active(&state));
 
         // Not active when hidden again
         state.ui.show_input = false;
-        assert!(!ElmHomeInput::is_input_active(&state));
+        assert!(!HomeInput::is_input_active(&state));
     }
 
     #[test]
@@ -540,23 +540,20 @@ mod tests {
 
         // Navigation mode
         assert_eq!(
-            ElmHomeInput::get_input_mode_description(&state),
+            HomeInput::get_input_mode_description(&state),
             "Navigation mode"
         );
 
         // Compose mode
         state.ui.show_input = true;
         assert_eq!(
-            ElmHomeInput::get_input_mode_description(&state),
+            HomeInput::get_input_mode_description(&state),
             "Compose mode"
         );
 
         // Reply mode
         state.ui.reply_to = Some(create_test_event());
-        assert_eq!(
-            ElmHomeInput::get_input_mode_description(&state),
-            "Reply mode"
-        );
+        assert_eq!(HomeInput::get_input_mode_description(&state), "Reply mode");
     }
 
     #[test]
@@ -584,13 +581,13 @@ mod tests {
 
         // Unicode content
         state.ui.input_content = "こんにちは世界！".to_string();
-        let stats = ElmHomeInput::get_input_stats(&state);
+        let stats = HomeInput::get_input_stats(&state);
         assert_eq!(stats.char_count, 8); // Unicode characters
         assert!(!stats.is_empty);
 
         // Emoji content
         state.ui.input_content = "🚀🌟💫".to_string();
-        let stats = ElmHomeInput::get_input_stats(&state);
+        let stats = HomeInput::get_input_stats(&state);
         assert_eq!(stats.char_count, 3); // Emoji count
         assert_eq!(stats.word_count, 1); // Emojis as one word
     }

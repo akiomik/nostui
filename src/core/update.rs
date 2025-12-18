@@ -57,14 +57,18 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
         Msg::Ui(ui_msg) => {
             match ui_msg {
                 UiMsg::SubmitNote => {
-                    if let Some(submit_data) = crate::presentation::components::elm_home_input::ElmHomeInput::get_submit_data(&state) {
+                    if let Some(submit_data) =
+                        crate::presentation::components::home_input::HomeInput::get_submit_data(
+                            &state,
+                        )
+                    {
                         // Reset UiState through its update to centralize behavior
                         let mut cmds = state.ui.update(UiMsg::CancelInput);
-                        cmds.push(Cmd::SendTextNote { content: submit_data.content, tags: submit_data.tags });
-                        (
-                            state,
-                            cmds
-                        )
+                        cmds.push(Cmd::SendTextNote {
+                            content: submit_data.content,
+                            tags: submit_data.tags,
+                        });
+                        (state, cmds)
                     } else {
                         (state, vec![])
                     }
@@ -72,7 +76,7 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
                 UiMsg::ProcessTextAreaInput(key) => {
                     if state.ui.show_input {
                         state.ui.pending_input_keys.push(key);
-                        let textarea_state = crate::presentation::components::elm_home_input::ElmHomeInput::process_pending_keys(&mut state);
+                        let textarea_state = crate::presentation::components::home_input::HomeInput::process_pending_keys(&mut state);
                         textarea_state.apply_to_ui_state(&mut state.ui);
                     }
                     (state, vec![])
