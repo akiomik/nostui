@@ -11,11 +11,9 @@ use crate::{
         tui,
         tui_event_source::{EventSource, TuiEvent},
     },
+    integration::renderer::Renderer,
     integration::{
         coalescer::Coalescer, elm_integration::ElmRuntime, update_executor::UpdateExecutor,
-    },
-    presentation::components::{
-        elm_fps::ElmFpsCounter, elm_home::ElmHome, elm_status_bar::ElmStatusBar,
     },
 };
 
@@ -29,9 +27,7 @@ pub struct AppRunner<'a> {
     tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
     event_source: Option<EventSource>,
     // Presentation components (stateless/pure rendering)
-    home: ElmHome<'a>,
-    status_bar: ElmStatusBar,
-    fps: ElmFpsCounter,
+    renderer: Renderer<'a>,
     // For service termination
     nostr_terminate_tx: mpsc::UnboundedSender<()>,
     // Incoming events from Nostr network
@@ -109,9 +105,7 @@ impl<'a> AppRunner<'a> {
             event_source,
             // Keep service for future direct Cmd::Tui execution
             // (currently CmdExecutor falls back to Action until wiring is complete)
-            home: ElmHome::new(),
-            status_bar: ElmStatusBar::new(),
-            fps: ElmFpsCounter::new(),
+            renderer: Renderer::new(),
             nostr_terminate_tx,
             nostr_event_rx,
             fps_service,
@@ -249,21 +243,7 @@ impl<'a> AppRunner<'a> {
 
     async fn render(&mut self) -> Result<()> {
         let state = self.runtime.state().clone();
-        // Prefer test terminal when injected (for unit tests)
-        {
-            let mut guard = self.tui.lock().await;
-            let mut draw = |f: &mut ratatui::Frame<'_>| {
-                let area = f.area();
-                // Home timeline and input overlay
-                self.home.render(f, area, &state);
-                // Status bar overlays bottom lines
-                let _ = self.status_bar.draw(&state, f, area);
-                // FPS indicator (top line overlay)
-                let _ = self.fps.draw(&state, f, area);
-            };
-            guard.draw(&mut draw)?;
-        }
-        Ok(())
+        self.renderer.render(&self.tui, &state).await
     }
 }
 
