@@ -23,7 +23,7 @@ fn create_test_state() -> AppState {
 fn create_test_state_with_config() -> AppState {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use nostui::infrastructure::config::Config;
-    use nostui::presentation::config::keybindings::{ElmAction, KeyBindings};
+    use nostui::presentation::config::keybindings::{Action, KeyBindings};
     use std::collections::HashMap;
 
     // Create config with test keybindings
@@ -33,31 +33,31 @@ fn create_test_state_with_config() -> AppState {
     let mut home_bindings = HashMap::new();
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE)],
-        ElmAction::ScrollDown,
+        Action::ScrollDown,
     );
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE)],
-        ElmAction::ScrollUp,
+        Action::ScrollUp,
     );
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE)],
-        ElmAction::React,
+        Action::React,
     );
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE)],
-        ElmAction::ReplyTextNote,
+        Action::ReplyTextNote,
     );
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE)],
-        ElmAction::Repost,
+        Action::Repost,
     );
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE)],
-        ElmAction::NewTextNote,
+        Action::NewTextNote,
     );
     home_bindings.insert(
         vec![KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)],
-        ElmAction::Unselect,
+        Action::Unselect,
     );
 
     config.keybindings = KeyBindings(home_bindings);
