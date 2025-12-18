@@ -11,6 +11,14 @@ pub enum UiMode {
     Composing,
 }
 
+/// Data required for submitting a note
+#[derive(Debug, Clone, PartialEq)]
+pub struct SubmitData {
+    pub content: String,
+    pub tags: Vec<nostr_sdk::Tag>,
+}
+
+use crate::domain::nostr::nip10::ReplyTagsBuilder;
 use crate::domain::ui::{CursorPosition, TextSelection};
 
 /// UI-related state
@@ -53,6 +61,21 @@ impl UiState {
         !self.input_content.trim().is_empty()
     }
 
+    pub fn prepare_submit_data(&self) -> Option<SubmitData> {
+        if !self.can_submit_input() {
+            return None;
+        }
+
+        let content = self.input_content.clone();
+        let tags = if let Some(ref reply_to) = self.reply_to {
+            ReplyTagsBuilder::build(reply_to.clone())
+        } else {
+            vec![]
+        };
+
+        Some(SubmitData { content, tags })
+    }
+
     /// UiState-specific update function performing pure state transitions
     /// and returning generated commands (currently none; coordinator emits commands)
     pub fn update(&mut self, msg: UiMsg) -> Vec<Cmd> {
@@ -65,6 +88,7 @@ impl UiState {
                 self.selection = None;
                 vec![]
             }
+
             UiMsg::ShowReply(target_event) => {
                 self.reply_to = Some(target_event);
                 self.current_mode = UiMode::Composing;
@@ -73,6 +97,7 @@ impl UiState {
                 self.selection = None;
                 vec![]
             }
+
             UiMsg::CancelInput => {
                 self.current_mode = UiMode::Normal;
                 self.reply_to = None;
@@ -87,22 +112,35 @@ impl UiState {
                 self.input_content = content;
                 vec![]
             }
+
             UiMsg::UpdateInputContentWithCursor(content, pos) => {
                 self.input_content = content;
                 self.cursor_position = pos;
                 vec![]
             }
+
             UiMsg::UpdateCursorPosition(pos) => {
                 self.cursor_position = pos;
                 vec![]
             }
+
             UiMsg::UpdateSelection(sel) => {
                 self.selection = sel;
                 vec![]
             }
 
-            // Not handled here: coordinator owns integration/commands
-            UiMsg::SubmitNote => vec![],
+            UiMsg::SubmitNote => {
+                if let Some(submit_data) = self.prepare_submit_data() {
+                    let mut cmds = self.update(UiMsg::CancelInput);
+                    cmds.push(Cmd::SendTextNote {
+                        content: submit_data.content,
+                        tags: submit_data.tags,
+                    });
+                    cmds
+                } else {
+                    vec![]
+                }
+            }
 
             // Keep legacy textarea path intact (no-op here; AppState handles it)
             UiMsg::ProcessTextAreaInput(_) => vec![],
@@ -189,5 +227,52 @@ mod tests {
         assert_eq!(s.start.column, 1);
         assert_eq!(s.end.line, 2);
         assert_eq!(s.end.column, 3);
+    }
+
+    #[test]
+    fn test_prepare_submit_data() {
+        let mut ui = UiState {
+            input_content: "Hello, Nostr!".to_string(),
+            current_mode: UiMode::Composing,
+            ..Default::default()
+        };
+
+        // Basic submission (new note)
+        let submit_data = ui.prepare_submit_data();
+        assert!(submit_data.is_some());
+        let data = submit_data.unwrap();
+        assert_eq!(data.content, "Hello, Nostr!");
+        assert!(data.tags.is_empty()); // No reply tags
+
+        // Reply submission
+        ui.reply_to = Some(create_event());
+        let submit_data = ui.prepare_submit_data();
+        assert!(submit_data.is_some());
+        let data = submit_data.unwrap();
+        assert!(!data.tags.is_empty()); // Should have reply tags
+
+        // Cannot submit when input hidden
+        ui.current_mode = UiMode::Normal;
+        let submit_data = ui.prepare_submit_data();
+        assert!(submit_data.is_none());
+    }
+
+    #[test]
+    fn test_submit_data_equality() {
+        let data1 = SubmitData {
+            content: "Hello".to_string(),
+            tags: vec![],
+        };
+        let data2 = SubmitData {
+            content: "Hello".to_string(),
+            tags: vec![],
+        };
+        let data3 = SubmitData {
+            content: "World".to_string(),
+            tags: vec![],
+        };
+
+        assert_eq!(data1, data2);
+        assert_ne!(data1, data3);
     }
 }
