@@ -9,9 +9,9 @@ use crate::{
 /// This component is purely functional - it receives state and renders status information
 /// No internal state management
 #[derive(Debug, Clone)]
-pub struct ElmStatusBar;
+pub struct StatusBar;
 
-impl ElmStatusBar {
+impl StatusBar {
     pub fn new() -> Self {
         Self
     }
@@ -70,14 +70,14 @@ impl ElmStatusBar {
     }
 }
 
-impl Default for ElmStatusBar {
+impl Default for StatusBar {
     fn default() -> Self {
         Self::new()
     }
 }
 
 /// Helper functions for status bar operations
-impl ElmStatusBar {
+impl StatusBar {
     /// Get connection status from app state
     pub fn get_connection_status(state: &AppState) -> String {
         // This could be extended to show network connection status
@@ -131,9 +131,9 @@ mod tests {
     }
 
     #[test]
-    fn test_elm_status_bar_creation() {
-        let status_bar = ElmStatusBar::new();
-        let default_status_bar = ElmStatusBar;
+    fn test_status_bar_creation() {
+        let status_bar = StatusBar::new();
+        let default_status_bar = StatusBar;
 
         // Both should be equivalent (stateless)
         assert_eq!(
@@ -144,8 +144,8 @@ mod tests {
 
     #[test]
     fn test_status_bar_is_stateless() {
-        let status1 = ElmStatusBar::new();
-        let status2 = ElmStatusBar::new();
+        let status1 = StatusBar::new();
+        let status2 = StatusBar::new();
 
         // Since it's stateless, all instances should be equivalent
         assert_eq!(format!("{:?}", status1), format!("{:?}", status2));
@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn test_display_name_with_profile() {
         let state = create_test_state_with_profile(true);
-        let status_bar = ElmStatusBar::new();
+        let status_bar = StatusBar::new();
 
         let display_name = status_bar.get_display_name(&state);
         assert_eq!(display_name, "Test Display");
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn test_display_name_without_profile() {
         let state = create_test_state_with_profile(false);
-        let status_bar = ElmStatusBar::new();
+        let status_bar = StatusBar::new();
 
         let display_name = status_bar.get_display_name(&state);
         // Should fall back to shortened public key
@@ -177,18 +177,18 @@ mod tests {
 
         // Test loading state
         state.system.is_loading = true;
-        let status = ElmStatusBar::get_connection_status(&state);
+        let status = StatusBar::get_connection_status(&state);
         assert_eq!(status, "Connecting...");
 
         // Test active state with message
         state.system.is_loading = false;
         state.system.status_message = Some("Connected to relay".to_string());
-        let status = ElmStatusBar::get_connection_status(&state);
+        let status = StatusBar::get_connection_status(&state);
         assert_eq!(status, "Active");
 
         // Test ready state
         state.system.status_message = None;
-        let status = ElmStatusBar::get_connection_status(&state);
+        let status = StatusBar::get_connection_status(&state);
         assert_eq!(status, "Ready");
     }
 
@@ -197,8 +197,8 @@ mod tests {
         let state_with_profile = create_test_state_with_profile(true);
         let state_without_profile = create_test_state_with_profile(false);
 
-        assert!(ElmStatusBar::has_profile_data(&state_with_profile));
-        assert!(!ElmStatusBar::has_profile_data(&state_without_profile));
+        assert!(StatusBar::has_profile_data(&state_with_profile));
+        assert!(!StatusBar::has_profile_data(&state_without_profile));
     }
 
     #[test]
@@ -206,10 +206,10 @@ mod tests {
         let state_with_profile = create_test_state_with_profile(true);
         let state_without_profile = create_test_state_with_profile(false);
 
-        let timestamp = ElmStatusBar::get_profile_timestamp(&state_with_profile);
+        let timestamp = StatusBar::get_profile_timestamp(&state_with_profile);
         assert!(timestamp.is_some());
 
-        let timestamp = ElmStatusBar::get_profile_timestamp(&state_without_profile);
+        let timestamp = StatusBar::get_profile_timestamp(&state_without_profile);
         assert!(timestamp.is_none());
     }
 
@@ -231,7 +231,7 @@ mod tests {
             crate::domain::nostr::Profile::new(keys2.public_key(), Timestamp::now(), metadata2);
         state.user.profiles.insert(keys2.public_key(), profile2);
 
-        let status_bar = ElmStatusBar::new();
+        let status_bar = StatusBar::new();
         let display_name = status_bar.get_display_name(&state);
 
         // Should show current user's name, not other user's
