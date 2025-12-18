@@ -21,9 +21,13 @@ async fn test_app_runner_headless_initialization() {
     let tui = Arc::new(Mutex::new(
         nostui::infrastructure::tui::test::TestTui::new(80, 24).expect("failed to create TestTui"),
     ));
-    let runner = AppRunner::new_with_config(cfg, tui)
-        .await
-        .expect("failed to create AppRunner");
+    let runner = AppRunner::new_with_config(
+        cfg,
+        tui.clone(),
+        nostui::infrastructure::tui::event_source::EventSource::real(tui),
+    )
+    .await
+    .expect("failed to create AppRunner");
 
     // Basic sanity checks on internal runtime state
     let state = runner.runtime().state().clone();
@@ -47,9 +51,13 @@ async fn test_app_runner_headless_one_loop_quit() {
     let tui = Arc::new(Mutex::new(
         nostui::infrastructure::tui::test::TestTui::new(80, 24).expect("failed to create TestTui"),
     ));
-    let mut runner = AppRunner::new_with_config(cfg, tui)
-        .await
-        .expect("failed to create AppRunner");
+    let mut runner = AppRunner::new_with_config(
+        cfg,
+        tui.clone(),
+        nostui::infrastructure::tui::event_source::EventSource::real(tui),
+    )
+    .await
+    .expect("failed to create AppRunner");
 
     // Send a Quit to runtime before running, so the loop exits immediately
     runner.runtime_mut().send_raw_msg(RawMsg::Quit);

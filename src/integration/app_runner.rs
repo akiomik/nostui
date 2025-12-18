@@ -22,7 +22,7 @@ pub struct AppRunner<'a> {
     render_req_rx: mpsc::UnboundedReceiver<()>,
     // NOTE: In tests or non-interactive environments, TUI can be absent.
     tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
-    event_source: Option<EventSource>,
+    event_source: EventSource,
     // Presentation components (stateless/pure rendering)
     renderer: Renderer<'a>,
     // For service termination
@@ -36,6 +36,14 @@ pub struct AppRunner<'a> {
 }
 
 impl<'a> AppRunner<'a> {
+    pub async fn new_with_real(
+        config: Config,
+        tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
+    ) -> Result<Self> {
+        let event_source = EventSource::real(tui.clone());
+        Self::new_with_config(config, tui, event_source).await
+    }
+
     pub fn runtime(&self) -> &ElmRuntime {
         &self.runtime
     }
@@ -44,17 +52,11 @@ impl<'a> AppRunner<'a> {
     }
 
     // Test helper: inject a custom event source (e.g., EventSource::Test)
-    pub fn set_event_source_for_tests(
-        &mut self,
-        src: crate::infrastructure::tui::event_source::EventSource,
-    ) {
-        self.event_source = Some(src);
-    }
-
     /// Create a new AppRunner with ElmRuntime and infrastructure initialized.
     pub async fn new_with_config(
         config: Config,
         tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
+        event_source: EventSource,
     ) -> Result<Self> {
         let keys = Keys::parse(&config.privatekey)?;
 
@@ -91,7 +93,7 @@ impl<'a> AppRunner<'a> {
         // Route TUI commands from CmdExecutor
         let _ = runtime.add_tui_sender(tui_cmd_tx);
 
-        let event_source = Some(EventSource::real(tui.clone()));
+        let event_source = event_source;
 
         Ok(Self {
             runtime,
@@ -186,11 +188,7 @@ impl<'a> AppRunner<'a> {
         // Note: For Resize coalescing, we only poll one event per loop.
         // If multiple Resize events arrive, last one wins across loops via pending_resize.
 
-        if let Some(src) = &mut self.event_source {
-            src.next().await
-        } else {
-            None
-        }
+        self.event_source.next().await
     }
 
     fn shutdown_services(&self) {
@@ -265,16 +263,26 @@ mod tests {
         let tui = Arc::new(Mutex::new(
             TestTui::new(80, 24).expect("failed to create TestTui"),
         ));
-        AppRunner::new_with_config(make_test_config(), tui)
+        AppRunner::new_with_config(make_test_config(), tui.clone(), TestEventSource::real(tui))
             .await
             .expect("failed to create AppRunner")
     }
 
     #[tokio::test]
     async fn app_runner_one_cycle_quit_sets_should_quit() {
-        let mut runner = make_runner_with_test_tui().await;
-        // Inject test event source that yields a single Quit
-        runner.set_event_source_for_tests(TestEventSource::test([tui::Event::Quit]));
+        use std::sync::Arc;
+        use tokio::sync::Mutex;
+        let test_tui = Arc::new(Mutex::new(
+            TestTui::new(80, 24).expect("failed to create TestTui"),
+        ));
+        // Create runner with a test event source that yields a single Quit
+        let mut runner = AppRunner::new_with_config(
+            make_test_config(),
+            test_tui.clone(),
+            TestEventSource::test([tui::Event::Quit]),
+        )
+        .await
+        .expect("failed to create AppRunner");
 
         // Manually perform one logical cycle using extracted helpers
         let _queued = runner.drain_render_req_count();
@@ -343,16 +351,14 @@ mod tests {
         ));
         let draw_counter_handle = test_tui.clone();
 
-        // Create runner with the same TestTui instance
-        let mut runner = AppRunner::new_with_config(make_test_config(), test_tui)
-            .await
-            .expect("failed to create AppRunner");
-
-        // Drive the loop with events: Render -> Quit
-        runner.set_event_source_for_tests(TestEventSource::test([
-            tui::Event::Render,
-            tui::Event::Quit,
-        ]));
+        // Drive the loop with events: Render -> Quit using a test event source
+        let mut runner = AppRunner::new_with_config(
+            make_test_config(),
+            test_tui.clone(),
+            TestEventSource::test([tui::Event::Render, tui::Event::Quit]),
+        )
+        .await
+        .expect("failed to create AppRunner");
 
         // Run the main loop; it should finish quickly due to Quit
         let res = tokio::time::timeout(std::time::Duration::from_millis(200), runner.run()).await;
