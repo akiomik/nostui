@@ -8,3 +8,4 @@
 pub mod collections;
 pub mod nostr;
 pub mod text;
+pub mod ui;

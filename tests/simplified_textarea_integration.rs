@@ -59,7 +59,7 @@ fn test_cursor_position_integration() {
     helper.type_text("Hello");
     let cursor = &helper.state().ui.cursor_position;
     // Cursor should be somewhere reasonable (usize is always >= 0)
-    assert!(cursor.row < 1000 && cursor.col < 1000); // Basic sanity check
+    assert!(cursor.line < 1000 && cursor.column < 1000); // Basic sanity check
 
     // Cursor resets on cancel
     helper.cancel_input();
@@ -219,7 +219,7 @@ fn test_elm_architecture_compliance() {
     let state = helper.state();
     assert!(!state.ui.show_input);
     assert_eq!(state.ui.input_content, "");
-    assert_eq!(state.ui.cursor_position.row, 0);
-    assert_eq!(state.ui.cursor_position.col, 0);
+    assert_eq!(state.ui.cursor_position.line, 0);
+    assert_eq!(state.ui.cursor_position.column, 0);
     assert_eq!(state.ui.selection, None);
 }

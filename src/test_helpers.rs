@@ -270,17 +270,17 @@ impl<'a> TextAreaTestHelper<'a> {
     }
 
     /// Assert cursor position
-    pub fn assert_cursor_position(&self, row: usize, col: usize) {
+    pub fn assert_cursor_position(&self, line: usize, column: usize) {
         let cursor = &self.state.ui.cursor_position;
         assert_eq!(
-            cursor.row, row,
+            cursor.line, line,
             "Expected cursor row {}, got {}",
-            row, cursor.row
+            line, cursor.line
         );
         assert_eq!(
-            cursor.col, col,
+            cursor.column, column,
             "Expected cursor col {}, got {}",
-            col, cursor.col
+            column, cursor.column
         );
     }
 
