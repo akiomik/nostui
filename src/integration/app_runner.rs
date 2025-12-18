@@ -15,7 +15,7 @@ use crate::{
 /// Experimental runner that drives the Elm architecture directly without legacy App
 /// This is introduced alongside the legacy runner and is not yet wired to main().
 pub struct AppRunner<'a> {
-    /* lifetime used by ElmHome */
+    /* lifetime used by Home */
     runtime: Runtime,
     render_req_rx: mpsc::UnboundedReceiver<()>,
     // NOTE: In tests or non-interactive environments, TUI can be absent.

@@ -8,20 +8,20 @@ use super::{home_data::HomeData, home_input::HomeInput, home_list::HomeList};
 
 /// Complete Elm-style Home component that orchestrates data, list, and input
 #[derive(Debug)]
-pub struct ElmHome<'a> {
+pub struct Home<'a> {
     data: HomeData,
     list: HomeList,
     input: HomeInput<'a>,
 }
 
-impl<'a> Default for ElmHome<'a> {
+impl<'a> Default for Home<'a> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a> ElmHome<'a> {
-    /// Create a new ElmHome component
+impl<'a> Home<'a> {
+    /// Create a new Home component
     pub fn new() -> Self {
         Self {
             data: HomeData::new(),
@@ -106,7 +106,7 @@ impl<'a> ElmHome<'a> {
 }
 
 /// Helper methods for advanced interaction logic
-impl<'a> ElmHome<'a> {
+impl<'a> Home<'a> {
     /// Determine available actions based on current state
     pub fn get_available_actions(&self, state: &AppState) -> Vec<HomeAction> {
         let mut actions = Vec::new();
@@ -198,16 +198,16 @@ mod tests {
     }
 
     #[test]
-    fn test_elm_home_new() {
-        let home = ElmHome::new();
+    fn test_home_new() {
+        let home = Home::new();
         assert!(matches!(home.data, HomeData { .. }));
         assert!(matches!(home.list, HomeList { .. }));
         assert!(matches!(home.input, HomeInput { .. }));
     }
 
     #[test]
-    fn test_elm_home_can_interact() {
-        let home = ElmHome::new();
+    fn test_home_can_interact() {
+        let home = Home::new();
         let mut state = create_test_state();
 
         // Cannot interact when input is showing
@@ -226,8 +226,8 @@ mod tests {
     }
 
     #[test]
-    fn test_elm_home_get_selected_note() {
-        let home = ElmHome::new();
+    fn test_home_get_selected_note() {
+        let home = Home::new();
         let state = create_test_state();
 
         // No note selected
@@ -235,8 +235,8 @@ mod tests {
     }
 
     #[test]
-    fn test_elm_home_can_submit_input() {
-        let home = ElmHome::new();
+    fn test_home_can_submit_input() {
+        let home = Home::new();
         let mut state = create_test_state();
 
         // Cannot submit when input is not showing
@@ -250,8 +250,8 @@ mod tests {
     }
 
     #[test]
-    fn test_elm_home_available_actions() {
-        let home = ElmHome::new();
+    fn test_home_available_actions() {
+        let home = Home::new();
         let mut state = create_test_state();
 
         // Actions when in input mode
@@ -269,8 +269,8 @@ mod tests {
     }
 
     #[test]
-    fn test_elm_home_help_text() {
-        let home = ElmHome::new();
+    fn test_home_help_text() {
+        let home = Home::new();
         let mut state = create_test_state();
 
         // Help text for input mode
@@ -286,8 +286,8 @@ mod tests {
     }
 
     #[test]
-    fn test_elm_home_status_info() {
-        let home = ElmHome::new();
+    fn test_home_status_info() {
+        let home = Home::new();
         let mut state = create_test_state();
 
         let status = home.get_status_info(&state);
@@ -306,8 +306,8 @@ mod tests {
     }
 
     #[test]
-    fn test_elm_home_reset() {
-        let mut home = ElmHome::new();
+    fn test_home_reset() {
+        let mut home = Home::new();
 
         // Reset should recreate all components
         home.reset();
