@@ -114,13 +114,19 @@ impl<'a> AppRunner<'a> {
         })
     }
 
-    /// Coalesce render requests from both CmdExecutor (channel) and TUI events
-    fn drain_render_requests(&mut self) -> bool {
-        let mut should_render = false;
+    /// Drain render request channel and return the number of queued requests
+    fn drain_render_req_count(&mut self) -> usize {
+        let mut n = 0;
         while let Ok(()) = self.render_req_rx.try_recv() {
-            should_render = true;
+            n += 1;
         }
-        should_render
+        n
+    }
+
+    /// Pure decision function: whether to render this loop based on coalesced inputs
+    #[inline]
+    pub(crate) fn decide_render(queued_render_reqs: usize, saw_tui_render: bool) -> bool {
+        queued_render_reqs > 0 || saw_tui_render
     }
 
     /// Drain all pending Nostr events and forward to runtime as RawMsg
@@ -215,20 +221,25 @@ impl<'a> AppRunner<'a> {
 
         loop {
             // 1) Coalesce render requests (at most one render per loop)
-            let mut should_render = self.drain_render_requests();
+            let queued = self.drain_render_req_count();
+            let mut render_flag = false;
 
             // 2) Drain Nostr events first to keep timeline responsive
             self.drain_nostr_events();
 
             // 3) Poll one TUI event and handle it
             if let Some(e) = self.poll_next_tui_event().await {
-                self.handle_tui_event(e, &mut should_render);
+                if let TuiEvent::Render = e {
+                    render_flag = true;
+                }
+                self.handle_tui_event(e, &mut render_flag);
             }
 
             // 4) Process Elm update cycle and execute commands
             self.process_update_cycle();
 
             // 5) Execute coalesced render if requested
+            let should_render = Self::decide_render(queued, render_flag);
             self.maybe_render(should_render).await?;
 
             // 6) Check quit condition from Elm state
@@ -298,10 +309,14 @@ mod tests {
         runner.set_event_source_for_tests(TestEventSource::test([TuiEvent::Quit]));
 
         // Manually perform one logical cycle using extracted helpers
-        let mut should_render = runner.drain_render_requests();
+        let _queued = runner.drain_render_req_count();
+        let mut render_flag = false;
         runner.drain_nostr_events();
         if let Some(e) = runner.poll_next_tui_event().await {
-            runner.handle_tui_event(e, &mut should_render);
+            if let TuiEvent::Render = e {
+                render_flag = true;
+            }
+            runner.handle_tui_event(e, &mut render_flag);
         }
         runner.process_update_cycle();
         // don't call maybe_render on purpose (legacy one-cycle helper also skipped draw)
@@ -322,7 +337,7 @@ mod tests {
             // by sending through the runtime's added sender integrated in CmdExecutor using Cmd::Tui(Render).
             // However, there isn't a direct API to enqueue render requests. Instead, we rely on the channel to be empty
             // and validate false, then manually push should_render via TuiEvent::Render handled function.
-            assert!(!runner.drain_render_requests());
+            assert_eq!(runner.drain_render_req_count(), 0);
             let mut sr = false;
             runner.handle_tui_event(TuiEvent::Render, &mut sr);
             assert!(sr);
