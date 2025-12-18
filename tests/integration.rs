@@ -5,7 +5,7 @@ use nostui::{
         state::AppState,
         update::update,
     },
-    integration::elm_integration::ElmRuntime,
+    integration::runtime::Runtime,
     Cmd, VERSION,
 };
 
@@ -46,12 +46,12 @@ fn test_library_basic_flow() {
     }
 }
 
-/// ElmRuntime integration test
+/// Runtime integration test
 #[test]
 fn test_elm_runtime_integration() {
     let keys = Keys::generate();
     let initial_state = AppState::new(keys.public_key());
-    let mut runtime = ElmRuntime::new(initial_state);
+    let mut runtime = Runtime::new(initial_state);
 
     // Test runtime message processing
     runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote));
@@ -78,7 +78,7 @@ fn test_version_info() {
 fn test_complex_workflow() {
     let keys = Keys::generate();
     let initial_state = AppState::new(keys.public_key());
-    let mut runtime = ElmRuntime::new(initial_state);
+    let mut runtime = Runtime::new(initial_state);
 
     // 1. Add event to timeline
     let event = EventBuilder::text_note("Test post")
@@ -132,7 +132,7 @@ fn test_complex_workflow() {
 fn test_error_handling_integration() {
     let keys = Keys::generate();
     let initial_state = AppState::new(keys.public_key());
-    let mut runtime = ElmRuntime::new(initial_state);
+    let mut runtime = Runtime::new(initial_state);
 
     // Send error message
     runtime.send_msg(Msg::System(SystemMsg::ShowError("Test error".to_string())));
@@ -154,7 +154,7 @@ fn test_error_handling_integration() {
 async fn test_async_message_handling() {
     let keys = Keys::generate();
     let initial_state = AppState::new(keys.public_key());
-    let mut runtime = ElmRuntime::new(initial_state);
+    let mut runtime = Runtime::new(initial_state);
     let sender = runtime.get_sender().unwrap();
 
     // Send messages asynchronously
@@ -201,7 +201,7 @@ async fn test_async_message_handling() {
 fn test_performance_many_events() {
     let keys = Keys::generate();
     let initial_state = AppState::new(keys.public_key());
-    let mut runtime = ElmRuntime::new(initial_state);
+    let mut runtime = Runtime::new(initial_state);
 
     let start = std::time::Instant::now();
 

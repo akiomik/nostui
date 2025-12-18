@@ -6,6 +6,6 @@
 
 pub mod app_runner;
 pub mod coalescer;
-pub mod elm_integration;
 pub mod renderer;
+pub mod runtime;
 pub mod update_executor;
