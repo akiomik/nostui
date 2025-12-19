@@ -79,8 +79,8 @@ impl<'a> AppRunner<'a> {
         nostr_service.run();
 
         // Add Nostr support to runtime now that we have the sender
-        let _ = runtime.add_nostr_support(nostr_cmd_tx.clone());
-        let fps_service = FpsService::new(raw_tx.clone());
+        let _ = runtime.add_nostr_support(nostr_cmd_tx);
+        let fps_service = FpsService::new(raw_tx);
 
         // Render request channel from CmdExecutor -> AppRunner
         let (render_req_tx, render_req_rx) = mpsc::unbounded_channel::<()>();
@@ -92,7 +92,7 @@ impl<'a> AppRunner<'a> {
         let (tui_cmd_tx, tui_cmd_rx, tui_service) =
             crate::infrastructure::tui_service::TuiService::new_with_channel(Arc::clone(&tui));
         // Start TuiService background loop
-        let _tui_handle = tui_service.clone().run(tui_cmd_rx);
+        let _tui_handle = tui_service.run(tui_cmd_rx);
         // Route TUI commands from CmdExecutor
         let _ = runtime.add_tui_sender(tui_cmd_tx);
 

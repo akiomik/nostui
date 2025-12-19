@@ -186,8 +186,8 @@ mod tests {
         assert!(user.get_profile(&pubkey1).is_none());
 
         // Add profiles
-        user.update(UserMsg::UpdateProfile(pubkey1, profile1.clone()));
-        user.update(UserMsg::UpdateProfile(pubkey2, profile2.clone()));
+        user.update(UserMsg::UpdateProfile(pubkey1, profile1));
+        user.update(UserMsg::UpdateProfile(pubkey2, profile2));
 
         assert_eq!(user.profile_count(), 2);
         assert!(user.has_profile(&pubkey1));

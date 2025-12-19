@@ -54,4 +54,5 @@ rstest = "0.22.0"
 
 [lints.clippy]
 clone_on_ref_ptr = "warn"
+redundant_clone = "warn"
 uninlined_format_args = "warn"

@@ -10,7 +10,7 @@ use tracing_subscriber::{
 use super::paths::{get_data_dir, LOG_ENV, LOG_FILE};
 
 lazy_static! {
-    pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase().to_string();
+    pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase();
 }
 
 pub fn initialize_logging() -> Result<()> {

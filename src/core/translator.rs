@@ -584,7 +584,7 @@ mod tests {
             .sign_with_keys(&keys)
             .unwrap();
 
-        let result = translate_raw_to_domain(RawMsg::ReceiveEvent(metadata_event.clone()), &_state);
+        let result = translate_raw_to_domain(RawMsg::ReceiveEvent(metadata_event), &_state);
         assert_eq!(result.len(), 2);
         match (&result[0], &result[1]) {
             (Msg::System(SystemMsg::SetLoading(false)), Msg::UpdateProfile(pubkey, _)) => {
@@ -671,7 +671,7 @@ mod tests {
         let reaction = EventBuilder::reaction(&event, "+")
             .sign_with_keys(&reaction_keys)
             .unwrap();
-        let mut reaction_with_user_key = reaction.clone();
+        let mut reaction_with_user_key = reaction;
         reaction_with_user_key.pubkey = state.user.current_user_pubkey;
 
         state.timeline.reactions.insert(event.id, {
@@ -694,14 +694,13 @@ mod tests {
     #[test]
     fn test_translate_repost_key_own_note_prevention() {
         let mut state = create_test_state();
-        let event = create_test_event();
 
         // Make the event authored by the current user
-        let mut user_event = event.clone();
+        let mut user_event = create_test_event();
         user_event.pubkey = state.user.current_user_pubkey;
 
         // Add user's own event to timeline and select it
-        let sortable = crate::domain::nostr::SortableEvent::new(user_event.clone());
+        let sortable = crate::domain::nostr::SortableEvent::new(user_event);
         state
             .timeline
             .notes
