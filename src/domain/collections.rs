@@ -358,7 +358,7 @@ mod tests {
         assert_eq!(slice.len(), 2);
 
         // Display
-        let display = format!("{}", events);
+        let display = format!("{events}");
         assert!(display.contains("2 events"));
     }
 
@@ -368,12 +368,12 @@ mod tests {
 
         // 複数のイベントを追加 (1-10)
         for i in 1..=10 {
-            events.insert(create_test_event(i, &format!("event {}", i)));
+            events.insert(create_test_event(i, &format!("event {i}")));
         }
 
         // いくつか重複を試行 (5-15で5-10は重複)
         for i in 5..=15 {
-            events.insert(create_test_event(i, &format!("duplicate attempt {}", i)));
+            events.insert(create_test_event(i, &format!("duplicate attempt {i}")));
         }
 
         // 内部の一貫性をチェック
@@ -394,7 +394,7 @@ mod tests {
 
         // 大量のイベントを追加（パフォーマンステスト）
         for i in 0..1000 {
-            let event = create_test_event((i % 256) as u8, &format!("event {}", i));
+            let event = create_test_event((i % 256) as u8, &format!("event {i}"));
             events.insert(event);
         }
 

@@ -187,7 +187,7 @@ fn translate_like_key(state: &AppState) -> Vec<Msg> {
             {
                 let note1 = selected_note.id.to_bech32().unwrap_or_default();
                 vec![
-                    Msg::System(SystemMsg::UpdateStatusMessage(format!("[Liked] {}", note1))),
+                    Msg::System(SystemMsg::UpdateStatusMessage(format!("[Liked] {note1}"))),
                     Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
                         selected_note.clone(),
                     )),
@@ -223,8 +223,7 @@ fn translate_repost_key(state: &AppState) -> Vec<Msg> {
                 let note1 = selected_note.id.to_bech32().unwrap_or_default();
                 vec![
                     Msg::System(SystemMsg::UpdateStatusMessage(format!(
-                        "[Reposted] {}",
-                        note1
+                        "[Reposted] {note1}",
                     ))),
                     Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendRepost(
                         selected_note.clone(),

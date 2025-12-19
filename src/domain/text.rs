@@ -8,9 +8,9 @@ pub fn wrap_text(s: &str, width: usize) -> String {
     s.chars().fold(String::from(""), |acc: String, c: char| {
         let last_line = acc.lines().last().unwrap_or(&acc);
         if last_line.width() + c.to_string().width() > width {
-            format!("{}\n{}", acc, c)
+            format!("{acc}\n{c}")
         } else {
-            format!("{}{}", acc, c)
+            format!("{acc}{c}")
         }
     })
 }
@@ -37,7 +37,7 @@ pub fn shorten_hex(hex: &str) -> String {
     let len = pubkey.len();
     let heading = &pubkey[0..5];
     let trail = &pubkey[(len - 5)..len];
-    format!("{}:{}", heading, trail)
+    format!("{heading}:{trail}")
 }
 
 #[cfg(test)]

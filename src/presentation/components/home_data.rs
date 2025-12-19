@@ -250,7 +250,7 @@ mod tests {
 
         // Add test notes
         for i in 0..note_count {
-            let event = EventBuilder::text_note(format!("Test note {}", i))
+            let event = EventBuilder::text_note(format!("Test note {i}"))
                 .sign_with_keys(&keys)
                 .unwrap();
 
@@ -282,10 +282,7 @@ mod tests {
         let default_home_data = HomeData;
 
         // Should be equivalent (stateless)
-        assert_eq!(
-            format!("{:?}", home_data),
-            format!("{:?}", default_home_data)
-        );
+        assert_eq!(format!("{home_data:?}"), format!("{default_home_data:?}"));
     }
 
     #[test]

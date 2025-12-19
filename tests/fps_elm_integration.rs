@@ -18,7 +18,7 @@ fn test_fps_counter_stateless() {
 
     // FpsCounter should be completely stateless
     // Since it's a unit struct, all instances are equivalent
-    assert_eq!(format!("{:?}", fps1), format!("{:?}", fps2));
+    assert_eq!(format!("{fps1:?}"), format!("{fps2:?}"));
 }
 
 #[test]

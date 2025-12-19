@@ -135,13 +135,12 @@ mod tests {
             }
             Err(e) => {
                 // If it fails, it should be for expected reasons (no config file or no privatekey)
-                println!("Config failed as expected: {:?}", e);
-                let err_msg = format!("{:?}", e);
+                println!("Config failed as expected: {e:?}");
+                let err_msg = format!("{e:?}");
                 assert!(
                     err_msg.contains("No configuration file found")
                         || err_msg.contains("privatekey"),
-                    "Error should be about missing config file or privatekey, got: {:?}",
-                    e
+                    "Error should be about missing config file or privatekey, got: {e:?}",
                 );
             }
         }

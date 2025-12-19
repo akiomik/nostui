@@ -16,7 +16,7 @@ fn test_elm_home_data_stateless() {
     let home2 = HomeData;
 
     // HomeData should be completely stateless
-    assert_eq!(format!("{:?}", home1), format!("{:?}", home2));
+    assert_eq!(format!("{home1:?}"), format!("{home2:?}"));
 }
 
 #[test]
@@ -151,7 +151,7 @@ fn test_timeline_selection_flow() {
 
     // Add test notes
     for i in 0..5 {
-        let event = EventBuilder::text_note(format!("Post #{}", i))
+        let event = EventBuilder::text_note(format!("Post #{i}"))
             .sign_with_keys(&keys)
             .unwrap();
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
@@ -376,7 +376,7 @@ fn test_large_timeline_performance() {
 
     // Add 1000 notes
     for i in 0..1000 {
-        let event = EventBuilder::text_note(format!("Large timeline post #{}", i))
+        let event = EventBuilder::text_note(format!("Large timeline post #{i}"))
             .sign_with_keys(&keys)
             .unwrap();
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
@@ -384,7 +384,7 @@ fn test_large_timeline_performance() {
     }
 
     let elapsed = start.elapsed();
-    println!("Added 1000 notes in {:?}", elapsed);
+    println!("Added 1000 notes in {elapsed:?}",);
 
     // Test timeline generation performance
     let start = std::time::Instant::now();
@@ -407,7 +407,7 @@ fn test_large_timeline_performance() {
     let stats = HomeData::calculate_timeline_stats(&state);
     let elapsed = start.elapsed();
 
-    println!("Calculated stats in {:?}", elapsed);
+    println!("Calculated stats in {elapsed:?}",);
     assert_eq!(stats.total_notes, 1000);
     assert!(elapsed < std::time::Duration::from_millis(10)); // Should be very fast
 }

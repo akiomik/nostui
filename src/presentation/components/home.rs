@@ -39,7 +39,7 @@ impl<'a> Home<'a> {
     pub fn render(&mut self, frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
         // Render timeline first (always full area for scrolling continuity like original)
         if let Err(e) = self.list.draw(state, frame, area) {
-            log::error!("Failed to render timeline: {}", e);
+            log::error!("Failed to render timeline: {e}");
         }
 
         // Render input area as overlay if needed (like original implementation home.rs:265-270)
@@ -51,7 +51,7 @@ impl<'a> Home<'a> {
             input_area.height = input_area.height.saturating_sub(2);
 
             if let Err(e) = self.input.draw(state, frame, input_area) {
-                log::error!("Failed to render input overlay: {}", e);
+                log::error!("Failed to render input overlay: {e}");
             }
         }
     }

@@ -189,7 +189,7 @@ impl Runtime {
         let executor = self.cmd_executor.as_ref().unwrap();
         executor
             .execute_commands(&commands)
-            .map_err(|e| format!("Command execution failed: {}", e))
+            .map_err(|e| format!("Command execution failed: {e}"))
     }
 
     /// Execute a single command immediately
@@ -197,7 +197,7 @@ impl Runtime {
         if let Some(executor) = &self.cmd_executor {
             executor
                 .execute_command(cmd)
-                .map_err(|e| format!("Command execution failed: {}", e))
+                .map_err(|e| format!("Command execution failed: {e}"))
         } else {
             Err("No command executor available. Use set_executor() to configure.".to_string())
         }

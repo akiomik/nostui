@@ -59,12 +59,11 @@ impl NostrService {
         tokio::spawn(async move {
             let result = self.run_service().await;
             if let Err(e) = result {
-                log::error!("NostrService error: {}", e);
+                log::error!("NostrService error: {e}");
                 let _ = self
                     .raw_tx
                     .send(crate::core::raw_msg::RawMsg::Error(format!(
-                        "NostrService error: {}",
-                        e
+                        "NostrService error: {e}",
                     )));
             }
         });
@@ -94,12 +93,11 @@ impl NostrService {
                         }
                     }
                     Err(e) => {
-                        log::error!("Failed to handle command: {}", e);
+                        log::error!("Failed to handle command: {e}");
                         let _ = self
                             .raw_tx
                             .send(crate::core::raw_msg::RawMsg::Error(format!(
-                                "Command failed: {}",
-                                e
+                                "Command failed: {e}",
                             )));
                     }
                 }
@@ -125,7 +123,7 @@ impl NostrService {
         cmd: NostrCommand,
         timeline: &mut tokio::sync::broadcast::Receiver<RelayPoolNotification>,
     ) -> Result<bool> {
-        log::debug!("Handling NostrCommand: {:?}", cmd);
+        log::debug!("Handling NostrCommand: {cmd:?}");
 
         match cmd {
             NostrCommand::SendReaction {
@@ -138,7 +136,7 @@ impl NostrService {
                 self.conn.send(event).await?;
 
                 let note_bech32 = target_event.id.to_bech32()?;
-                let status = format!("[Reacted {}] {}", content, note_bech32);
+                let status = format!("[Reacted {content}] {note_bech32}");
                 let _ = self
                     .raw_tx
                     .send(crate::core::raw_msg::RawMsg::SystemMessage(status));
@@ -161,9 +159,9 @@ impl NostrService {
 
                 let note_bech32 = target_event.id.to_bech32()?;
                 let status = if reason.is_some() {
-                    format!("[Reposted with comment] {}", note_bech32)
+                    format!("[Reposted with comment] {note_bech32}")
                 } else {
-                    format!("[Reposted] {}", note_bech32)
+                    format!("[Reposted] {note_bech32}")
                 };
                 let _ = self
                     .raw_tx
@@ -172,9 +170,7 @@ impl NostrService {
 
             NostrCommand::SendTextNote { content, tags } => {
                 log::info!(
-                    "NostrService: Processing SendTextNote - content: '{}', tags: {:?}",
-                    content,
-                    tags
+                    "NostrService: Processing SendTextNote - content: '{content}', tags: {tags:?}"
                 );
                 let event = EventBuilder::text_note(&content)
                     .tags(tags)
@@ -183,7 +179,7 @@ impl NostrService {
                 self.conn.send(event).await?;
                 log::info!("NostrService: Successfully sent event to network");
 
-                let status = format!("[Posted] {}", content);
+                let status = format!("[Posted] {content}");
                 let _ = self
                     .raw_tx
                     .send(crate::core::raw_msg::RawMsg::SystemMessage(status));
@@ -191,7 +187,7 @@ impl NostrService {
 
             NostrCommand::ConnectToRelays { relays } => {
                 // Dynamic relay connection not supported (same as legacy implementation)
-                log::info!("Connect to relays requested: {:?}", relays);
+                log::info!("Connect to relays requested: {relays:?}");
                 let status = "Dynamic relay connection not supported. Restart application with new relay config.".to_string();
                 let _ = self
                     .raw_tx
@@ -234,9 +230,9 @@ impl NostrService {
                 content,
             } => {
                 // DM feature not available (same as legacy implementation)
-                log::info!("DM to {}: {}", recipient_pubkey, content);
+                log::info!("DM to {recipient_pubkey}: {content}");
                 let recipient_hex = recipient_pubkey.to_hex()[0..8].to_string();
-                let status = format!("[DM feature not available] to {}", recipient_hex);
+                let status = format!("[DM feature not available] to {recipient_hex}");
                 let _ = self
                     .raw_tx
                     .send(crate::core::raw_msg::RawMsg::SystemMessage(status));

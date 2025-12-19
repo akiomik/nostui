@@ -15,7 +15,7 @@ fn test_home_list_stateless() {
     let list2 = HomeList::default();
 
     // HomeList should be completely stateless
-    assert_eq!(format!("{:?}", list1), format!("{:?}", list2));
+    assert_eq!(format!("{list1:?}"), format!("{list2:?}"));
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn test_selection_state_integration_with_elm() {
 
     // Add test notes
     for i in 0..5 {
-        let event = EventBuilder::text_note(format!("Test note {}", i))
+        let event = EventBuilder::text_note(format!("Test note {i}"))
             .sign_with_keys(&keys)
             .unwrap();
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
@@ -126,7 +126,7 @@ fn test_scroll_with_input_shown() {
 
     // Add test notes
     for i in 0..5 {
-        let event = EventBuilder::text_note(format!("Note {}", i))
+        let event = EventBuilder::text_note(format!("Note {i}"))
             .sign_with_keys(&keys)
             .unwrap();
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
@@ -159,7 +159,7 @@ fn test_out_of_bounds_selection_handling() {
 
     // Add 3 notes
     for i in 0..3 {
-        let event = EventBuilder::text_note(format!("Note {}", i))
+        let event = EventBuilder::text_note(format!("Note {i}"))
             .sign_with_keys(&keys)
             .unwrap();
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
@@ -208,7 +208,7 @@ fn test_selection_info_comprehensive() {
 
     // Add more notes
     for i in 1..5 {
-        let event = EventBuilder::text_note(format!("Note {}", i))
+        let event = EventBuilder::text_note(format!("Note {i}"))
             .sign_with_keys(&keys)
             .unwrap();
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
@@ -231,7 +231,7 @@ fn test_clamps_selection_to_valid_range_in_draw() {
     let mut state = AppState::new(keys.public_key());
 
     for i in 0..3 {
-        let ev = EventBuilder::text_note(format!("Note {}", i))
+        let ev = EventBuilder::text_note(format!("Note {i}"))
             .sign_with_keys(&keys)
             .unwrap();
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(ev)), state);
@@ -268,7 +268,7 @@ async fn test_complete_ui_workflow() {
 
     // 2. Add notes progressively
     for i in 0..10 {
-        let event = EventBuilder::text_note(format!("Timeline post #{}", i))
+        let event = EventBuilder::text_note(format!("Timeline post #{i}"))
             .sign_with_keys(&keys)
             .unwrap();
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);

@@ -70,7 +70,7 @@ fn test_elm_runtime_integration() {
 #[test]
 fn test_version_info() {
     assert!(!VERSION.is_empty());
-    println!("Nostui version: {}", VERSION);
+    println!("Nostui version: {VERSION}");
 }
 
 /// Complex workflow integration test
@@ -207,7 +207,7 @@ fn test_performance_many_events() {
 
     // Process 1000 events
     for i in 0..1000 {
-        let event = EventBuilder::text_note(format!("Event #{}", i))
+        let event = EventBuilder::text_note(format!("Event #{i}"))
             .sign_with_keys(&keys)
             .unwrap();
         runtime.send_msg(Msg::Timeline(TimelineMsg::AddNote(event)));
@@ -216,7 +216,7 @@ fn test_performance_many_events() {
     runtime.process_all_messages();
     let elapsed = start.elapsed();
 
-    println!("Processed 1000 events in {:?}", elapsed);
+    println!("Processed 1000 events in {elapsed:?}");
 
     assert_eq!(runtime.state().timeline_len(), 1000);
     assert!(elapsed < std::time::Duration::from_millis(500)); // Should complete within 500ms

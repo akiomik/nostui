@@ -65,8 +65,8 @@ mod tests {
 
         // Both should be equivalent (stateless)
         assert_eq!(
-            format!("{:?}", fps_counter),
-            format!("{:?}", default_fps_counter)
+            format!("{fps_counter:?}",),
+            format!("{default_fps_counter:?}")
         );
     }
 
@@ -76,7 +76,7 @@ mod tests {
         let fps2 = FpsCounter::new();
 
         // Since it's stateless, all instances should be equivalent
-        assert_eq!(format!("{:?}", fps1), format!("{:?}", fps2));
+        assert_eq!(format!("{fps1:?}"), format!("{fps2:?}"));
     }
 
     // Note: Drawing tests would require a mock terminal backend

@@ -14,16 +14,16 @@ fn main() {
         let git_path = std::path::Path::new(git_dir);
         let refs_path = git_path.join("refs");
         if git_path.join("HEAD").exists() {
-            println!("cargo:rerun-if-changed={}/HEAD", git_dir);
+            println!("cargo:rerun-if-changed={git_dir}/HEAD");
         }
         if git_path.join("packed-refs").exists() {
-            println!("cargo:rerun-if-changed={}/packed-refs", git_dir);
+            println!("cargo:rerun-if-changed={git_dir}/packed-refs");
         }
         if refs_path.join("heads").exists() {
-            println!("cargo:rerun-if-changed={}/refs/heads", git_dir);
+            println!("cargo:rerun-if-changed={git_dir}/refs/heads");
         }
         if refs_path.join("tags").exists() {
-            println!("cargo:rerun-if-changed={}/refs/tags", git_dir);
+            println!("cargo:rerun-if-changed={git_dir}/refs/tags");
         }
     }
 
@@ -36,6 +36,6 @@ fn main() {
         .and_then(|output| std::str::from_utf8(&output.stdout).ok().map(str::trim));
 
     if let Some(git_info) = git_info {
-        println!("cargo:rustc-env=_GIT_INFO={}", git_info);
+        println!("cargo:rustc-env=_GIT_INFO={git_info}");
     }
 }

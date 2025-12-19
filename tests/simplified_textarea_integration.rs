@@ -135,8 +135,7 @@ fn test_performance_characteristics() {
     let duration = start.elapsed();
     assert!(
         duration.as_millis() < 500,
-        "Should be fast, took {:?}",
-        duration
+        "Should be fast, took {duration:?}",
     );
 
     helper.assert_input_active();
