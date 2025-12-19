@@ -67,9 +67,8 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
                 if state.ui.is_composing() {
                     state.ui.pending_input_keys.push(key);
                     let keys = mem::take(&mut state.ui.pending_input_keys);
-                    let textarea_state =
+                    state.ui.textarea =
                         HomeInput::compute_textarea_snapshot_after_keys(&state, keys);
-                    textarea_state.apply_to_ui_state(&mut state.ui);
                 }
                 (state, vec![])
             }
@@ -156,7 +155,7 @@ mod tests {
 
         assert!(new_state.ui.is_composing());
         assert!(new_state.ui.reply_to.is_none());
-        assert!(new_state.ui.input_content.is_empty());
+        assert!(new_state.ui.textarea.content.is_empty());
         assert!(cmds.is_empty());
     }
 
@@ -168,7 +167,7 @@ mod tests {
 
         assert!(new_state.ui.is_composing());
         assert_eq!(new_state.ui.reply_to, Some(target_event));
-        assert!(new_state.ui.input_content.is_empty());
+        assert!(new_state.ui.textarea.content.is_empty());
         assert!(cmds.is_empty());
     }
 
@@ -176,14 +175,14 @@ mod tests {
     fn test_update_cancel_input() {
         let mut state = create_test_state();
         state.ui.current_mode = UiMode::Composing;
-        state.ui.input_content = "test".to_string();
+        state.ui.textarea.content = "test".to_string();
         state.ui.reply_to = Some(create_test_event());
 
         let (new_state, cmds) = update(Msg::Ui(UiMsg::CancelInput), state);
 
         assert!(new_state.ui.is_normal());
         assert!(new_state.ui.reply_to.is_none());
-        assert!(new_state.ui.input_content.is_empty());
+        assert!(new_state.ui.textarea.content.is_empty());
         assert!(cmds.is_empty());
     }
 
@@ -192,7 +191,7 @@ mod tests {
         let mut state = create_test_state();
         // Prepare UI state to be reset by CancelInput
         state.ui.current_mode = UiMode::Composing;
-        state.ui.input_content = "typing...".into();
+        state.ui.textarea.content = "typing...".into();
         state.ui.reply_to = Some(create_test_event());
         // Prepare timeline selection and a system status message
         state.timeline.selected_index = Some(3);
@@ -203,7 +202,7 @@ mod tests {
         // UiState was reset by UiState::update
         assert!(new_state.ui.is_normal());
         assert!(new_state.ui.reply_to.is_none());
-        assert!(new_state.ui.input_content.is_empty());
+        assert!(new_state.ui.textarea.content.is_empty());
 
         // Coordinator delegated to TimelineMsg::DeselectNote and aggregated commands (currently none)
         assert_eq!(new_state.timeline.selected_index, None);
@@ -253,7 +252,7 @@ mod tests {
             state,
         );
 
-        assert_eq!(new_state.ui.input_content, content);
+        assert_eq!(new_state.ui.textarea.content, content);
         assert!(cmds.is_empty());
     }
 

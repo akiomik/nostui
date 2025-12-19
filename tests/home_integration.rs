@@ -113,7 +113,7 @@ fn test_home_input_workflow() -> Result<()> {
 
     // Start new note
     state.ui.current_mode = UiMode::Composing;
-    state.ui.input_content = "Hello, Nostr!".to_string();
+    state.ui.textarea.content = "Hello, Nostr!".to_string();
 
     // Check input mode status
     let status = home.get_status_info(&state);
@@ -143,7 +143,7 @@ fn test_home_reply_workflow() -> Result<()> {
     // Setup reply mode
     state.ui.current_mode = UiMode::Composing;
     state.ui.reply_to = Some(target_event);
-    state.ui.input_content = "Great point!".to_string();
+    state.ui.textarea.content = "Great point!".to_string();
 
     // Check reply mode status
     let status = home.get_status_info(&state);
@@ -181,7 +181,7 @@ fn test_home_key_processing() -> Result<()> {
 
     // Test input mode key processing
     state.ui.current_mode = UiMode::Composing;
-    state.ui.input_content = "test".to_string();
+    state.ui.textarea.content = "test".to_string();
     let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
     let msgs = home.process_key(key, &state);
     // Currently returns empty since key processing is handled by translator

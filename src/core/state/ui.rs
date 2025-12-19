@@ -9,7 +9,7 @@ use crate::domain::ui::{CursorPosition, TextSelection};
 /// Complete state representation of a TextArea component
 /// This struct encapsulates all mutable state that needs to be
 /// preserved across TextArea recreation in the stateless approach
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextAreaState {
     /// The complete text content
     pub content: String,
@@ -33,25 +33,17 @@ impl TextAreaState {
         }
     }
 
-    /// Create TextAreaState from UiState (temporary helper during migration)
-    pub fn from_ui_state(ui_state: &UiState) -> Self {
-        Self::new(
-            ui_state.input_content.clone(),
-            ui_state.cursor_position,
-            ui_state.selection.clone(),
-        )
-    }
-
-    /// Apply this TextAreaState to UiState (temporary helper during migration)
-    pub fn apply_to_ui_state(&self, ui_state: &mut UiState) {
-        ui_state.input_content = self.content.clone();
-        ui_state.cursor_position = self.cursor_position;
-        ui_state.selection = self.selection.clone();
-    }
-
     /// Create empty TextAreaState
     pub fn empty() -> Self {
-        Self::new(String::new(), CursorPosition { line: 0, column: 0 }, None)
+        Default::default()
+    }
+
+    pub fn content_length(&self) -> usize {
+        self.content.len()
+    }
+
+    pub fn has_content(&self) -> bool {
+        !self.content.trim().is_empty()
     }
 }
 
@@ -73,11 +65,9 @@ pub struct SubmitData {
 /// UI-related state
 #[derive(Debug, Clone, Default)]
 pub struct UiState {
-    pub input_content: String,
+    pub textarea: TextAreaState,
     pub reply_to: Option<Event>,
     pub current_mode: UiMode,
-    pub cursor_position: CursorPosition,
-    pub selection: Option<TextSelection>,
     pub pending_input_keys: Vec<KeyEvent>, // Queue for stateless TextArea processing
 }
 
@@ -91,7 +81,7 @@ impl UiState {
     }
 
     pub fn can_submit_input(&self) -> bool {
-        self.is_composing() && self.has_input_content()
+        self.is_composing() && self.textarea.has_content()
     }
 
     pub fn is_reply(&self) -> bool {
@@ -102,20 +92,12 @@ impl UiState {
         self.reply_to.as_ref()
     }
 
-    pub fn input_length(&self) -> usize {
-        self.input_content.len()
-    }
-
-    pub fn has_input_content(&self) -> bool {
-        !self.input_content.trim().is_empty()
-    }
-
     pub fn prepare_submit_data(&self) -> Option<SubmitData> {
         if !self.can_submit_input() {
             return None;
         }
 
-        let content = self.input_content.clone();
+        let content = self.textarea.content.clone();
         let tags = if let Some(ref reply_to) = self.reply_to {
             ReplyTagsBuilder::build(reply_to.clone())
         } else {
@@ -132,49 +114,43 @@ impl UiState {
             UiMsg::ShowNewNote => {
                 self.reply_to = None;
                 self.current_mode = UiMode::Composing;
-                self.input_content.clear();
-                self.cursor_position = Default::default();
-                self.selection = None;
+                self.textarea = TextAreaState::empty();
                 vec![]
             }
 
             UiMsg::ShowReply(target_event) => {
                 self.reply_to = Some(target_event);
                 self.current_mode = UiMode::Composing;
-                self.input_content.clear();
-                self.cursor_position = Default::default();
-                self.selection = None;
+                self.textarea = TextAreaState::empty();
                 vec![]
             }
 
             UiMsg::CancelInput => {
                 self.current_mode = UiMode::Normal;
                 self.reply_to = None;
-                self.input_content.clear();
-                self.cursor_position = Default::default();
-                self.selection = None;
+                self.textarea = TextAreaState::empty();
                 vec![]
             }
 
             // Content/cursor/selection updates
             UiMsg::UpdateInputContent(content) => {
-                self.input_content = content;
+                self.textarea.content = content;
                 vec![]
             }
 
             UiMsg::UpdateInputContentWithCursor(content, pos) => {
-                self.input_content = content;
-                self.cursor_position = pos;
+                self.textarea.content = content;
+                self.textarea.cursor_position = pos;
                 vec![]
             }
 
             UiMsg::UpdateCursorPosition(pos) => {
-                self.cursor_position = pos;
+                self.textarea.cursor_position = pos;
                 vec![]
             }
 
             UiMsg::UpdateSelection(sel) => {
-                self.selection = sel;
+                self.textarea.selection = sel;
                 vec![]
             }
 
@@ -209,7 +185,7 @@ mod tests {
     #[test]
     fn test_show_new_note_resets_and_shows_input() {
         let mut ui = UiState {
-            input_content: "abc".into(),
+            textarea: TextAreaState::new("abc".into(), Default::default(), None),
             reply_to: Some(create_event()),
             ..Default::default()
         };
@@ -217,9 +193,9 @@ mod tests {
         assert!(cmds.is_empty());
         assert!(ui.is_composing());
         assert!(ui.reply_to.is_none());
-        assert!(ui.input_content.is_empty());
-        assert_eq!(ui.cursor_position, Default::default());
-        assert!(ui.selection.is_none());
+        assert!(ui.textarea.content.is_empty());
+        assert_eq!(ui.textarea.cursor_position, Default::default());
+        assert!(ui.textarea.selection.is_none());
     }
 
     #[test]
@@ -231,29 +207,29 @@ mod tests {
         assert!(ui.is_composing());
         assert!(ui.reply_to.as_ref().is_some());
         assert_eq!(ui.reply_to.as_ref().unwrap().id, ev_id);
-        assert!(ui.input_content.is_empty());
+        assert!(ui.textarea.content.is_empty());
     }
 
     #[test]
     fn test_cancel_input_hides_and_resets() {
         let mut ui = UiState {
             current_mode: UiMode::Composing,
-            input_content: "x".into(),
+            textarea: TextAreaState::new("x".into(), Default::default(), None),
             reply_to: Some(create_event()),
             ..Default::default()
         };
         let _ = ui.update(UiMsg::CancelInput);
         assert!(ui.is_normal());
         assert!(ui.reply_to.is_none());
-        assert!(ui.input_content.is_empty());
-        assert!(ui.selection.is_none());
+        assert!(ui.textarea.content.is_empty());
+        assert!(ui.textarea.selection.is_none());
     }
 
     #[test]
     fn test_update_input_content() {
         let mut ui = UiState::default();
         let _ = ui.update(UiMsg::UpdateInputContent("hello".into()));
-        assert_eq!(ui.input_content, "hello");
+        assert_eq!(ui.textarea.content, "hello");
     }
 
     #[test]
@@ -263,15 +239,15 @@ mod tests {
             line: 1,
             column: 2,
         }));
-        assert_eq!(ui.cursor_position.line, 1);
-        assert_eq!(ui.cursor_position.column, 2);
+        assert_eq!(ui.textarea.cursor_position.line, 1);
+        assert_eq!(ui.textarea.cursor_position.column, 2);
 
         let sel = TextSelection {
             start: CursorPosition { line: 0, column: 1 },
             end: CursorPosition { line: 2, column: 3 },
         };
         let _ = ui.update(UiMsg::UpdateSelection(Some(sel)));
-        let s = ui.selection.unwrap();
+        let s = ui.textarea.selection.unwrap();
         assert_eq!(s.start.line, 0);
         assert_eq!(s.start.column, 1);
         assert_eq!(s.end.line, 2);
@@ -281,7 +257,7 @@ mod tests {
     #[test]
     fn test_prepare_submit_data() {
         let mut ui = UiState {
-            input_content: "Hello, Nostr!".to_string(),
+            textarea: TextAreaState::new("Hello, Nostr!".to_string(), Default::default(), None),
             current_mode: UiMode::Composing,
             ..Default::default()
         };

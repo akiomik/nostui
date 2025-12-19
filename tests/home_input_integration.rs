@@ -161,12 +161,18 @@ fn test_draw_is_pure_like() {
 
     // Then: state should remain unchanged
     let state_after = state_before.clone();
-    assert_eq!(state_before.ui.input_content, state_after.ui.input_content);
     assert_eq!(
-        state_before.ui.cursor_position,
-        state_after.ui.cursor_position
+        state_before.ui.textarea.content,
+        state_after.ui.textarea.content
     );
-    assert_eq!(state_before.ui.selection, state_after.ui.selection);
+    assert_eq!(
+        state_before.ui.textarea.cursor_position,
+        state_after.ui.textarea.cursor_position
+    );
+    assert_eq!(
+        state_before.ui.textarea.selection,
+        state_after.ui.textarea.selection
+    );
 }
 
 #[test]

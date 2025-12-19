@@ -85,33 +85,33 @@ fn test_terminal_keybinds_through_textarea_delegation() {
 fn test_pending_keys_basic_functionality() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.current_mode = UiMode::Composing;
-    state.ui.input_content = "test".to_string();
-    state.ui.cursor_position = CursorPosition { line: 0, column: 4 };
+    state.ui.textarea.content = "test".to_string();
+    state.ui.textarea.cursor_position = CursorPosition { line: 0, column: 4 };
 
     // Add character at cursor position
     let char_key = KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE);
     let (new_state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_key)), state);
 
     // Verify content was updated and pending_keys was processed
-    assert_eq!(new_state.ui.input_content, "test!");
+    assert_eq!(new_state.ui.textarea.content, "test!");
     assert!(new_state.ui.pending_input_keys.is_empty());
-    assert_eq!(new_state.ui.cursor_position.column, 5);
+    assert_eq!(new_state.ui.textarea.cursor_position.column, 5);
 }
 
 #[test]
 fn test_pending_keys_navigation_functionality() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.current_mode = UiMode::Composing;
-    state.ui.input_content = "hello world".to_string();
-    state.ui.cursor_position = CursorPosition { line: 0, column: 5 }; // At space
+    state.ui.textarea.content = "hello world".to_string();
+    state.ui.textarea.cursor_position = CursorPosition { line: 0, column: 5 }; // At space
 
     // Test left arrow navigation
     let left_key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
     let (new_state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(left_key)), state);
 
     // Verify cursor moved left but content unchanged
-    assert_eq!(new_state.ui.input_content, "hello world");
-    assert_eq!(new_state.ui.cursor_position.column, 4); // Moved to 'o'
+    assert_eq!(new_state.ui.textarea.content, "hello world");
+    assert_eq!(new_state.ui.textarea.cursor_position.column, 4); // Moved to 'o'
     assert!(new_state.ui.pending_input_keys.is_empty());
 }
 
@@ -119,8 +119,8 @@ fn test_pending_keys_navigation_functionality() {
 fn test_pending_keys_multiple_operations() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.current_mode = UiMode::Composing;
-    state.ui.input_content = "test".to_string();
-    state.ui.cursor_position = CursorPosition { line: 0, column: 4 };
+    state.ui.textarea.content = "test".to_string();
+    state.ui.textarea.cursor_position = CursorPosition { line: 0, column: 4 };
 
     // First operation: move left
     let left_key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
@@ -131,8 +131,8 @@ fn test_pending_keys_multiple_operations() {
     let (final_state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_key)), state);
 
     // Verify final state: "tes!t" with cursor after '!'
-    assert_eq!(final_state.ui.input_content, "tes!t");
-    assert_eq!(final_state.ui.cursor_position.column, 4);
+    assert_eq!(final_state.ui.textarea.content, "tes!t");
+    assert_eq!(final_state.ui.textarea.cursor_position.column, 4);
     assert!(final_state.ui.pending_input_keys.is_empty());
 }
 
@@ -140,34 +140,34 @@ fn test_pending_keys_multiple_operations() {
 fn test_pending_keys_home_end_navigation() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.current_mode = UiMode::Composing;
-    state.ui.input_content = "hello world".to_string();
-    state.ui.cursor_position = CursorPosition { line: 0, column: 5 };
+    state.ui.textarea.content = "hello world".to_string();
+    state.ui.textarea.cursor_position = CursorPosition { line: 0, column: 5 };
 
     // Test Home key
     let home_key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
     let (state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(home_key)), state);
-    assert_eq!(state.ui.cursor_position.column, 0);
+    assert_eq!(state.ui.textarea.cursor_position.column, 0);
 
     // Test End key
     let end_key = KeyEvent::new(KeyCode::End, KeyModifiers::NONE);
     let (final_state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(end_key)), state);
-    assert_eq!(final_state.ui.cursor_position.column, 11); // End of "hello world"
+    assert_eq!(final_state.ui.textarea.cursor_position.column, 11); // End of "hello world"
 }
 
 #[test]
 fn test_pending_keys_maintains_state_consistency() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.current_mode = UiMode::Composing;
-    state.ui.input_content = "test content".to_string();
-    state.ui.cursor_position = CursorPosition { line: 0, column: 4 };
+    state.ui.textarea.content = "test content".to_string();
+    state.ui.textarea.cursor_position = CursorPosition { line: 0, column: 4 };
 
     // Verify AppState is always the single source of truth
     let backspace_key = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
     let (new_state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(backspace_key)), state);
 
     // Content should be updated and cursor moved back
-    assert_eq!(new_state.ui.input_content, "tes content");
-    assert_eq!(new_state.ui.cursor_position.column, 3);
+    assert_eq!(new_state.ui.textarea.content, "tes content");
+    assert_eq!(new_state.ui.textarea.cursor_position.column, 3);
     assert!(new_state.ui.pending_input_keys.is_empty());
 }
 
@@ -184,7 +184,7 @@ fn test_pending_keys_empty_queue_after_processing() {
     let (final_state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_b)), state);
 
     // All keys should be processed and queue should be empty
-    assert_eq!(final_state.ui.input_content, "ab");
+    assert_eq!(final_state.ui.textarea.content, "ab");
     assert!(final_state.ui.pending_input_keys.is_empty());
 }
 
@@ -192,7 +192,7 @@ fn test_pending_keys_empty_queue_after_processing() {
 fn test_textarea_delegation_produces_no_spurious_cmds() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.current_mode = UiMode::Composing;
-    state.ui.input_content = "test".to_string();
+    state.ui.textarea.content = "test".to_string();
 
     // Process a character through the hybrid approach
     let char_key = KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE);
@@ -202,7 +202,7 @@ fn test_textarea_delegation_produces_no_spurious_cmds() {
     assert!(cmds.is_empty());
 
     // Content should be updated
-    assert_ne!(new_state.ui.input_content, "test"); // Should be different
+    assert_ne!(new_state.ui.textarea.content, "test"); // Should be different
 }
 
 #[test]
@@ -218,7 +218,7 @@ fn test_process_input_does_not_change_state_in_normal_mode() {
     );
 
     // State should be unchanged
-    assert_eq!(new_state.ui.input_content, state.ui.input_content);
+    assert_eq!(new_state.ui.textarea.content, state.ui.textarea.content);
     assert!(cmds.is_empty());
 }
 

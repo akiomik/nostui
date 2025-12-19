@@ -236,7 +236,7 @@ mod tests {
 
         // Check when input is showing (depends on input component implementation)
         state.ui.current_mode = UiMode::Composing;
-        state.ui.input_content = "test content".to_string();
+        state.ui.textarea.content = "test content".to_string();
         // Result depends on input validation logic
     }
 
