@@ -143,7 +143,7 @@ fn translate_reply_key(state: &AppState) -> Vec<Msg> {
         ))];
     }
 
-    if let Some(selected_note) = state.selected_note() {
+    if let Some(selected_note) = state.timeline.selected_note() {
         if selected_note.pubkey == state.user.current_user_pubkey {
             vec![Msg::System(SystemMsg::UpdateStatusMessage(
                 "Cannot reply to your own note".to_string(),
@@ -172,7 +172,7 @@ fn translate_like_key(state: &AppState) -> Vec<Msg> {
         ))];
     }
 
-    if let Some(selected_note) = state.selected_note() {
+    if let Some(selected_note) = state.timeline.selected_note() {
         if has_user_reacted_to_note(selected_note, state) {
             vec![Msg::System(SystemMsg::UpdateStatusMessage(
                 "You have already liked this note".to_string(),
@@ -201,7 +201,7 @@ fn translate_repost_key(state: &AppState) -> Vec<Msg> {
         ))];
     }
 
-    if let Some(selected_note) = state.selected_note() {
+    if let Some(selected_note) = state.timeline.selected_note() {
         if selected_note.pubkey == state.user.current_user_pubkey {
             vec![Msg::System(SystemMsg::UpdateStatusMessage(
                 "Cannot repost your own note".to_string(),
@@ -232,7 +232,7 @@ fn translate_repost_key(state: &AppState) -> Vec<Msg> {
 fn can_interact_with_timeline(state: &AppState) -> bool {
     !state.ui.is_composing()
         && state.timeline.selected_index.is_some()
-        && !state.timeline_is_empty()
+        && !state.timeline.is_empty()
 }
 
 /// Helper: Check if user has already reacted to a note

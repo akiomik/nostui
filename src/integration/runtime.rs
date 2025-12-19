@@ -275,7 +275,7 @@ impl Runtime {
         RuntimeStats {
             queued_messages: self.msg_queue.len(),
             queued_commands: self.cmd_queue.len(),
-            timeline_notes_count: self.state.timeline_len(),
+            timeline_notes_count: self.state.timeline.len(),
             profiles_count: self.state.user.profiles.len(),
             is_input_shown: self.state.ui.is_composing(),
             selected_note_index: self.state.timeline.selected_index,
@@ -453,7 +453,7 @@ mod tests {
         // Receive text note
         let text_event = create_test_event();
         runtime.process_message(Msg::Timeline(TimelineMsg::AddNote(text_event)));
-        assert_eq!(runtime.state().timeline_len(), 1);
+        assert_eq!(runtime.state().timeline.len(), 1);
 
         // Receive metadata event
         let keys = Keys::generate();

@@ -117,7 +117,7 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
         runtime.state().ui.is_composing(),
         runtime.state().timeline.selected_index
     );
-    println!("Timeline length: {}", runtime.state().timeline_len());
+    println!("Timeline length: {}", runtime.state().timeline.len());
 
     // Should have executed the SendReaction command
     assert!(!execution_log.is_empty());

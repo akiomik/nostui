@@ -400,4 +400,24 @@ mod tests {
         assert!(selected.is_some());
         assert_eq!(selected.unwrap().id, event.id);
     }
+
+    #[test]
+    fn test_timeline_properties() {
+        let state = TimelineState::default();
+
+        assert_eq!(state.len(), 0);
+        assert!(state.is_empty());
+    }
+
+    #[test]
+    fn test_selected_note() {
+        let mut state = TimelineState::default();
+
+        // The default is unselected
+        assert!(state.selected_note().is_none());
+
+        // Returns None if the index is set, but the timeline is empty
+        state.selected_index = Some(0);
+        assert!(state.selected_note().is_none());
+    }
 }
