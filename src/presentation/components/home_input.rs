@@ -68,8 +68,6 @@ impl TextAreaState {
 pub struct HomeInput<'a> {
     // We need to maintain a TextArea for rendering, but sync it with AppState
     textarea: TextArea<'a>,
-    // Store navigation key that should be processed directly
-    pending_navigation_key: Option<KeyEvent>,
 }
 
 impl<'a> HomeInput<'a> {
@@ -79,10 +77,7 @@ impl<'a> HomeInput<'a> {
         // Ensure proper key bindings are set for navigation
         // TextArea should have default key bindings, but let's make sure
 
-        Self {
-            textarea,
-            pending_navigation_key: None,
-        }
+        Self { textarea }
     }
 
     /// Render input area from AppState
@@ -95,10 +90,9 @@ impl<'a> HomeInput<'a> {
         // Sync TextArea content with AppState
         self.sync_textarea_with_state(state);
 
-        // Process any pending navigation key directly
-        if let Some(nav_key) = self.pending_navigation_key.take() {
-            self.textarea.input(Event::Key(nav_key));
-        }
+        // No side effects in draw: do not consume or mutate input state here.
+        // TODO(architecture): pending_navigation_key is legacy. Route all navigation keys via Translator→update
+        // and remove this field in a follow-up cleanup.
 
         // Calculate input area like the original implementation (home.rs:265-270)
         let mut input_area = area;
@@ -275,12 +269,6 @@ impl<'a> HomeInput<'a> {
         } else {
             "Compose mode".to_string()
         }
-    }
-
-    /// Process navigation key directly (legacy method, kept for compatibility)
-    /// Note: This method is now largely unused due to pending_keys approach
-    pub fn process_navigation_key(&mut self, key: KeyEvent) {
-        self.pending_navigation_key = Some(key);
     }
 
     /// Process pending keys from AppState using stateless TextArea
