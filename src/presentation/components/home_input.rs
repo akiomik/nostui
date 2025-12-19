@@ -1,5 +1,5 @@
 use color_eyre::eyre::Result;
-use crossterm::event::Event;
+use crossterm::event::{Event, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use tui_textarea::{CursorMove, TextArea};
 
@@ -250,20 +250,27 @@ impl<'a> HomeInput<'a> {
     }
 
     /// Process pending keys from AppState using a temporary TextArea (processing path)
+    ///
     /// Contract:
     /// - Construct TextArea from SSOT (AppState), do not use the rendering TextArea.
     /// - Apply pending_input_keys to the temporary TextArea.
     /// - Extract a snapshot (content/cursor/selection) and return it.
     /// - Do not mutate AppState here except via the caller applying the returned snapshot.
-    pub fn process_pending_keys(state: &mut AppState) -> TextAreaState {
+    ///
+    /// Apply a batch of keys to a temporary TextArea and produce a snapshot.
+    /// Prefer using UiState.textarea as SSOT in the future.
+    pub fn compute_textarea_snapshot_after_keys(
+        state: &AppState,
+        keys: impl IntoIterator<Item = KeyEvent>,
+    ) -> TextAreaState {
         // Create temporary TextArea for processing
         let mut textarea = TextArea::default();
 
         // Restore TextArea state from AppState
         Self::restore_textarea_from_state(&mut textarea, state);
 
-        // Apply all pending keys sequentially to preserve state continuity
-        for key in state.ui.pending_input_keys.drain(..) {
+        // Apply all provided keys sequentially to preserve state continuity
+        for key in keys {
             textarea.input(Event::Key(key));
         }
 
@@ -378,6 +385,86 @@ mod tests {
         // Should be creatable
         assert!(input.textarea.is_empty());
         assert!(default_input.textarea.is_empty());
+    }
+
+    #[test]
+    fn test_apply_textarea_keys_basic_edit_and_cursor_move() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let mut state = AppState::new(Keys::generate().public_key());
+        state.ui.current_mode = UiMode::Composing;
+        state.ui.input_content = String::from("ab");
+        state.ui.cursor_position = CursorPosition { line: 0, column: 2 }; // end
+        state.ui.selection = None;
+
+        // Apply: Left, Char('X') => aXb
+        let keys = vec![
+            KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char('X'), KeyModifiers::NONE),
+        ];
+        let snapshot = HomeInput::compute_textarea_snapshot_after_keys(&state, keys);
+
+        assert_eq!(snapshot.content, "aXb");
+        assert_eq!(
+            snapshot.cursor_position,
+            CursorPosition { line: 0, column: 2 }
+        );
+        // Original state must remain unchanged (purity)
+        assert_eq!(state.ui.input_content, "ab");
+        assert_eq!(
+            state.ui.cursor_position,
+            CursorPosition { line: 0, column: 2 }
+        );
+    }
+
+    #[test]
+    fn test_apply_textarea_keys_backspace_behavior() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let mut state = AppState::new(Keys::generate().public_key());
+        state.ui.current_mode = UiMode::Composing;
+        state.ui.input_content = String::from("ab");
+        state.ui.cursor_position = CursorPosition { line: 0, column: 2 }; // end
+        state.ui.selection = None;
+
+        let keys = vec![KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)];
+        let snapshot = HomeInput::compute_textarea_snapshot_after_keys(&state, keys);
+
+        assert_eq!(snapshot.content, "a");
+        // Cursor should move left by one after backspace at end
+        assert_eq!(
+            snapshot.cursor_position,
+            CursorPosition { line: 0, column: 1 }
+        );
+        // Original state unchanged
+        assert_eq!(state.ui.input_content, "ab");
+    }
+
+    #[test]
+    fn test_apply_textarea_keys_respects_selection_delete() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let mut state = AppState::new(Keys::generate().public_key());
+        state.ui.current_mode = UiMode::Composing;
+        state.ui.input_content = String::from("hello");
+        state.ui.cursor_position = CursorPosition { line: 0, column: 5 }; // end
+        state.ui.selection = Some(TextSelection {
+            start: CursorPosition { line: 0, column: 1 },
+            end: CursorPosition { line: 0, column: 4 },
+        }); // select 'ell'
+
+        // Hitting Backspace with selection should delete selection
+        let keys = vec![KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)];
+        let snapshot = HomeInput::compute_textarea_snapshot_after_keys(&state, keys);
+
+        assert_eq!(snapshot.content, "ho");
+        // Cursor at start of selection after deletion
+        assert_eq!(
+            snapshot.cursor_position,
+            CursorPosition { line: 0, column: 1 }
+        );
+        // Original state unchanged
+        assert_eq!(state.ui.input_content, "hello");
     }
 
     #[test]
