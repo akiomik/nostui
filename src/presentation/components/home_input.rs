@@ -1,5 +1,5 @@
 use color_eyre::eyre::Result;
-use crossterm::event::{Event, KeyEvent};
+use crossterm::event::Event;
 use ratatui::{prelude::*, widgets::*};
 use tui_textarea::{CursorMove, TextArea};
 
@@ -169,32 +169,6 @@ impl<'a> HomeInput<'a> {
             .get(&reply_to.pubkey)
             .map(|profile| profile.name())
             .unwrap_or_else(|| shorten_hex(&reply_to.pubkey.to_string()))
-    }
-
-    /// Process raw key input and convert to content update with cursor position
-    /// This is the bridge between TextArea input and Elm state management
-    pub fn process_key_input(&mut self, key: KeyEvent) -> Option<String> {
-        // Let TextArea handle ALL key inputs (including Enter, arrows, Ctrl+A, etc.)
-        // TextArea has built-in support for navigation and editing
-        self.textarea.input(Event::Key(key));
-
-        let new_content = self.textarea.lines().join("\n");
-
-        // Return the new content for AppState update
-        Some(new_content)
-    }
-
-    /// Process raw key input and return complete TextArea state
-    /// Enhanced version that provides complete state information
-    pub fn process_key_input_with_cursor(&mut self, key: KeyEvent) -> TextAreaState {
-        // Let TextArea handle the key input
-        self.textarea.input(Event::Key(key));
-
-        let new_content = self.textarea.lines().join("\n");
-        let cursor_pos = self.get_cursor_position();
-        let selection = self.get_selection();
-
-        TextAreaState::new(new_content, cursor_pos, selection)
     }
 
     /// Get current cursor position from TextArea
