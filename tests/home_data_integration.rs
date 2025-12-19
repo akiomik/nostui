@@ -33,7 +33,7 @@ fn test_timeline_note_management_flow() {
     let event1 = EventBuilder::text_note("First post")
         .sign_with_keys(&keys)
         .unwrap();
-    let (new_state, cmds) = update(Msg::Timeline(TimelineMsg::AddNote(event1.clone())), state);
+    let (new_state, cmds) = update(Msg::Timeline(TimelineMsg::AddNote(event1)), state);
     state = new_state;
     assert!(cmds.is_empty());
 
@@ -47,7 +47,7 @@ fn test_timeline_note_management_flow() {
     let event2 = EventBuilder::text_note("Second post")
         .sign_with_keys(&keys)
         .unwrap();
-    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event2.clone())), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event2)), state);
     state = new_state;
 
     // Should have 2 notes now
@@ -224,7 +224,7 @@ fn test_timeline_stats_calculation() {
 
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event1.clone())), state);
     state = new_state;
-    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event2.clone())), state);
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event2)), state);
     state = new_state;
 
     // Add profiles

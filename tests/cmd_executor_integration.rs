@@ -87,7 +87,7 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
     );
 
     // Add event to timeline first so the key can work
-    runtime.send_msg(Msg::Timeline(TimelineMsg::AddNote(target_event.clone())));
+    runtime.send_msg(Msg::Timeline(TimelineMsg::AddNote(target_event)));
     runtime.send_msg(Msg::Timeline(TimelineMsg::ScrollDown)); // Select the note
 
     // Process messages to update state before testing translator
@@ -169,7 +169,7 @@ fn test_reply_workflow_with_tags() -> Result<()> {
 
     // Start reply
     runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(
-        target_event.clone(),
+        target_event,
     )));
     runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
         "Great point!".to_string(),
@@ -198,10 +198,10 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
 
     // Send multiple commands
     runtime.send_msg(Msg::Nostr(
-        nostui::core::msg::nostr::NostrMsg::SendReaction(event1.clone()),
+        nostui::core::msg::nostr::NostrMsg::SendReaction(event1),
     ));
     runtime.send_msg(Msg::Nostr(nostui::core::msg::nostr::NostrMsg::SendRepost(
-        event2.clone(),
+        event2,
     )));
     runtime.send_msg(Msg::System(nostui::core::msg::system::SystemMsg::Resize(
         100, 50,
@@ -315,7 +315,7 @@ fn test_translator_integration_with_executor() -> Result<()> {
     // Add an event and select it
     let event = create_test_event();
     state.timeline.notes.find_or_insert(std::cmp::Reverse(
-        nostui::domain::nostr::SortableEvent::new(event.clone()),
+        nostui::domain::nostr::SortableEvent::new(event),
     ));
     state.timeline.selected_index = Some(0);
 

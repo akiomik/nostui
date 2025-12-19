@@ -234,7 +234,7 @@ mod tests {
         assert_eq!(events.len(), 1);
 
         // 重複挿入
-        let second_add = events.insert(event.clone());
+        let second_add = events.insert(event);
         assert!(!second_add);
         assert_eq!(events.len(), 1); // サイズは変わらない
     }
@@ -259,7 +259,7 @@ mod tests {
         let event = create_test_event(1, "test content");
 
         assert!(events.push(event.clone()));
-        assert!(!events.push(event.clone())); // 重複
+        assert!(!events.push(event)); // 重複
         assert_eq!(events.len(), 1);
     }
 
@@ -347,7 +347,7 @@ mod tests {
         assert_eq!(events_from_iter.len(), 2);
 
         // Extend
-        events.extend(vec![event1.clone(), event2.clone()]);
+        events.extend(vec![event1.clone(), event2]);
         assert_eq!(events.len(), 2);
 
         // Index

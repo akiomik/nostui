@@ -531,7 +531,7 @@ mod tests {
         // Send a message that generates a command
         let target_event = create_test_event();
         runtime.send_msg(Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
-            target_event.clone(),
+            target_event,
         )));
 
         // Process messages and execute commands

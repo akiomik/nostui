@@ -492,9 +492,7 @@ mod tests {
     fn test_no_fallback_without_nostr_sender() {
         let executor = create_test_executor(); // No NostrSender
         let target_event = create_test_event();
-        let cmd = Cmd::SendReaction {
-            target_event: target_event.clone(),
-        };
+        let cmd = Cmd::SendReaction { target_event };
 
         // Should NOT fallback to Action; command succeeds silently
         executor.execute_command(&cmd).unwrap();

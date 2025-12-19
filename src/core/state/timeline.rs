@@ -352,8 +352,8 @@ mod tests {
         let event3 = create_test_event_with_content("Third note");
 
         timeline.update(TimelineMsg::AddNote(event1.clone()));
-        timeline.update(TimelineMsg::AddNote(event2.clone()));
-        timeline.update(TimelineMsg::AddNote(event3.clone()));
+        timeline.update(TimelineMsg::AddNote(event2));
+        timeline.update(TimelineMsg::AddNote(event3));
 
         assert_eq!(timeline.len(), 3);
 

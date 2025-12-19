@@ -82,7 +82,7 @@ fn test_home_complete_workflow() -> Result<()> {
 
     // Add some timeline content
     let event = create_test_event();
-    let sortable = nostui::domain::nostr::SortableEvent::new(event.clone());
+    let sortable = nostui::domain::nostr::SortableEvent::new(event);
     state
         .timeline
         .notes
@@ -142,7 +142,7 @@ fn test_home_reply_workflow() -> Result<()> {
 
     // Setup reply mode
     state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
-    state.ui.reply_to = Some(target_event.clone());
+    state.ui.reply_to = Some(target_event);
     state.ui.input_content = "Great point!".to_string();
 
     // Check reply mode status
@@ -164,7 +164,7 @@ fn test_home_key_processing() -> Result<()> {
 
     // Add event to timeline
     let event = create_test_event();
-    let sortable = nostui::domain::nostr::SortableEvent::new(event.clone());
+    let sortable = nostui::domain::nostr::SortableEvent::new(event);
     state
         .timeline
         .notes
@@ -204,7 +204,7 @@ fn test_home_advanced_interaction_validation() -> Result<()> {
 
     // Test interaction validation with timeline
     let event = create_test_event();
-    let sortable = nostui::domain::nostr::SortableEvent::new(event.clone());
+    let sortable = nostui::domain::nostr::SortableEvent::new(event);
     state
         .timeline
         .notes
@@ -286,7 +286,7 @@ fn test_home_validation_edge_cases() -> Result<()> {
     let mut own_event = create_test_event();
     own_event.pubkey = keys.public_key(); // Make it user's own event
 
-    let sortable = nostui::domain::nostr::SortableEvent::new(own_event.clone());
+    let sortable = nostui::domain::nostr::SortableEvent::new(own_event);
     state
         .timeline
         .notes

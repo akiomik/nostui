@@ -399,7 +399,7 @@ mod tests {
 
         // Test highlighted TextNote
         let mut text_note_highlighted = TextNote::new(
-            event.clone(),
+            event,
             None,
             EventSet::new(),
             EventSet::new(),
