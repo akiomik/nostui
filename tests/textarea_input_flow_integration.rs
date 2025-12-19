@@ -53,7 +53,7 @@ fn test_regular_keys_delegate_to_process_input() {
 }
 
 #[test]
-fn test_textarea_delegation_updates_state_via_process_input() {
+fn test_process_input_drains_pending_keys() {
     // Test that ProcessTextAreaInput doesn't break the update cycle
     let mut helper = TextAreaTestHelper::in_input_mode();
 
@@ -206,7 +206,7 @@ fn test_textarea_delegation_produces_no_spurious_cmds() {
 }
 
 #[test]
-fn test_process_input_is_noop_outside_composing() {
+fn test_process_input_does_not_change_state_in_normal_mode() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.current_mode = UiMode::Normal; // Not in input mode
 
