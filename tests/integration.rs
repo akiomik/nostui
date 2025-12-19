@@ -97,7 +97,7 @@ fn test_complex_workflow() {
     let commands = runtime.process_all_messages();
 
     // Verification
-    assert_eq!(runtime.state().timeline_len(), 1);
+    assert_eq!(runtime.state().timeline.len(), 1);
     assert!(runtime.state().ui.is_normal());
     assert!(runtime.state().ui.textarea.content.is_empty());
 
@@ -209,6 +209,6 @@ fn test_performance_many_events() {
 
     println!("Processed 1000 events in {elapsed:?}");
 
-    assert_eq!(runtime.state().timeline_len(), 1000);
+    assert_eq!(runtime.state().timeline.len(), 1000);
     assert!(elapsed < Duration::from_millis(500)); // Should complete within 500ms
 }

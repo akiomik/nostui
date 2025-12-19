@@ -78,7 +78,7 @@ impl<'a> Home<'a> {
 
     /// Get the currently selected note for interactions
     pub fn get_selected_note<'b>(&self, state: &'b AppState) -> Option<&'b Event> {
-        state.selected_note()
+        state.timeline.selected_note()
     }
 
     /// Check if input is in a valid state for submission
@@ -106,13 +106,13 @@ impl<'a> Home<'a> {
         } else {
             actions.push(HomeAction::ShowNewNote);
 
-            if let Some(_selected_note) = state.selected_note() {
+            if let Some(_selected_note) = state.timeline.selected_note() {
                 actions.push(HomeAction::SendReaction);
                 actions.push(HomeAction::ShowReply);
                 actions.push(HomeAction::SendRepost);
             }
 
-            if !state.timeline_is_empty() {
+            if !state.timeline.is_empty() {
                 actions.push(HomeAction::Navigate);
             }
         }
@@ -128,9 +128,9 @@ impl<'a> Home<'a> {
             } else {
                 "Enter: Send note | Esc: Cancel".to_string()
             }
-        } else if state.timeline_is_empty() {
+        } else if state.timeline.is_empty() {
             "n: New note | Press 'n' to compose your first note".to_string()
-        } else if state.selected_note().is_some() {
+        } else if state.timeline.selected_note().is_some() {
             "j/k: Navigate | l: Like | r: Reply | t: Repost | n: New note".to_string()
         } else {
             "j/k: Navigate | n: New note".to_string()
@@ -140,7 +140,7 @@ impl<'a> Home<'a> {
     /// Get status information for display
     pub fn get_status_info(&self, state: &AppState) -> HomeStatusInfo {
         HomeStatusInfo {
-            timeline_count: state.timeline_len(),
+            timeline_count: state.timeline.len(),
             selected_index: state.timeline.selected_index,
             input_mode: state.ui.is_composing(),
             reply_mode: state.ui.reply_to.is_some(),

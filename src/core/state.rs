@@ -55,24 +55,6 @@ impl AppState {
             ..Default::default()
         }
     }
-
-    /// Get the selected note in the timeline
-    pub fn selected_note(&self) -> Option<&Event> {
-        self.timeline
-            .selected_index
-            .and_then(|i| self.timeline.notes.get(i))
-            .map(|sortable| &sortable.0.event)
-    }
-
-    /// Get the length of the timeline
-    pub fn timeline_len(&self) -> usize {
-        self.timeline.notes.len()
-    }
-
-    /// Check if the timeline is empty
-    pub fn timeline_is_empty(&self) -> bool {
-        self.timeline.notes.is_empty()
-    }
 }
 
 #[cfg(test)]
@@ -96,27 +78,7 @@ mod tests {
         let state = AppState::new(pubkey);
 
         assert_eq!(state.user.current_user_pubkey, pubkey);
-        assert_eq!(state.timeline.notes.len(), 0);
-    }
-
-    #[test]
-    fn test_selected_note() {
-        let mut state = AppState::default();
-
-        // 最初は何も選択されていない
-        assert!(state.selected_note().is_none());
-
-        // インデックスを設定してもノートがなければNone
-        state.timeline.selected_index = Some(0);
-        assert!(state.selected_note().is_none());
-    }
-
-    #[test]
-    fn test_timeline_properties() {
-        let state = AppState::default();
-
-        assert_eq!(state.timeline_len(), 0);
-        assert!(state.timeline_is_empty());
+        assert_eq!(state.timeline.len(), 0);
     }
 
     #[test]
