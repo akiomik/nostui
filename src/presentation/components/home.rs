@@ -56,12 +56,6 @@ impl<'a> Home<'a> {
         }
     }
 
-    /// Process navigation key directly for cursor movement
-    /// This bypasses the normal update cycle to preserve cursor position
-    pub fn process_navigation_key(&mut self, key: KeyEvent) {
-        self.input.process_navigation_key(key);
-    }
-
     /// Process a key event and return resulting messages
     pub fn process_key(&mut self, _key: KeyEvent, _state: &AppState) -> Vec<Msg> {
         vec![]

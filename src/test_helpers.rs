@@ -98,7 +98,13 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Press navigation key (Ctrl+A, Ctrl+E, etc.)
     pub fn press_navigation_key(&mut self, key: KeyEvent) -> &mut Self {
-        self.input.process_navigation_key(key);
+        // Route navigation via the normal translator→update path
+        let messages = translate_raw_to_domain(RawMsg::Key(key), &self.state);
+        for msg in messages {
+            let (new_state, _cmds) = update(msg, self.state.clone());
+            self.state = new_state;
+        }
+        self.sync_state();
         self
     }
 
