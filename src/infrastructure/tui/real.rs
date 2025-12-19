@@ -1,11 +1,14 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::thread::sleep;
 use std::{
     ops::{Deref, DerefMut},
     time::Duration,
 };
 
 use color_eyre::eyre::Result;
+use crossterm::event::EventStream;
+use crossterm::terminal;
 use crossterm::{
     cursor,
     event::{
@@ -16,6 +19,10 @@ use crossterm::{
 };
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::CrosstermBackend as Backend;
+use ratatui::prelude::*;
+#[cfg(not(windows))]
+use signal_hook::{consts::signal, low_level::raise};
+use tokio::time::interval;
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
@@ -27,7 +34,7 @@ use super::{io, Event, Frame, TuiLike, IO};
 pub struct RealTui {
     // NOTE: keep CrosstermBackend alias local to RealTui implementation
     // to avoid leaking concrete backend type outside.
-    pub terminal: ratatui::Terminal<Backend<IO>>,
+    pub terminal: Terminal<Backend<IO>>,
     pub task: JoinHandle<()>,
     pub cancellation_token: CancellationToken,
     pub event_rx: UnboundedReceiver<Event>,
@@ -39,7 +46,7 @@ pub struct RealTui {
 }
 
 impl RealTui {
-    pub fn resize(&mut self, area: ratatui::prelude::Rect) -> Result<()> {
+    pub fn resize(&mut self, area: Rect) -> Result<()> {
         self.terminal.resize(area)?;
         Ok(())
     }
@@ -47,7 +54,7 @@ impl RealTui {
     pub fn new() -> Result<Self> {
         let tick_rate = 4.0;
         let frame_rate = 60.0;
-        let terminal = ratatui::Terminal::new(Backend::new(io()))?;
+        let terminal = Terminal::new(Backend::new(io()))?;
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let cancellation_token = CancellationToken::new();
         let task = tokio::spawn(async {});
@@ -87,16 +94,16 @@ impl RealTui {
     }
 
     pub fn start(&mut self) {
-        let tick_delay = std::time::Duration::from_secs_f64(1.0 / self.tick_rate);
-        let render_delay = std::time::Duration::from_secs_f64(1.0 / self.frame_rate);
+        let tick_delay = Duration::from_secs_f64(1.0 / self.tick_rate);
+        let render_delay = Duration::from_secs_f64(1.0 / self.frame_rate);
         self.cancel();
         self.cancellation_token = CancellationToken::new();
         let _cancellation_token = self.cancellation_token.clone();
         let _event_tx = self.event_tx.clone();
         self.task = tokio::spawn(async move {
-            let mut reader = crossterm::event::EventStream::new();
-            let mut tick_interval = tokio::time::interval(tick_delay);
-            let mut render_interval = tokio::time::interval(render_delay);
+            let mut reader = EventStream::new();
+            let mut tick_interval = interval(tick_delay);
+            let mut render_interval = interval(render_delay);
             _event_tx.send(Event::Init).unwrap();
             loop {
                 let tick_delay = tick_interval.tick();
@@ -153,7 +160,7 @@ impl RealTui {
         self.cancel();
         let mut counter = 0;
         while !self.task.is_finished() {
-            std::thread::sleep(Duration::from_millis(1));
+            sleep(Duration::from_millis(1));
             counter += 1;
             if counter > 50 {
                 self.task.abort();
@@ -167,7 +174,7 @@ impl RealTui {
     }
 
     pub fn enter(&mut self) -> Result<()> {
-        crossterm::terminal::enable_raw_mode()?;
+        terminal::enable_raw_mode()?;
         crossterm::execute!(io(), EnterAlternateScreen, cursor::Hide)?;
         if self.mouse {
             crossterm::execute!(io(), EnableMouseCapture)?;
@@ -181,7 +188,7 @@ impl RealTui {
 
     pub fn exit(&mut self) -> Result<()> {
         self.stop()?;
-        if crossterm::terminal::is_raw_mode_enabled()? {
+        if terminal::is_raw_mode_enabled()? {
             self.flush()?;
             if self.paste {
                 crossterm::execute!(io(), DisableBracketedPaste)?;
@@ -190,7 +197,7 @@ impl RealTui {
                 crossterm::execute!(io(), DisableMouseCapture)?;
             }
             crossterm::execute!(io(), LeaveAlternateScreen, cursor::Show)?;
-            crossterm::terminal::disable_raw_mode()?;
+            terminal::disable_raw_mode()?;
         }
         Ok(())
     }
@@ -202,7 +209,7 @@ impl RealTui {
     pub fn suspend(&mut self) -> Result<()> {
         self.exit()?;
         #[cfg(not(windows))]
-        signal_hook::low_level::raise(signal_hook::consts::signal::SIGTSTP)?;
+        raise(signal::SIGTSTP)?;
         Ok(())
     }
 
@@ -217,7 +224,7 @@ impl RealTui {
 }
 
 impl Deref for RealTui {
-    type Target = ratatui::Terminal<Backend<IO>>;
+    type Target = Terminal<Backend<IO>>;
 
     fn deref(&self) -> &Self::Target {
         &self.terminal
@@ -241,7 +248,7 @@ impl TuiLike for RealTui {
         self.terminal.draw(|frame| f(frame))?;
         Ok(())
     }
-    fn resize(&mut self, area: ratatui::prelude::Rect) -> Result<()> {
+    fn resize(&mut self, area: Rect) -> Result<()> {
         RealTui::resize(self, area)
     }
     fn next(&mut self) -> Pin<Box<dyn Future<Output = Option<Event>> + Send + '_>> {

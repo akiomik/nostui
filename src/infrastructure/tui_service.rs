@@ -1,8 +1,12 @@
 use color_eyre::eyre::Result;
+use ratatui::prelude::*;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::{
+    sync::{mpsc, Mutex},
+    task::JoinHandle,
+};
 
-use crate::infrastructure::tui;
+use crate::{core::cmd::TuiCommand, infrastructure::tui};
 
 /// Thin facade around the TUI backend to execute rendering-related commands.
 /// When no TUI is available (headless), methods are no-ops.
@@ -21,26 +25,22 @@ impl TuiService {
     pub fn new_with_channel(
         inner: Arc<Mutex<dyn tui::TuiLike + Send>>,
     ) -> (
-        tokio::sync::mpsc::UnboundedSender<crate::core::cmd::TuiCommand>,
-        tokio::sync::mpsc::UnboundedReceiver<crate::core::cmd::TuiCommand>,
+        mpsc::UnboundedSender<TuiCommand>,
+        mpsc::UnboundedReceiver<TuiCommand>,
         Self,
     ) {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::unbounded_channel();
         (tx, rx, Self { inner })
     }
 
     /// Run background loop consuming TuiCommand from the given receiver.
-    pub fn run(
-        self,
-        mut rx: tokio::sync::mpsc::UnboundedReceiver<crate::core::cmd::TuiCommand>,
-    ) -> tokio::task::JoinHandle<()> {
+    pub fn run(self, mut rx: mpsc::UnboundedReceiver<TuiCommand>) -> JoinHandle<()> {
         tokio::spawn(async move {
-            use crate::core::cmd::TuiCommand;
             while let Some(cmd) = rx.recv().await {
                 match cmd {
                     TuiCommand::Resize { width, height } => {
                         let mut tui = self.inner.lock().await;
-                        let _ = tui.resize(ratatui::prelude::Rect::new(0, 0, width, height));
+                        let _ = tui.resize(Rect::new(0, 0, width, height));
                     }
                     TuiCommand::Render => {
                         // Rendering stays orchestrated by AppRunner; ignore here.
@@ -69,10 +69,10 @@ impl TuiService {
 
     pub async fn render<F>(&self, mut draw: F) -> Result<()>
     where
-        F: FnMut(&mut ratatui::Frame<'_>) + Send + 'static,
+        F: FnMut(&mut Frame<'_>) + Send + 'static,
     {
         let mut tui = self.inner.lock().await;
-        let mut closure = |f: &mut ratatui::Frame<'_>| {
+        let mut closure = |f: &mut Frame<'_>| {
             draw(f);
         };
         tui.draw(&mut closure)?;
@@ -81,7 +81,6 @@ impl TuiService {
 
     pub async fn resize(&self, width: u16, height: u16) -> Result<()> {
         let mut tui = self.inner.lock().await;
-        use ratatui::prelude::Rect;
         tui.resize(Rect::new(0, 0, width, height))?;
         Ok(())
     }
@@ -89,6 +88,10 @@ impl TuiService {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use tokio::time::sleep;
+
     use super::*;
     use crate::infrastructure::tui::test::TestTui;
 
@@ -119,14 +122,14 @@ mod tests {
     #[tokio::test]
     async fn test_run_handles_resize_command() {
         let (svc, _t) = make_service_with_test_tui(80, 24);
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::unbounded_channel();
         let _h = svc.clone().run(rx);
-        tx.send(crate::core::cmd::TuiCommand::Resize {
+        tx.send(TuiCommand::Resize {
             width: 100,
             height: 40,
         })
         .expect("send should succeed");
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        sleep(Duration::from_millis(10)).await;
         // sanity: render works
         let _ = svc.render(|_f| {}).await;
     }

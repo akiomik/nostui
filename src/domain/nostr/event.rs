@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use nostr_sdk::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12,13 +14,13 @@ impl SortableEvent {
 }
 
 impl PartialOrd for SortableEvent {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for SortableEvent {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         if self.event.created_at == other.event.created_at {
             self.event.id.cmp(&other.event.id)
         } else {

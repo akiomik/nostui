@@ -1,7 +1,11 @@
+use std::time::Duration;
+
 use nostr_sdk::prelude::*;
+use tokio::time::{sleep, timeout};
+
 use nostui::{
     core::{
-        msg::{system::SystemMsg, timeline::TimelineMsg, Msg},
+        msg::{nostr::NostrMsg, system::SystemMsg, timeline::TimelineMsg, ui::UiMsg, Msg},
         state::AppState,
         update::update,
     },
@@ -16,25 +20,20 @@ fn test_library_basic_flow() {
     let initial_state = AppState::new(keys.public_key());
 
     // Test basic message processing
-    let (state, cmds) = update(
-        Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote),
-        initial_state,
-    );
+    let (state, cmds) = update(Msg::Ui(UiMsg::ShowNewNote), initial_state);
     assert!(state.ui.is_composing());
     assert!(cmds.is_empty());
 
     // Test input handling
     let (state, cmds) = update(
-        Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
-            "Hello".to_string(),
-        )),
+        Msg::Ui(UiMsg::UpdateInputContent("Hello".to_string())),
         state,
     );
     assert_eq!(state.ui.input_content, "Hello");
     assert!(cmds.is_empty());
 
     // Test submission
-    let (state, cmds) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote), state);
+    let (state, cmds) = update(Msg::Ui(UiMsg::SubmitNote), state);
     assert!(state.ui.is_normal());
     assert_eq!(cmds.len(), 1);
 
@@ -54,7 +53,7 @@ fn test_elm_runtime_integration() {
     let mut runtime = Runtime::new(initial_state);
 
     // Test runtime message processing
-    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote));
+    runtime.send_msg(Msg::Ui(UiMsg::ShowNewNote));
     let commands = runtime.process_all_messages();
 
     assert!(runtime.state().ui.is_composing());
@@ -87,16 +86,12 @@ fn test_complex_workflow() {
     runtime.send_msg(Msg::Timeline(TimelineMsg::AddNote(event.clone())));
 
     // 2. Send reaction
-    runtime.send_msg(Msg::Nostr(
-        nostui::core::msg::nostr::NostrMsg::SendReaction(event.clone()),
-    ));
+    runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(event.clone())));
 
     // 3. Start reply
-    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(event)));
-    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
-        "Nice post!".to_string(),
-    )));
-    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote));
+    runtime.send_msg(Msg::Ui(UiMsg::ShowReply(event)));
+    runtime.send_msg(Msg::Ui(UiMsg::UpdateInputContent("Nice post!".to_string())));
+    runtime.send_msg(Msg::Ui(UiMsg::SubmitNote));
 
     // Process all messages
     let commands = runtime.process_all_messages();
@@ -159,27 +154,23 @@ async fn test_async_message_handling() {
 
     // Send messages asynchronously
     let handle = tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        sleep(Duration::from_millis(10)).await;
+        sender.send(Msg::Ui(UiMsg::ShowNewNote)).unwrap();
         sender
-            .send(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote))
-            .unwrap();
-        sender
-            .send(Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
+            .send(Msg::Ui(UiMsg::UpdateInputContent(
                 "Async message".to_string(),
             )))
             .unwrap();
-        sender
-            .send(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote))
-            .unwrap();
+        sender.send(Msg::Ui(UiMsg::SubmitNote)).unwrap();
     });
 
     // Wait for task completion
-    let timeout = tokio::time::timeout(std::time::Duration::from_millis(100), handle).await;
+    let timeout = timeout(Duration::from_millis(100), handle).await;
     assert!(timeout.is_ok());
     timeout.unwrap().unwrap();
 
     // Wait a bit then process messages
-    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    sleep(Duration::from_millis(20)).await;
 
     let commands = runtime.process_all_messages();
 
@@ -203,7 +194,7 @@ fn test_performance_many_events() {
     let initial_state = AppState::new(keys.public_key());
     let mut runtime = Runtime::new(initial_state);
 
-    let start = std::time::Instant::now();
+    let start = Instant::now();
 
     // Process 1000 events
     for i in 0..1000 {
@@ -219,5 +210,5 @@ fn test_performance_many_events() {
     println!("Processed 1000 events in {elapsed:?}");
 
     assert_eq!(runtime.state().timeline_len(), 1000);
-    assert!(elapsed < std::time::Duration::from_millis(500)); // Should complete within 500ms
+    assert!(elapsed < Duration::from_millis(500)); // Should complete within 500ms
 }

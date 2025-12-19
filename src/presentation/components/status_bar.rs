@@ -111,6 +111,8 @@ impl StatusBar {
 
 #[cfg(test)]
 mod tests {
+    use crate::domain::nostr::Profile;
+
     use super::*;
     use nostr_sdk::prelude::*;
 
@@ -122,8 +124,7 @@ mod tests {
             let metadata = Metadata::new()
                 .name("Test User")
                 .display_name("Test Display");
-            let profile =
-                crate::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata);
+            let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
             state.user.profiles.insert(keys.public_key(), profile);
         }
 
@@ -218,14 +219,12 @@ mod tests {
 
         // Add profile for current user
         let metadata1 = Metadata::new().name("Current User");
-        let profile1 =
-            crate::domain::nostr::Profile::new(keys1.public_key(), Timestamp::now(), metadata1);
+        let profile1 = Profile::new(keys1.public_key(), Timestamp::now(), metadata1);
         state.user.profiles.insert(keys1.public_key(), profile1);
 
         // Add profile for another user
         let metadata2 = Metadata::new().name("Other User");
-        let profile2 =
-            crate::domain::nostr::Profile::new(keys2.public_key(), Timestamp::now(), metadata2);
+        let profile2 = Profile::new(keys2.public_key(), Timestamp::now(), metadata2);
         state.user.profiles.insert(keys2.public_key(), profile2);
 
         let status_bar = StatusBar::new();

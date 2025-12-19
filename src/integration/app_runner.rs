@@ -6,11 +6,13 @@ use tokio::sync::{mpsc, Mutex};
 
 use crate::{
     core::{raw_msg::RawMsg, state::AppState},
+    domain::nostr::Connection,
     infrastructure::{
         config::Config,
         fps_service::FpsService,
         nostr_service::NostrService,
         tui::{self, event_source::EventSource},
+        tui_service::TuiService,
     },
     integration::{
         coalescer::Coalescer, renderer::Renderer, runtime::Runtime, update_executor::UpdateExecutor,
@@ -72,8 +74,7 @@ impl<'a> AppRunner<'a> {
         let raw_tx = runtime.get_raw_sender().expect("raw sender must exist");
 
         // Initialize NostrService and start it in background
-        let conn =
-            crate::domain::nostr::Connection::new(keys.clone(), config.relays.clone()).await?;
+        let conn = Connection::new(keys.clone(), config.relays.clone()).await?;
         let (nostr_event_rx, nostr_cmd_tx, nostr_terminate_tx, nostr_service) =
             NostrService::new(conn, keys.clone(), raw_tx.clone())?;
         nostr_service.run();
@@ -89,8 +90,7 @@ impl<'a> AppRunner<'a> {
         // TUI is injected by caller (RealTui for interactive, TestTui for tests)
         let tui = tui;
         // Wire TuiService with channel (Nostr-like pattern)
-        let (tui_cmd_tx, tui_cmd_rx, tui_service) =
-            crate::infrastructure::tui_service::TuiService::new_with_channel(Arc::clone(&tui));
+        let (tui_cmd_tx, tui_cmd_rx, tui_service) = TuiService::new_with_channel(Arc::clone(&tui));
         // Start TuiService background loop
         let _tui_handle = tui_service.run(tui_cmd_rx);
         // Route TUI commands from CmdExecutor
@@ -245,6 +245,11 @@ impl<'a> AppRunner<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use tokio::runtime::Runtime;
+    use tokio::time::timeout;
+
     // Unit tests for the extracted helpers
     use super::*;
     use crate::infrastructure::tui;
@@ -309,7 +314,7 @@ mod tests {
     #[test]
     fn drain_render_requests_returns_true_when_channel_has_requests() {
         // Build a runner with test TUI
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         rt.block_on(async {
             let mut runner = make_runner_with_test_tui().await;
             // Send a render request via runtime's render_req_tx (already wired)
@@ -361,7 +366,7 @@ mod tests {
         .expect("failed to create AppRunner");
 
         // Run the main loop; it should finish quickly due to Quit
-        let res = tokio::time::timeout(std::time::Duration::from_millis(200), runner.run()).await;
+        let res = timeout(Duration::from_millis(200), runner.run()).await;
         assert!(res.is_ok(), "runner.run() should complete promptly");
 
         // Verify at least one draw happened due to Render coalescing

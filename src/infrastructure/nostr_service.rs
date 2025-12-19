@@ -1,8 +1,11 @@
 use color_eyre::eyre::Result;
 use nostr_sdk::prelude::*;
-use tokio::sync::mpsc;
+use tokio::{
+    sync::{broadcast, mpsc},
+    task::yield_now,
+};
 
-use crate::{domain::nostr::Connection, infrastructure::nostr_command::NostrCommand};
+use crate::{domain::nostr::Connection, infrastructure::nostr_command::NostrCommand, RawMsg};
 
 /// NostrService handles all Nostr protocol operations including signing and sending events
 /// Evolved from ConnectionProcess with expanded responsibilities:
@@ -18,7 +21,7 @@ pub struct NostrService {
     terminate_rx: mpsc::UnboundedReceiver<()>,
     // Outgoing channels
     event_tx: mpsc::UnboundedSender<Event>, // For received events
-    raw_tx: mpsc::UnboundedSender<crate::core::raw_msg::RawMsg>, // For Elm RawMsg notifications
+    raw_tx: mpsc::UnboundedSender<RawMsg>,  // For Elm RawMsg notifications
 }
 
 pub type NewNostrService = (
@@ -33,7 +36,7 @@ impl NostrService {
     pub fn new(
         conn: Connection,
         keys: Keys,
-        raw_tx: mpsc::UnboundedSender<crate::core::raw_msg::RawMsg>,
+        raw_tx: mpsc::UnboundedSender<RawMsg>,
     ) -> Result<NewNostrService> {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
@@ -62,9 +65,7 @@ impl NostrService {
                 log::error!("NostrService error: {e}");
                 let _ = self
                     .raw_tx
-                    .send(crate::core::raw_msg::RawMsg::Error(format!(
-                        "NostrService error: {e}",
-                    )));
+                    .send(RawMsg::Error(format!("NostrService error: {e}",)));
             }
         });
     }
@@ -96,9 +97,7 @@ impl NostrService {
                         log::error!("Failed to handle command: {e}");
                         let _ = self
                             .raw_tx
-                            .send(crate::core::raw_msg::RawMsg::Error(format!(
-                                "Command failed: {e}",
-                            )));
+                            .send(RawMsg::Error(format!("Command failed: {e}",)));
                     }
                 }
             }
@@ -110,7 +109,7 @@ impl NostrService {
             }
 
             // Small yield to prevent busy waiting
-            tokio::task::yield_now().await;
+            yield_now().await;
         }
 
         Ok(())
@@ -121,7 +120,7 @@ impl NostrService {
     async fn handle_command(
         &mut self,
         cmd: NostrCommand,
-        timeline: &mut tokio::sync::broadcast::Receiver<RelayPoolNotification>,
+        timeline: &mut broadcast::Receiver<RelayPoolNotification>,
     ) -> Result<bool> {
         log::debug!("Handling NostrCommand: {cmd:?}");
 
@@ -137,9 +136,7 @@ impl NostrService {
 
                 let note_bech32 = target_event.id.to_bech32()?;
                 let status = format!("[Reacted {content}] {note_bech32}");
-                let _ = self
-                    .raw_tx
-                    .send(crate::core::raw_msg::RawMsg::SystemMessage(status));
+                let _ = self.raw_tx.send(RawMsg::SystemMessage(status));
             }
 
             NostrCommand::SendRepost {
@@ -163,9 +160,7 @@ impl NostrService {
                 } else {
                     format!("[Reposted] {note_bech32}")
                 };
-                let _ = self
-                    .raw_tx
-                    .send(crate::core::raw_msg::RawMsg::SystemMessage(status));
+                let _ = self.raw_tx.send(RawMsg::SystemMessage(status));
             }
 
             NostrCommand::SendTextNote { content, tags } => {
@@ -180,39 +175,31 @@ impl NostrService {
                 log::info!("NostrService: Successfully sent event to network");
 
                 let status = format!("[Posted] {content}");
-                let _ = self
-                    .raw_tx
-                    .send(crate::core::raw_msg::RawMsg::SystemMessage(status));
+                let _ = self.raw_tx.send(RawMsg::SystemMessage(status));
             }
 
             NostrCommand::ConnectToRelays { relays } => {
                 // Dynamic relay connection not supported (same as legacy implementation)
                 log::info!("Connect to relays requested: {relays:?}");
                 let status = "Dynamic relay connection not supported. Restart application with new relay config.".to_string();
-                let _ = self
-                    .raw_tx
-                    .send(crate::core::raw_msg::RawMsg::SystemMessage(status));
+                let _ = self.raw_tx.send(RawMsg::SystemMessage(status));
             }
 
             NostrCommand::DisconnectFromRelays => {
                 // Disconnect all relays and terminate service (same behavior as legacy)
                 log::info!("Disconnect from all relays requested");
-                let _ = self
-                    .raw_tx
-                    .send(crate::core::raw_msg::RawMsg::SystemMessage(
-                        "Disconnecting from all relays...".to_string(),
-                    ));
+                let _ = self.raw_tx.send(RawMsg::SystemMessage(
+                    "Disconnecting from all relays...".to_string(),
+                ));
                 return Ok(false); // Signal to terminate the service
             }
 
             NostrCommand::SubscribeToTimeline => {
                 // Re-subscribe to timeline
                 *timeline = self.conn.subscribe_timeline().await?;
-                let _ = self
-                    .raw_tx
-                    .send(crate::core::raw_msg::RawMsg::SystemMessage(
-                        "Timeline subscription refreshed".to_string(),
-                    ));
+                let _ = self.raw_tx.send(RawMsg::SystemMessage(
+                    "Timeline subscription refreshed".to_string(),
+                ));
             }
 
             NostrCommand::UpdateProfile { metadata } => {
@@ -220,9 +207,7 @@ impl NostrService {
                 self.conn.send(event).await?;
 
                 let status = "Profile updated".to_string();
-                let _ = self
-                    .raw_tx
-                    .send(crate::core::raw_msg::RawMsg::SystemMessage(status));
+                let _ = self.raw_tx.send(RawMsg::SystemMessage(status));
             }
 
             NostrCommand::SendDirectMessage {
@@ -233,9 +218,7 @@ impl NostrService {
                 log::info!("DM to {recipient_pubkey}: {content}");
                 let recipient_hex = recipient_pubkey.to_hex()[0..8].to_string();
                 let status = format!("[DM feature not available] to {recipient_hex}");
-                let _ = self
-                    .raw_tx
-                    .send(crate::core::raw_msg::RawMsg::SystemMessage(status));
+                let _ = self.raw_tx.send(RawMsg::SystemMessage(status));
             }
         }
 
@@ -246,6 +229,7 @@ impl NostrService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::domain::nostr::Connection;
     use tokio::sync::mpsc;
 

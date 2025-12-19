@@ -2,8 +2,15 @@ use std::collections::VecDeque;
 use tokio::sync::mpsc;
 
 use crate::{
-    core::cmd::Cmd, core::cmd_executor::CmdExecutor, core::msg::Msg, core::raw_msg::RawMsg,
-    core::state::AppState, core::translator::translate_raw_to_domain, core::update::update,
+    core::{
+        cmd::{Cmd, TuiCommand},
+        cmd_executor::CmdExecutor,
+        msg::Msg,
+        raw_msg::RawMsg,
+        state::AppState,
+        translator::translate_raw_to_domain,
+        update::update,
+    },
     infrastructure::nostr_command::NostrCommand,
 };
 
@@ -114,7 +121,7 @@ impl Runtime {
     /// Add TUI command sender support to existing executor (for TuiCommand execution)
     pub fn add_tui_sender(
         &mut self,
-        tui_sender: mpsc::UnboundedSender<crate::core::cmd::TuiCommand>,
+        tui_sender: mpsc::UnboundedSender<TuiCommand>,
     ) -> Result<(), String> {
         if let Some(executor) = &mut self.cmd_executor {
             executor.set_tui_sender(tui_sender);
@@ -294,9 +301,12 @@ pub struct RuntimeStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::msg::nostr::NostrMsg;
+    use crate::core::msg::system::SystemMsg;
     use crate::core::msg::timeline::TimelineMsg;
     use crate::core::msg::ui::UiMsg;
     use crate::core::msg::Msg;
+    use crate::domain::nostr::Profile;
     use nostr_sdk::prelude::*;
 
     fn create_test_runtime() -> Runtime {
@@ -343,8 +353,7 @@ mod tests {
     fn test_process_message() {
         let mut runtime = create_test_runtime();
 
-        let commands =
-            runtime.process_message(Msg::System(crate::core::msg::system::SystemMsg::Quit));
+        let commands = runtime.process_message(Msg::System(SystemMsg::Quit));
         assert!(commands.is_empty());
         assert!(runtime.state().system.should_quit);
     }
@@ -370,9 +379,8 @@ mod tests {
         let mut runtime = create_test_runtime();
         let target_event = create_test_event();
 
-        let commands = runtime.process_message(Msg::Nostr(
-            crate::core::msg::nostr::NostrMsg::SendReaction(target_event.clone()),
-        ));
+        let commands =
+            runtime.process_message(Msg::Nostr(NostrMsg::SendReaction(target_event.clone())));
         assert_eq!(commands.len(), 1);
 
         match &commands[0] {
@@ -456,11 +464,7 @@ mod tests {
             .sign_with_keys(&keys)
             .unwrap();
 
-        let profile = crate::domain::nostr::Profile::new(
-            keys.public_key(),
-            metadata_event.created_at,
-            metadata,
-        );
+        let profile = Profile::new(keys.public_key(), metadata_event.created_at, metadata);
         runtime.process_message(Msg::UpdateProfile(keys.public_key(), profile));
         assert!(runtime
             .state()
@@ -498,12 +502,8 @@ mod tests {
         let target_event = create_test_event();
 
         // Send messages that generate commands
-        runtime.process_message(Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
-            target_event.clone(),
-        )));
-        runtime.process_message(Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendRepost(
-            target_event,
-        )));
+        runtime.process_message(Msg::Nostr(NostrMsg::SendReaction(target_event.clone())));
+        runtime.process_message(Msg::Nostr(NostrMsg::SendRepost(target_event)));
 
         // Get pending commands
         let pending = runtime.pending_commands();
@@ -516,8 +516,6 @@ mod tests {
 
     #[test]
     fn test_runtime_with_executor() {
-        use tokio::sync::mpsc;
-
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
         let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
@@ -530,9 +528,7 @@ mod tests {
 
         // Send a message that generates a command
         let target_event = create_test_event();
-        runtime.send_msg(Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
-            target_event,
-        )));
+        runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(target_event)));
 
         // Process messages and execute commands
         let execution_log = runtime.run_update_cycle().unwrap();
@@ -545,8 +541,6 @@ mod tests {
 
     #[test]
     fn test_runtime_with_nostr_executor() {
-        use tokio::sync::mpsc;
-
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
         let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
@@ -560,9 +554,7 @@ mod tests {
 
         // Send a message that generates a command
         let target_event = create_test_event();
-        runtime.send_msg(Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
-            target_event.clone(),
-        )));
+        runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(target_event.clone())));
 
         // Process messages and execute commands
         let execution_log = runtime.run_update_cycle().unwrap();
@@ -588,8 +580,6 @@ mod tests {
 
     #[test]
     fn test_add_nostr_support() {
-        use tokio::sync::mpsc;
-
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
         let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
@@ -609,8 +599,6 @@ mod tests {
 
     #[test]
     fn test_add_nostr_support_without_executor() {
-        use tokio::sync::mpsc;
-
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
         let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
@@ -628,7 +616,7 @@ mod tests {
     #[test]
     fn test_execute_command_without_executor() {
         let runtime = create_test_runtime();
-        let cmd = Cmd::Tui(crate::core::cmd::TuiCommand::Render);
+        let cmd = Cmd::Tui(TuiCommand::Render);
 
         // Should fail without executor
         let result = runtime.execute_command(&cmd);
@@ -640,8 +628,6 @@ mod tests {
 
     #[test]
     fn test_set_executor() {
-        use tokio::sync::mpsc;
-
         let mut runtime = create_test_runtime();
         let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
 
@@ -653,7 +639,7 @@ mod tests {
         assert!(runtime.get_stats().has_executor);
 
         // Should now be able to execute commands
-        let cmd = Cmd::Tui(crate::core::cmd::TuiCommand::Render);
+        let cmd = Cmd::Tui(TuiCommand::Render);
         let result = runtime.execute_command(&cmd);
         assert!(result.is_ok());
     }

@@ -1,4 +1,7 @@
+use std::time::Instant;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
 use nostui::test_helpers::TextAreaTestHelper;
 
 /// Simplified TextArea integration tests
@@ -119,8 +122,6 @@ fn test_real_world_usage_patterns() {
 fn test_performance_characteristics() {
     // Replace: textarea_delegation_performance.rs (9 tests)
     // Simplified performance verification
-
-    use std::time::Instant;
 
     let mut helper = TextAreaTestHelper::in_input_mode();
 

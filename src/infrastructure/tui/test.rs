@@ -4,7 +4,8 @@ use std::pin::Pin;
 
 use color_eyre::eyre::Result;
 use futures::future;
-use ratatui::{backend::TestBackend, Terminal};
+use ratatui::backend::TestBackend;
+use ratatui::prelude::*;
 
 use crate::infrastructure::tui::{Event, Frame, TuiLike};
 
@@ -49,7 +50,7 @@ impl TestTui {
         self.events.push_back(ev);
     }
 
-    fn resize_impl(&mut self, area: ratatui::prelude::Rect) -> Result<()> {
+    fn resize_impl(&mut self, area: Rect) -> Result<()> {
         self.term.backend_mut().resize(area.width, area.height);
         Ok(())
     }
@@ -72,7 +73,7 @@ impl TuiLike for TestTui {
         Ok(())
     }
 
-    fn resize(&mut self, area: ratatui::prelude::Rect) -> Result<()> {
+    fn resize(&mut self, area: Rect) -> Result<()> {
         self.resize_impl(area)
     }
 

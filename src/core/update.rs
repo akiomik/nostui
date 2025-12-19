@@ -1,7 +1,10 @@
 use crate::{
-    core::cmd::Cmd,
-    core::msg::{timeline::TimelineMsg, ui::UiMsg, user::UserMsg, Msg},
-    core::state::AppState,
+    core::{
+        cmd::Cmd,
+        msg::{timeline::TimelineMsg, ui::UiMsg, user::UserMsg, Msg},
+        state::AppState,
+    },
+    presentation::components::home_input::HomeInput,
 };
 
 /// Elm-like update function
@@ -58,7 +61,7 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             UiMsg::ProcessTextAreaInput(key) => {
                 if state.ui.is_composing() {
                     state.ui.pending_input_keys.push(key);
-                    let textarea_state = crate::presentation::components::home_input::HomeInput::process_pending_keys(&mut state);
+                    let textarea_state = HomeInput::process_pending_keys(&mut state);
                     textarea_state.apply_to_ui_state(&mut state.ui);
                 }
                 (state, vec![])
@@ -86,6 +89,11 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
 
 #[cfg(test)]
 mod tests {
+    use crate::core::{
+        msg::{nostr::NostrMsg, system::SystemMsg},
+        state::ui::UiMode,
+    };
+
     use super::*;
     use nostr_sdk::prelude::*;
 
@@ -103,10 +111,7 @@ mod tests {
     #[test]
     fn test_update_quit() {
         let state = create_test_state();
-        let (new_state, cmds) = update(
-            Msg::System(crate::core::msg::system::SystemMsg::Quit),
-            state,
-        );
+        let (new_state, cmds) = update(Msg::System(SystemMsg::Quit), state);
 
         assert!(new_state.system.should_quit);
         assert!(cmds.is_empty());
@@ -163,7 +168,7 @@ mod tests {
     #[test]
     fn test_update_cancel_input() {
         let mut state = create_test_state();
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        state.ui.current_mode = UiMode::Composing;
         state.ui.input_content = "test".to_string();
         state.ui.reply_to = Some(create_test_event());
 
@@ -179,7 +184,7 @@ mod tests {
     fn test_ui_cancel_input_delegates_to_timeline_and_keeps_status_message() {
         let mut state = create_test_state();
         // Prepare UI state to be reset by CancelInput
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        state.ui.current_mode = UiMode::Composing;
         state.ui.input_content = "typing...".into();
         state.ui.reply_to = Some(create_test_event());
         // Prepare timeline selection and a system status message
@@ -206,9 +211,7 @@ mod tests {
         let state = create_test_state();
         let target_event = create_test_event();
         let (new_state, cmds) = update(
-            Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
-                target_event.clone(),
-            )),
+            Msg::Nostr(NostrMsg::SendReaction(target_event.clone())),
             state,
         );
 

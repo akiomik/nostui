@@ -1,11 +1,12 @@
 //! Logging utilities
+use std::env;
+use std::fs::{self, File};
 
 use color_eyre::eyre::Result;
 use lazy_static::lazy_static;
 use tracing_error::ErrorLayer;
-use tracing_subscriber::{
-    self, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, Layer,
-};
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter};
 
 use super::paths::{get_data_dir, LOG_ENV, LOG_FILE};
 
@@ -15,13 +16,13 @@ lazy_static! {
 
 pub fn initialize_logging() -> Result<()> {
     let directory = get_data_dir();
-    std::fs::create_dir_all(directory.clone())?;
+    fs::create_dir_all(directory.clone())?;
     let log_path = directory.join(LOG_FILE.clone());
-    let log_file = std::fs::File::create(&log_path)?;
-    std::env::set_var(
+    let log_file = File::create(&log_path)?;
+    env::set_var(
         "RUST_LOG",
-        std::env::var("RUST_LOG")
-            .or_else(|_| std::env::var(LOG_ENV.clone()))
+        env::var("RUST_LOG")
+            .or_else(|_| env::var(LOG_ENV.clone()))
             .unwrap_or_else(|_| {
                 format!(
                     "{}=info,nostr=warn,nostr_sdk=warn,tokio_tungstenite=warn,tungstenite=warn",
@@ -29,13 +30,13 @@ pub fn initialize_logging() -> Result<()> {
                 )
             }),
     );
-    let file_subscriber = tracing_subscriber::fmt::layer()
+    let file_subscriber = fmt::layer()
         .with_file(true)
         .with_line_number(true)
         .with_writer(log_file)
         .with_target(false)
         .with_ansi(false)
-        .with_filter(tracing_subscriber::filter::EnvFilter::from_default_env());
+        .with_filter(EnvFilter::from_default_env());
     tracing_subscriber::registry()
         .with(file_subscriber)
         .with(ErrorLayer::default())

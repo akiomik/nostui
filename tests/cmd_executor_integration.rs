@@ -1,6 +1,18 @@
+use std::cmp::Reverse;
+use std::collections::HashMap;
+
 use color_eyre::eyre::Result;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
+use tokio::sync::mpsc;
+
 use nostui::core::cmd::TuiCommand;
+use nostui::core::msg::nostr::NostrMsg;
+use nostui::core::msg::system::SystemMsg;
+use nostui::core::msg::ui::UiMsg;
+use nostui::domain::nostr::SortableEvent;
+use nostui::infrastructure::config::Config;
+use nostui::presentation::config::keybindings::{Action, KeyBindings};
 use nostui::{
     core::{
         cmd::Cmd,
@@ -12,7 +24,6 @@ use nostui::{
     },
     integration::runtime::Runtime,
 };
-use tokio::sync::mpsc;
 
 /// Integration tests for command execution system
 fn create_test_state() -> AppState {
@@ -21,11 +32,6 @@ fn create_test_state() -> AppState {
 
 /// Create test state with proper config for keybindings tests
 fn create_test_state_with_config() -> AppState {
-    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-    use nostui::infrastructure::config::Config;
-    use nostui::presentation::config::keybindings::{Action, KeyBindings};
-    use std::collections::HashMap;
-
     // Create config with test keybindings
     let mut config = Config::default();
 
@@ -81,10 +87,7 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
 
     // Simulate user input: like a post
     let target_event = create_test_event();
-    let key_event = crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char('l'),
-        crossterm::event::KeyModifiers::NONE,
-    );
+    let key_event = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
 
     // Add event to timeline first so the key can work
     runtime.send_msg(Msg::Timeline(TimelineMsg::AddNote(target_event)));
@@ -97,8 +100,7 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
     let raw_msg = RawMsg::Key(key_event);
 
     // Debug: Test translator directly with updated state
-    let translated_msgs =
-        nostui::core::translator::translate_raw_to_domain(raw_msg.clone(), runtime.state());
+    let translated_msgs = translate_raw_to_domain(raw_msg.clone(), runtime.state());
     println!("Translated messages from 'l' key: {translated_msgs:?}");
 
     runtime.send_raw_msg(raw_msg);
@@ -135,15 +137,15 @@ fn test_text_note_submission_workflow() -> Result<()> {
 
     // Simulate text note submission workflow
     // Start new note
-    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote));
+    runtime.send_msg(Msg::Ui(UiMsg::ShowNewNote));
 
     // Add content
-    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
+    runtime.send_msg(Msg::Ui(UiMsg::UpdateInputContent(
         "Hello, Nostr from Elm!".to_string(),
     )));
 
     // Submit note
-    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote));
+    runtime.send_msg(Msg::Ui(UiMsg::SubmitNote));
 
     // Process and execute commands
     let execution_log = runtime
@@ -168,13 +170,11 @@ fn test_reply_workflow_with_tags() -> Result<()> {
     let target_event = create_test_event();
 
     // Start reply
-    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(
-        target_event,
-    )));
-    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
+    runtime.send_msg(Msg::Ui(UiMsg::ShowReply(target_event)));
+    runtime.send_msg(Msg::Ui(UiMsg::UpdateInputContent(
         "Great point!".to_string(),
     )));
-    runtime.send_msg(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote));
+    runtime.send_msg(Msg::Ui(UiMsg::SubmitNote));
 
     let execution_log = runtime
         .run_update_cycle()
@@ -197,18 +197,12 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
     let event2 = create_test_event();
 
     // Send multiple commands
-    runtime.send_msg(Msg::Nostr(
-        nostui::core::msg::nostr::NostrMsg::SendReaction(event1),
-    ));
-    runtime.send_msg(Msg::Nostr(nostui::core::msg::nostr::NostrMsg::SendRepost(
-        event2,
-    )));
-    runtime.send_msg(Msg::System(nostui::core::msg::system::SystemMsg::Resize(
-        100, 50,
-    )));
+    runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(event1)));
+    runtime.send_msg(Msg::Nostr(NostrMsg::SendRepost(event2)));
+    runtime.send_msg(Msg::System(SystemMsg::Resize(100, 50)));
 
     // Provide TUI sender BEFORE executing to capture resize command
-    let (tui_tx, mut tui_rx) = tokio::sync::mpsc::unbounded_channel::<TuiCommand>();
+    let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
     runtime.add_tui_sender(tui_tx).unwrap();
 
     let execution_log = runtime
@@ -250,9 +244,9 @@ fn test_batch_command_execution() -> Result<()> {
     ]);
 
     // Route TUI and Render requests through dedicated channels BEFORE execution
-    let (tui_tx, mut tui_rx) = tokio::sync::mpsc::unbounded_channel::<TuiCommand>();
+    let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
     executor.set_tui_sender(tui_tx);
-    let (render_tx, mut render_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    let (render_tx, mut render_rx) = mpsc::unbounded_channel::<()>();
     executor.set_render_request_sender(render_tx);
 
     executor.execute_command(&batch_cmd)?;
@@ -285,9 +279,7 @@ fn test_error_handling_in_execution() -> Result<()> {
     drop(action_rx);
 
     // Try to send a command - should handle the error gracefully
-    runtime.send_msg(Msg::Nostr(
-        nostui::core::msg::nostr::NostrMsg::SendReaction(create_test_event()),
-    ));
+    runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(create_test_event())));
     let result = runtime.run_update_cycle();
 
     // The execution should succeed and simply ignore the command when Nostr is unavailable
@@ -314,16 +306,14 @@ fn test_translator_integration_with_executor() -> Result<()> {
 
     // Add an event and select it
     let event = create_test_event();
-    state.timeline.notes.find_or_insert(std::cmp::Reverse(
-        nostui::domain::nostr::SortableEvent::new(event),
-    ));
+    state
+        .timeline
+        .notes
+        .find_or_insert(Reverse(SortableEvent::new(event)));
     state.timeline.selected_index = Some(0);
 
     // Simulate key presses through translator
-    let key_r = crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::Char('r'),
-        crossterm::event::KeyModifiers::NONE,
-    );
+    let key_r = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
 
     // Translate key to domain messages
     let messages = translate_raw_to_domain(RawMsg::Key(key_r), &state);
@@ -352,17 +342,14 @@ fn test_performance_with_many_commands() -> Result<()> {
     let mut runtime = Runtime::new_with_executor(state);
 
     // Provide TUI sender BEFORE executing to capture resize commands
-    let (tui_tx, mut tui_rx) = tokio::sync::mpsc::unbounded_channel::<TuiCommand>();
+    let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
     runtime.add_tui_sender(tui_tx).unwrap();
 
-    let start = std::time::Instant::now();
+    let start = Instant::now();
 
     // Send many commands
     for i in 0..100 {
-        runtime.send_msg(Msg::System(nostui::core::msg::system::SystemMsg::Resize(
-            100 + i,
-            50 + i,
-        )));
+        runtime.send_msg(Msg::System(SystemMsg::Resize(100 + i, 50 + i)));
     }
 
     let execution_log = runtime

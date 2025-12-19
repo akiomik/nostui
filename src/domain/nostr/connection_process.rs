@@ -1,27 +1,28 @@
 use color_eyre::eyre::{ErrReport, Result};
 use nostr_sdk::prelude::*;
+use tokio::sync::mpsc;
 
 use crate::domain::nostr::Connection;
 
 pub struct ConnectionProcess {
     conn: Connection,
-    req_tx: tokio::sync::mpsc::UnboundedSender<Event>,
-    event_rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
-    terminate_rx: tokio::sync::mpsc::UnboundedReceiver<()>,
+    req_tx: mpsc::UnboundedSender<Event>,
+    event_rx: mpsc::UnboundedReceiver<Event>,
+    terminate_rx: mpsc::UnboundedReceiver<()>,
 }
 
 type NewConnectionProcess = (
-    tokio::sync::mpsc::UnboundedReceiver<Event>,
-    tokio::sync::mpsc::UnboundedSender<Event>,
-    tokio::sync::mpsc::UnboundedSender<()>,
+    mpsc::UnboundedReceiver<Event>,
+    mpsc::UnboundedSender<Event>,
+    mpsc::UnboundedSender<()>,
     ConnectionProcess,
 );
 
 impl ConnectionProcess {
     pub fn new(conn: Connection) -> Result<NewConnectionProcess> {
-        let (req_tx, req_rx) = tokio::sync::mpsc::unbounded_channel();
-        let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
-        let (terminate_tx, terminate_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (req_tx, req_rx) = mpsc::unbounded_channel();
+        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let (terminate_tx, terminate_rx) = mpsc::unbounded_channel();
 
         Ok((
             req_rx,

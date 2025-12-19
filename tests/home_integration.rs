@@ -1,13 +1,20 @@
+use std::cmp::Reverse;
+use std::collections::HashMap;
+
 use color_eyre::eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
+
+use nostui::infrastructure::config::Config;
+use nostui::presentation::config::keybindings::{Action, KeyBindings};
 use nostui::{
     core::{
-        msg::{timeline::TimelineMsg, Msg},
+        msg::{nostr::NostrMsg, system::SystemMsg, timeline::TimelineMsg, ui::UiMsg, Msg},
         raw_msg::RawMsg,
-        state::AppState,
+        state::{ui::UiMode, AppState},
         translator::translate_raw_to_domain,
     },
+    domain::nostr::SortableEvent,
     presentation::components::home::{Home, HomeAction},
 };
 
@@ -18,10 +25,6 @@ fn create_test_state() -> AppState {
 
 /// Create test state with proper config for keybindings tests
 fn create_test_state_with_config() -> AppState {
-    use nostui::infrastructure::config::Config;
-    use nostui::presentation::config::keybindings::{Action, KeyBindings};
-    use std::collections::HashMap;
-
     // Create config with test keybindings
     let mut config = Config::default();
 
@@ -82,11 +85,8 @@ fn test_home_complete_workflow() -> Result<()> {
 
     // Add some timeline content
     let event = create_test_event();
-    let sortable = nostui::domain::nostr::SortableEvent::new(event);
-    state
-        .timeline
-        .notes
-        .find_or_insert(std::cmp::Reverse(sortable));
+    let sortable = SortableEvent::new(event);
+    state.timeline.notes.find_or_insert(Reverse(sortable));
     state.timeline.selected_index = Some(0);
 
     // Now can interact
@@ -112,7 +112,7 @@ fn test_home_input_workflow() -> Result<()> {
     let mut state = create_test_state();
 
     // Start new note
-    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
+    state.ui.current_mode = UiMode::Composing;
     state.ui.input_content = "Hello, Nostr!".to_string();
 
     // Check input mode status
@@ -141,7 +141,7 @@ fn test_home_reply_workflow() -> Result<()> {
     let target_event = create_test_event();
 
     // Setup reply mode
-    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
+    state.ui.current_mode = UiMode::Composing;
     state.ui.reply_to = Some(target_event);
     state.ui.input_content = "Great point!".to_string();
 
@@ -164,11 +164,8 @@ fn test_home_key_processing() -> Result<()> {
 
     // Add event to timeline
     let event = create_test_event();
-    let sortable = nostui::domain::nostr::SortableEvent::new(event);
-    state
-        .timeline
-        .notes
-        .find_or_insert(std::cmp::Reverse(sortable));
+    let sortable = SortableEvent::new(event);
+    state.timeline.notes.find_or_insert(Reverse(sortable));
     state.timeline.selected_index = Some(0);
 
     // Test navigation keys (should be handled by list component)
@@ -183,7 +180,7 @@ fn test_home_key_processing() -> Result<()> {
     );
 
     // Test input mode key processing
-    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
+    state.ui.current_mode = UiMode::Composing;
     state.ui.input_content = "test".to_string();
     let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
     let msgs = home.process_key(key, &state);
@@ -204,18 +201,15 @@ fn test_home_advanced_interaction_validation() -> Result<()> {
 
     // Test interaction validation with timeline
     let event = create_test_event();
-    let sortable = nostui::domain::nostr::SortableEvent::new(event);
-    state
-        .timeline
-        .notes
-        .find_or_insert(std::cmp::Reverse(sortable));
+    let sortable = SortableEvent::new(event);
+    state.timeline.notes.find_or_insert(Reverse(sortable));
     state.timeline.selected_index = Some(0);
 
     assert!(home.can_interact(&state));
     assert!(home.get_selected_note(&state).is_some());
 
     // Test interaction blocked by input mode
-    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
+    state.ui.current_mode = UiMode::Composing;
     assert!(!home.can_interact(&state));
 
     Ok(())
@@ -227,11 +221,8 @@ fn test_home_translator_integration() -> Result<()> {
     let event = create_test_event();
 
     // Setup timeline with event
-    let sortable = nostui::domain::nostr::SortableEvent::new(event.clone());
-    state
-        .timeline
-        .notes
-        .find_or_insert(std::cmp::Reverse(sortable));
+    let sortable = SortableEvent::new(event.clone());
+    state.timeline.notes.find_or_insert(Reverse(sortable));
     state.timeline.selected_index = Some(0);
 
     // Test like key translation
@@ -240,8 +231,8 @@ fn test_home_translator_integration() -> Result<()> {
     assert_eq!(msgs.len(), 2);
     match (&msgs[0], &msgs[1]) {
         (
-            Msg::System(nostui::core::msg::system::SystemMsg::UpdateStatusMessage(msg)),
-            Msg::Nostr(nostui::core::msg::nostr::NostrMsg::SendReaction(reaction_event)),
+            Msg::System(SystemMsg::UpdateStatusMessage(msg)),
+            Msg::Nostr(NostrMsg::SendReaction(reaction_event)),
         ) => {
             assert!(msg.contains("[Liked]"));
             assert_eq!(reaction_event.id, event.id);
@@ -255,7 +246,7 @@ fn test_home_translator_integration() -> Result<()> {
     assert!(!msgs.is_empty());
     assert!(msgs
         .iter()
-        .any(|msg| matches!(msg, Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(_)))));
+        .any(|msg| matches!(msg, Msg::Ui(UiMsg::ShowReply(_)))));
 
     // Test repost key translation
     let key = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE);
@@ -263,8 +254,8 @@ fn test_home_translator_integration() -> Result<()> {
     assert_eq!(msgs.len(), 2);
     match (&msgs[0], &msgs[1]) {
         (
-            Msg::System(nostui::core::msg::system::SystemMsg::UpdateStatusMessage(msg)),
-            Msg::Nostr(nostui::core::msg::nostr::NostrMsg::SendRepost(repost_event)),
+            Msg::System(SystemMsg::UpdateStatusMessage(msg)),
+            Msg::Nostr(NostrMsg::SendRepost(repost_event)),
         ) => {
             assert!(msg.contains("[Reposted]"));
             assert_eq!(repost_event.id, event.id);
@@ -286,11 +277,8 @@ fn test_home_validation_edge_cases() -> Result<()> {
     let mut own_event = create_test_event();
     own_event.pubkey = keys.public_key(); // Make it user's own event
 
-    let sortable = nostui::domain::nostr::SortableEvent::new(own_event);
-    state
-        .timeline
-        .notes
-        .find_or_insert(std::cmp::Reverse(sortable));
+    let sortable = SortableEvent::new(own_event);
+    state.timeline.notes.find_or_insert(Reverse(sortable));
     state.timeline.selected_index = Some(0);
 
     // Attempt to repost own note
@@ -298,7 +286,7 @@ fn test_home_validation_edge_cases() -> Result<()> {
     let msgs = translate_raw_to_domain(RawMsg::Key(key), &state);
     assert_eq!(msgs.len(), 1);
     match &msgs[0] {
-        Msg::System(nostui::core::msg::system::SystemMsg::UpdateStatusMessage(msg)) => {
+        Msg::System(SystemMsg::UpdateStatusMessage(msg)) => {
             assert!(msg.contains("Cannot repost your own note"));
         }
         _ => panic!("Expected status message about own note repost"),
@@ -319,11 +307,8 @@ fn test_home_help_text_contextual() -> Result<()> {
 
     // With timeline but no selection
     let event = create_test_event();
-    let sortable = nostui::domain::nostr::SortableEvent::new(event);
-    state
-        .timeline
-        .notes
-        .find_or_insert(std::cmp::Reverse(sortable));
+    let sortable = SortableEvent::new(event);
+    state.timeline.notes.find_or_insert(Reverse(sortable));
 
     let help = home.get_help_text(&state);
     assert!(help.contains("Navigate"));
@@ -336,7 +321,7 @@ fn test_home_help_text_contextual() -> Result<()> {
     assert!(help.contains("Repost"));
 
     // Input mode
-    state.ui.current_mode = nostui::core::state::ui::UiMode::Composing;
+    state.ui.current_mode = UiMode::Composing;
     let help = home.get_help_text(&state);
     assert!(help.contains("Send note"));
     assert!(help.contains("Cancel"));

@@ -181,6 +181,10 @@ pub struct SelectionInfo {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Reverse;
+
+    use crate::{core::state::ui::UiMode, domain::nostr::SortableEvent};
+
     use super::*;
     use nostr_sdk::prelude::*;
 
@@ -194,11 +198,8 @@ mod tests {
                 .sign_with_keys(&keys)
                 .unwrap();
 
-            let sortable = crate::domain::nostr::SortableEvent::new(event);
-            state
-                .timeline
-                .notes
-                .find_or_insert(std::cmp::Reverse(sortable));
+            let sortable = SortableEvent::new(event);
+            state.timeline.notes.find_or_insert(Reverse(sortable));
         }
 
         state
@@ -282,11 +283,11 @@ mod tests {
         assert!(HomeList::is_scrollable(&state));
 
         // Input shown - not scrollable
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        state.ui.current_mode = UiMode::Composing;
         assert!(!HomeList::is_scrollable(&state));
 
         // Empty timeline - not scrollable
-        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
+        state.ui.current_mode = UiMode::Normal;
         state.timeline.notes.clear();
         assert!(!HomeList::is_scrollable(&state));
     }

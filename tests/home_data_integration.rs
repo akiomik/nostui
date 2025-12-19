@@ -1,13 +1,17 @@
+use std::time::Duration;
+
 use nostr_sdk::prelude::*;
+use ratatui::{prelude::*, widgets::Padding};
+
 use nostui::{
     core::{
-        msg::{timeline::TimelineMsg, Msg},
+        msg::{timeline::TimelineMsg, ui::UiMsg, Msg},
         state::AppState,
         update::update,
     },
+    domain::nostr::Profile,
     presentation::components::home_data::HomeData,
 };
-use ratatui::{prelude::*, widgets::Padding};
 
 /// Test Home data layer integration with Elm architecture
 #[test]
@@ -74,8 +78,7 @@ fn test_profile_management_flow() {
         .name("Alice")
         .display_name("Alice Smith")
         .about("Test user");
-    let profile =
-        nostui::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata);
+    let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
     let (new_state, cmds) = update(Msg::UpdateProfile(keys.public_key(), profile), state);
     state = new_state;
     assert!(cmds.is_empty());
@@ -86,8 +89,7 @@ fn test_profile_management_flow() {
 
     // Test with different name (should overwrite previous profile)
     let metadata2 = Metadata::new().name("Bob");
-    let profile2 =
-        nostui::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata2);
+    let profile2 = Profile::new(keys.public_key(), Timestamp::now(), metadata2);
     let (new_state, _) = update(Msg::UpdateProfile(keys.public_key(), profile2), state);
     state = new_state;
 
@@ -198,12 +200,12 @@ fn test_timeline_interaction_conditions() {
     assert!(HomeData::can_interact_with_timeline(&state));
 
     // Show input - cannot interact
-    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote), state);
+    let (new_state, _) = update(Msg::Ui(UiMsg::ShowNewNote), state);
     state = new_state;
     assert!(!HomeData::can_interact_with_timeline(&state));
 
     // Hide input - can interact again
-    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::CancelInput), state);
+    let (new_state, _) = update(Msg::Ui(UiMsg::CancelInput), state);
     state = new_state;
     assert!(HomeData::can_interact_with_timeline(&state));
 }
@@ -229,14 +231,12 @@ fn test_timeline_stats_calculation() {
 
     // Add profiles
     let metadata1 = Metadata::new().name("User1");
-    let profile1 =
-        nostui::domain::nostr::Profile::new(keys1.public_key(), Timestamp::now(), metadata1);
+    let profile1 = Profile::new(keys1.public_key(), Timestamp::now(), metadata1);
     let (new_state, _) = update(Msg::UpdateProfile(keys1.public_key(), profile1), state);
     state = new_state;
 
     let metadata2 = Metadata::new().name("User2");
-    let profile2 =
-        nostui::domain::nostr::Profile::new(keys2.public_key(), Timestamp::now(), metadata2);
+    let profile2 = Profile::new(keys2.public_key(), Timestamp::now(), metadata2);
     let (new_state, _) = update(Msg::UpdateProfile(keys2.public_key(), profile2), state);
     state = new_state;
 
@@ -270,8 +270,7 @@ fn test_text_note_creation() {
     state = new_state;
 
     let metadata = Metadata::new().name("Test User");
-    let profile =
-        nostui::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata);
+    let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
     let (new_state, _) = update(Msg::UpdateProfile(keys.public_key(), profile), state);
     state = new_state;
 
@@ -314,8 +313,7 @@ async fn test_complete_home_data_workflow() {
         .name("nostr_dev")
         .display_name("Nostr Developer")
         .about("Building the decentralized social web");
-    let profile =
-        nostui::domain::nostr::Profile::new(author_keys.public_key(), Timestamp::now(), metadata);
+    let profile = Profile::new(author_keys.public_key(), Timestamp::now(), metadata);
     let (new_state, _) = update(Msg::UpdateProfile(author_keys.public_key(), profile), state);
     state = new_state;
 
@@ -372,7 +370,7 @@ fn test_large_timeline_performance() {
     let mut state = AppState::new(keys.public_key());
     let home_data = HomeData::new();
 
-    let start = std::time::Instant::now();
+    let start = Instant::now();
 
     // Add 1000 notes
     for i in 0..1000 {
@@ -387,7 +385,7 @@ fn test_large_timeline_performance() {
     println!("Added 1000 notes in {elapsed:?}",);
 
     // Test timeline generation performance
-    let start = std::time::Instant::now();
+    let start = Instant::now();
     let area = Rect::new(0, 0, 100, 50);
     let padding = Padding::new(1, 1, 1, 1);
     let timeline_items = home_data.generate_timeline_items(&state, area, padding);
@@ -400,14 +398,14 @@ fn test_large_timeline_performance() {
     );
 
     assert_eq!(timeline_items.len(), 1000);
-    assert!(elapsed < std::time::Duration::from_millis(100)); // Should be fast
+    assert!(elapsed < Duration::from_millis(100)); // Should be fast
 
     // Test stats calculation performance
-    let start = std::time::Instant::now();
+    let start = Instant::now();
     let stats = HomeData::calculate_timeline_stats(&state);
     let elapsed = start.elapsed();
 
     println!("Calculated stats in {elapsed:?}",);
     assert_eq!(stats.total_notes, 1000);
-    assert!(elapsed < std::time::Duration::from_millis(10)); // Should be very fast
+    assert!(elapsed < Duration::from_millis(10)); // Should be very fast
 }

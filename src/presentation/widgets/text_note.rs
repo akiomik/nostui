@@ -416,8 +416,8 @@ mod tests {
         assert_eq!(text_note_highlighted.name(), None);
 
         // Render both and verify style differences
-        let mut buffer_normal = ratatui::buffer::Buffer::empty(area);
-        let mut buffer_highlighted = ratatui::buffer::Buffer::empty(area);
+        let mut buffer_normal = Buffer::empty(area);
+        let mut buffer_highlighted = Buffer::empty(area);
 
         text_note_normal.render(area, &mut buffer_normal);
         text_note_highlighted.render(area, &mut buffer_highlighted);
@@ -492,8 +492,8 @@ mod tests {
         assert!(text_note_highlighted.display_name().is_some());
 
         // Render and verify highlighting still works for named users
-        let mut buffer_normal = ratatui::buffer::Buffer::empty(area);
-        let mut buffer_highlighted = ratatui::buffer::Buffer::empty(area);
+        let mut buffer_normal = Buffer::empty(area);
+        let mut buffer_highlighted = Buffer::empty(area);
 
         text_note_normal.render(area, &mut buffer_normal);
         text_note_highlighted.render(area, &mut buffer_highlighted);

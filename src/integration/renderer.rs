@@ -44,7 +44,7 @@ impl<'a> Renderer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::tui::test::TestTui;
+    use crate::infrastructure::{config::Config, tui::test::TestTui};
 
     #[tokio::test]
     async fn renderer_renders_with_test_tui() {
@@ -55,7 +55,7 @@ mod tests {
         // minimal state
         use nostr_sdk::prelude::*;
         let keys = Keys::generate();
-        let cfg = crate::infrastructure::config::Config {
+        let cfg = Config {
             privatekey: keys.secret_key().to_bech32().unwrap(),
             relays: vec!["wss://example.com".into()],
             ..Default::default()

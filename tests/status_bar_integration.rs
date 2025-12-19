@@ -1,4 +1,5 @@
 use nostr_sdk::prelude::*;
+
 use nostui::{
     core::msg::{system::SystemMsg, Msg},
     core::state::AppState,
@@ -29,8 +30,7 @@ fn test_status_bar_display_name_flow() {
 
     // Add profile and update state
     let metadata = Metadata::new().name("Alice").display_name("Alice Smith");
-    let profile =
-        nostui::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata);
+    let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
 
     let (new_state, cmds) = update(Msg::UpdateProfile(keys.public_key(), profile), state);
     assert!(cmds.is_empty());
@@ -149,8 +149,7 @@ async fn test_status_bar_integration_full_flow() {
         .name("Integration Test User")
         .display_name("ITest User")
         .about("Testing Elm architecture");
-    let profile =
-        nostui::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata);
+    let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
     let (state, _) = update(Msg::UpdateProfile(keys.public_key(), profile), state);
 
     assert!(StatusBar::has_profile_data(&state));
