@@ -42,6 +42,10 @@ pub fn translate_raw_to_domain(raw: RawMsg, state: &AppState) -> Vec<Msg> {
 }
 
 /// Translates keyboard input to domain events based on current application state
+/// Contract:
+/// - Translator is the single place where external keys are given domain meaning.
+/// - Non-special keys in input mode are delegated to UiMsg::ProcessTextAreaInput.
+/// - Presentation code does not interpret keys; update is the only place for state transitions.
 fn translate_key_event(key: KeyEvent, state: &AppState) -> Vec<Msg> {
     // Handle global key bindings first
     match key {

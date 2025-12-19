@@ -82,6 +82,10 @@ impl<'a> HomeInput<'a> {
 
     /// Render input area from AppState
     /// Synchronizes internal TextArea with AppState and renders
+    /// Contract:
+    /// - Pure rendering: This function must not mutate AppState or consume inputs.
+    /// - Always hydrate before rendering: Internal TextArea is hydrated from SSOT (AppState) at the start.
+    /// - No input handling here: Key processing is handled via Translator→update→process_pending_keys, and reflected via state hydration.
     pub fn draw(&mut self, state: &AppState, f: &mut Frame<'_>, area: Rect) -> Result<()> {
         if !state.ui.is_composing() {
             return Ok(());
@@ -117,7 +121,8 @@ impl<'a> HomeInput<'a> {
     }
 
     /// Synchronize internal TextArea with AppState content and cursor position
-    /// This ensures the TextArea always reflects the current state
+    /// Hydration only: Projects SSOT (AppState) into the internal TextArea for rendering.
+    /// No input consumption or AppState mutation is allowed here.
     pub fn sync_textarea_with_state(&mut self, state: &AppState) {
         let current_content = self.textarea.lines().join("\n");
         let current_cursor = self.get_cursor_position();
@@ -244,8 +249,12 @@ impl<'a> HomeInput<'a> {
         }
     }
 
-    /// Process pending keys from AppState using stateless TextArea
-    /// Returns new TextAreaState without modifying the input state
+    /// Process pending keys from AppState using a temporary TextArea (processing path)
+    /// Contract:
+    /// - Construct TextArea from SSOT (AppState), do not use the rendering TextArea.
+    /// - Apply pending_input_keys to the temporary TextArea.
+    /// - Extract a snapshot (content/cursor/selection) and return it.
+    /// - Do not mutate AppState here except via the caller applying the returned snapshot.
     pub fn process_pending_keys(state: &mut AppState) -> TextAreaState {
         // Create temporary TextArea for processing
         let mut textarea = TextArea::default();
