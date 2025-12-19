@@ -44,6 +44,9 @@ impl<'a> Renderer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use nostr_sdk::prelude::*;
+
     use crate::infrastructure::{config::Config, tui::test::TestTui};
 
     #[tokio::test]
@@ -53,7 +56,6 @@ mod tests {
         ));
         let mut r: Renderer<'_> = Renderer::new();
         // minimal state
-        use nostr_sdk::prelude::*;
         let keys = Keys::generate();
         let cfg = Config {
             privatekey: keys.secret_key().to_bech32().unwrap(),
