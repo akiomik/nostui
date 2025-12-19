@@ -13,10 +13,10 @@ use nostui::{
     test_helpers::TextAreaTestHelper,
 };
 
-/// Test Hybrid Approach behavior
-/// Verifies that TextArea delegation works without breaking special keys
+/// TextArea input flow integration tests
+/// Verifies Translator→UiMsg::ProcessTextAreaInput→update→UiState flow and special key handling
 #[test]
-fn test_hybrid_special_keys_preserved() {
+fn test_special_keys_are_not_delegated_to_textarea() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.current_mode = UiMode::Composing;
 
@@ -32,7 +32,7 @@ fn test_hybrid_special_keys_preserved() {
 }
 
 #[test]
-fn test_hybrid_textarea_delegation() {
+fn test_regular_keys_delegate_to_process_input() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.current_mode = UiMode::Composing;
 
@@ -53,7 +53,7 @@ fn test_hybrid_textarea_delegation() {
 }
 
 #[test]
-fn test_hybrid_update_cycle() {
+fn test_textarea_delegation_updates_state_via_process_input() {
     // Test that ProcessTextAreaInput doesn't break the update cycle
     let mut helper = TextAreaTestHelper::in_input_mode();
 
@@ -68,7 +68,7 @@ fn test_hybrid_update_cycle() {
 
 #[test]
 #[ignore] // Legacy test - requires adaptation for pending_keys approach
-fn test_hybrid_terminal_keybinds() {
+fn test_terminal_keybinds_through_textarea_delegation() {
     let mut helper = TextAreaTestHelper::in_input_mode_with_content("hello world");
 
     // Terminal keybinds should work through TextArea delegation
@@ -189,7 +189,7 @@ fn test_pending_keys_empty_queue_after_processing() {
 }
 
 #[test]
-fn test_hybrid_no_circular_updates() {
+fn test_textarea_delegation_produces_no_spurious_cmds() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.current_mode = UiMode::Composing;
     state.ui.input_content = "test".to_string();
@@ -206,7 +206,7 @@ fn test_hybrid_no_circular_updates() {
 }
 
 #[test]
-fn test_hybrid_input_mode_only() {
+fn test_process_input_is_noop_outside_composing() {
     let mut state = AppState::new(Keys::generate().public_key());
     state.ui.current_mode = UiMode::Normal; // Not in input mode
 
@@ -223,7 +223,7 @@ fn test_hybrid_input_mode_only() {
 }
 
 #[test]
-fn test_hybrid_special_vs_regular_keys() {
+fn test_special_and_regular_key_paths() {
     let mut helper = TextAreaTestHelper::in_input_mode();
 
     // Type some content first

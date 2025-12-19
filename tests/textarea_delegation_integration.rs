@@ -4,9 +4,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use nostui::test_helpers::TextAreaTestHelper;
 
-/// Simplified TextArea integration tests
-/// After TextArea delegation, most complex scenarios are handled automatically
-/// This file replaces multiple previous test files with simplified, focused tests
+/// TextArea delegation simplified integration tests
+/// Focused tests verifying behavior through the delegation path (Translator→ProcessTextAreaInput→update).
+/// Complex behavior is covered by tui-textarea itself; here we ensure integration contracts hold.
 
 #[test]
 fn test_basic_textarea_integration() {
