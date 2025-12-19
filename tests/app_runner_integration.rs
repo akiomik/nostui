@@ -1,5 +1,13 @@
-use nostr_sdk::ToBech32;
+use std::sync::Arc;
+use std::time::Duration;
+
+use nostr_sdk::prelude::*;
+use tokio::sync::Mutex;
+use tokio::time::timeout;
+
 use nostui::core::raw_msg::RawMsg;
+use nostui::infrastructure::config::Config;
+use nostui::infrastructure::tui::event_source::EventSource;
 use nostui::infrastructure::tui::test::TestTui;
 use nostui::integration::app_runner::AppRunner;
 
@@ -8,24 +16,20 @@ use nostui::integration::app_runner::AppRunner;
 
 #[tokio::test]
 async fn test_app_runner_headless_initialization() {
-    use nostr_sdk::prelude::*;
-
     // Create runner in headless mode so it won't enter crossterm raw mode
-    let cfg = nostui::infrastructure::config::Config {
+    let cfg = Config {
         privatekey: Keys::generate().secret_key().to_bech32().unwrap(),
         relays: vec!["wss://example.com".into()],
         ..Default::default()
     };
 
-    use std::sync::Arc;
-    use tokio::sync::Mutex;
     let tui = Arc::new(Mutex::new(
-        nostui::infrastructure::tui::test::TestTui::new(80, 24).expect("failed to create TestTui"),
+        TestTui::new(80, 24).expect("failed to create TestTui"),
     ));
     let runner = AppRunner::new_with_config(
         cfg,
         Arc::<Mutex<TestTui>>::clone(&tui),
-        nostui::infrastructure::tui::event_source::EventSource::real(tui),
+        EventSource::real(tui),
     )
     .await
     .expect("failed to create AppRunner");
@@ -38,24 +42,19 @@ async fn test_app_runner_headless_initialization() {
 #[tokio::test]
 async fn test_app_runner_headless_one_loop_quit() {
     // Headless runner
-    let cfg = nostui::infrastructure::config::Config {
-        privatekey: nostr_sdk::prelude::Keys::generate()
-            .secret_key()
-            .to_bech32()
-            .unwrap(),
+    let cfg = Config {
+        privatekey: Keys::generate().secret_key().to_bech32().unwrap(),
         relays: vec!["wss://example.com".into()],
         ..Default::default()
     };
 
-    use std::sync::Arc;
-    use tokio::sync::Mutex;
     let tui = Arc::new(Mutex::new(
-        nostui::infrastructure::tui::test::TestTui::new(80, 24).expect("failed to create TestTui"),
+        TestTui::new(80, 24).expect("failed to create TestTui"),
     ));
     let mut runner = AppRunner::new_with_config(
         cfg,
         Arc::<Mutex<TestTui>>::clone(&tui),
-        nostui::infrastructure::tui::event_source::EventSource::real(tui),
+        EventSource::real(tui),
     )
     .await
     .expect("failed to create AppRunner");
@@ -64,7 +63,7 @@ async fn test_app_runner_headless_one_loop_quit() {
     runner.runtime_mut().send_raw_msg(RawMsg::Quit);
 
     // Run should exit quickly
-    let res = tokio::time::timeout(std::time::Duration::from_millis(50), runner.run()).await;
+    let res = timeout(Duration::from_millis(50), runner.run()).await;
     assert!(
         res.is_ok(),
         "runner.run() should complete promptly in headless quit scenario"

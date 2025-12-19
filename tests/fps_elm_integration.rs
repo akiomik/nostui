@@ -1,4 +1,6 @@
 use nostr_sdk::prelude::*;
+use tokio::sync::mpsc;
+
 use nostui::{
     core::msg::{system::SystemMsg, Msg},
     core::raw_msg::RawMsg,
@@ -8,7 +10,6 @@ use nostui::{
     infrastructure::fps_service::FpsService,
     presentation::components::fps::FpsCounter,
 };
-use tokio::sync::mpsc;
 
 /// Test FPS counter integration with Elm architecture
 #[test]

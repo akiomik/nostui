@@ -1,10 +1,15 @@
-use crossterm::event::{KeyCode, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
 
+use crate::core::msg::nostr::NostrMsg;
+use crate::presentation::config::keybindings::Action;
 use crate::{
-    core::msg::{system::SystemMsg, ui::UiMsg, Msg},
-    core::raw_msg::RawMsg,
-    core::state::AppState,
+    core::{
+        msg::{system::SystemMsg, timeline::TimelineMsg, ui::UiMsg, Msg},
+        raw_msg::RawMsg,
+        state::AppState,
+    },
+    domain::nostr::Profile,
 };
 
 /// Translates raw external events into domain messages
@@ -37,9 +42,7 @@ pub fn translate_raw_to_domain(raw: RawMsg, state: &AppState) -> Vec<Msg> {
 }
 
 /// Translates keyboard input to domain events based on current application state
-fn translate_key_event(key: crossterm::event::KeyEvent, state: &AppState) -> Vec<Msg> {
-    use crossterm::event::KeyEvent;
-
+fn translate_key_event(key: KeyEvent, state: &AppState) -> Vec<Msg> {
     // Handle global key bindings first
     match key {
         KeyEvent {
@@ -66,7 +69,7 @@ fn translate_key_event(key: crossterm::event::KeyEvent, state: &AppState) -> Vec
 }
 
 /// Key bindings when input is active
-fn translate_input_mode_keys(key: crossterm::event::KeyEvent, state: &AppState) -> Vec<Msg> {
+fn translate_input_mode_keys(key: KeyEvent, state: &AppState) -> Vec<Msg> {
     use crossterm::event::KeyEvent;
 
     match key {
@@ -95,7 +98,7 @@ fn translate_input_mode_keys(key: crossterm::event::KeyEvent, state: &AppState) 
 }
 
 /// Key bindings when in normal navigation mode
-fn translate_normal_mode_keys(key: crossterm::event::KeyEvent, state: &AppState) -> Vec<Msg> {
+fn translate_normal_mode_keys(key: KeyEvent, state: &AppState) -> Vec<Msg> {
     // Get keybindings from config state (flat mapping)
     if let Some(action) = state.config.config.keybindings.get(&vec![key]) {
         return translate_action_to_msg(action, state);
@@ -104,30 +107,17 @@ fn translate_normal_mode_keys(key: crossterm::event::KeyEvent, state: &AppState)
     vec![] // No matching keybinding found
 }
 
-/// Convert Action to Msg based on current state
-use crate::presentation::config::keybindings::Action;
-
 fn translate_action_to_msg(action: &Action, state: &AppState) -> Vec<Msg> {
     match action {
-        Action::ScrollUp => vec![Msg::Timeline(
-            crate::core::msg::timeline::TimelineMsg::ScrollUp,
-        )],
-        Action::ScrollDown => vec![Msg::Timeline(
-            crate::core::msg::timeline::TimelineMsg::ScrollDown,
-        )],
-        Action::ScrollToTop => vec![Msg::Timeline(
-            crate::core::msg::timeline::TimelineMsg::ScrollToTop,
-        )],
-        Action::ScrollToBottom => vec![Msg::Timeline(
-            crate::core::msg::timeline::TimelineMsg::ScrollToBottom,
-        )],
+        Action::ScrollUp => vec![Msg::Timeline(TimelineMsg::ScrollUp)],
+        Action::ScrollDown => vec![Msg::Timeline(TimelineMsg::ScrollDown)],
+        Action::ScrollToTop => vec![Msg::Timeline(TimelineMsg::ScrollToTop)],
+        Action::ScrollToBottom => vec![Msg::Timeline(TimelineMsg::ScrollToBottom)],
         Action::NewTextNote => vec![Msg::Ui(UiMsg::ShowNewNote)],
         Action::ReplyTextNote => translate_reply_key(state),
         Action::React => translate_like_key(state),
         Action::Repost => translate_repost_key(state),
-        Action::Unselect => vec![Msg::Timeline(
-            crate::core::msg::timeline::TimelineMsg::DeselectNote,
-        )],
+        Action::Unselect => vec![Msg::Timeline(TimelineMsg::DeselectNote)],
         Action::Quit => vec![Msg::System(SystemMsg::Quit)],
         Action::Suspend => vec![Msg::System(SystemMsg::Suspend)],
         Action::SubmitTextNote => {
@@ -188,9 +178,7 @@ fn translate_like_key(state: &AppState) -> Vec<Msg> {
                 let note1 = selected_note.id.to_bech32().unwrap_or_default();
                 vec![
                     Msg::System(SystemMsg::UpdateStatusMessage(format!("[Liked] {note1}"))),
-                    Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(
-                        selected_note.clone(),
-                    )),
+                    Msg::Nostr(NostrMsg::SendReaction(selected_note.clone())),
                 ]
             }
         }
@@ -225,9 +213,7 @@ fn translate_repost_key(state: &AppState) -> Vec<Msg> {
                     Msg::System(SystemMsg::UpdateStatusMessage(format!(
                         "[Reposted] {note1}",
                     ))),
-                    Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendRepost(
-                        selected_note.clone(),
-                    )),
+                    Msg::Nostr(NostrMsg::SendRepost(selected_note.clone())),
                 ]
             }
         }
@@ -287,8 +273,7 @@ fn translate_nostr_event(event: Event) -> Vec<Msg> {
         Kind::Metadata => {
             // Parse metadata and update profile
             if let Ok(metadata) = Metadata::from_json(event.content.clone()) {
-                let profile =
-                    crate::domain::nostr::Profile::new(event.pubkey, event.created_at, metadata);
+                let profile = Profile::new(event.pubkey, event.created_at, metadata);
                 msgs.push(Msg::UpdateProfile(event.pubkey, profile));
             } else {
                 msgs.push(Msg::System(SystemMsg::ShowError(
@@ -297,21 +282,13 @@ fn translate_nostr_event(event: Event) -> Vec<Msg> {
             }
         }
 
-        Kind::TextNote => msgs.push(Msg::Timeline(
-            crate::core::msg::timeline::TimelineMsg::AddNote(event),
-        )),
+        Kind::TextNote => msgs.push(Msg::Timeline(TimelineMsg::AddNote(event))),
 
-        Kind::Reaction => msgs.push(Msg::Timeline(
-            crate::core::msg::timeline::TimelineMsg::AddReaction(event),
-        )),
+        Kind::Reaction => msgs.push(Msg::Timeline(TimelineMsg::AddReaction(event))),
 
-        Kind::Repost => msgs.push(Msg::Timeline(
-            crate::core::msg::timeline::TimelineMsg::AddRepost(event),
-        )),
+        Kind::Repost => msgs.push(Msg::Timeline(TimelineMsg::AddRepost(event))),
 
-        Kind::ZapReceipt => msgs.push(Msg::Timeline(
-            crate::core::msg::timeline::TimelineMsg::AddZapReceipt(event),
-        )),
+        Kind::ZapReceipt => msgs.push(Msg::Timeline(TimelineMsg::AddZapReceipt(event))),
 
         _ => {
             // Unknown event types are logged but not processed
@@ -327,14 +304,17 @@ fn translate_nostr_event(event: Event) -> Vec<Msg> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    use std::cmp::Reverse;
+    use std::collections::HashMap;
+
+    use crate::core::state::ui::UiMode;
+    use crate::domain::collections::EventSet;
+    use crate::domain::nostr::SortableEvent;
+    use crate::infrastructure::config::Config;
+    use crate::presentation::config::keybindings::KeyBindings;
 
     fn create_test_state() -> AppState {
-        use crate::infrastructure::config::Config;
-        use crate::presentation::config::keybindings::Action;
-        use crate::presentation::config::keybindings::KeyBindings;
-        use std::collections::HashMap;
-
         // Create config with test keybindings
         let mut config = Config::default();
 
@@ -418,50 +398,25 @@ mod tests {
         // Test vim-style navigation
         let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(
-            result,
-            vec![Msg::Timeline(
-                crate::core::msg::timeline::TimelineMsg::ScrollDown
-            )]
-        );
+        assert_eq!(result, vec![Msg::Timeline(TimelineMsg::ScrollDown)]);
 
         // Test Escape key in normal mode (should use keybinding configuration)
         let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(
-            result,
-            vec![Msg::Timeline(
-                crate::core::msg::timeline::TimelineMsg::DeselectNote
-            )]
-        );
+        assert_eq!(result, vec![Msg::Timeline(TimelineMsg::DeselectNote)]);
 
         let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(
-            result,
-            vec![Msg::Timeline(
-                crate::core::msg::timeline::TimelineMsg::ScrollUp
-            )]
-        );
+        assert_eq!(result, vec![Msg::Timeline(TimelineMsg::ScrollUp)]);
 
         // Test arrow keys
         let key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(
-            result,
-            vec![Msg::Timeline(
-                crate::core::msg::timeline::TimelineMsg::ScrollDown
-            )]
-        );
+        assert_eq!(result, vec![Msg::Timeline(TimelineMsg::ScrollDown)]);
 
         let key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(
-            result,
-            vec![Msg::Timeline(
-                crate::core::msg::timeline::TimelineMsg::ScrollUp
-            )]
-        );
+        assert_eq!(result, vec![Msg::Timeline(TimelineMsg::ScrollUp)]);
     }
 
     #[test]
@@ -482,7 +437,7 @@ mod tests {
     #[test]
     fn test_translate_input_mode_keys() {
         let mut state = create_test_state();
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        state.ui.current_mode = UiMode::Composing;
 
         // Test Ctrl+P in input mode (submit)
         let key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
@@ -524,11 +479,8 @@ mod tests {
         let event = create_test_event();
 
         // Add event to timeline and select it
-        let sortable = crate::domain::nostr::SortableEvent::new(event.clone());
-        state
-            .timeline
-            .notes
-            .find_or_insert(std::cmp::Reverse(sortable));
+        let sortable = SortableEvent::new(event.clone());
+        state.timeline.notes.find_or_insert(Reverse(sortable));
         state.timeline.selected_index = Some(0);
 
         // Test like key
@@ -538,7 +490,7 @@ mod tests {
         match (&result[0], &result[1]) {
             (
                 Msg::System(SystemMsg::UpdateStatusMessage(msg)),
-                Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(ev)),
+                Msg::Nostr(NostrMsg::SendReaction(ev)),
             ) => {
                 assert!(msg.contains("[Liked]"));
                 assert_eq!(ev.id, event.id);
@@ -573,7 +525,7 @@ mod tests {
             result,
             vec![
                 Msg::System(SystemMsg::SetLoading(false)),
-                Msg::Timeline(crate::core::msg::timeline::TimelineMsg::AddNote(event))
+                Msg::Timeline(TimelineMsg::AddNote(event))
             ]
         );
 
@@ -619,7 +571,7 @@ mod tests {
         let mut state = create_test_state();
 
         // Cannot reply when in input mode - 'r' should be delegated to TextArea
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        state.ui.current_mode = UiMode::Composing;
         state.ui.input_content = "Hello".to_string();
         state.timeline.selected_index = Some(0);
         let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
@@ -627,7 +579,7 @@ mod tests {
         assert_eq!(result, vec![Msg::Ui(UiMsg::ProcessTextAreaInput(key))]);
 
         // Cannot reply when no note selected
-        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
+        state.ui.current_mode = UiMode::Normal;
         state.timeline.selected_index = None;
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result.len(), 1);
@@ -645,11 +597,8 @@ mod tests {
         let event = create_test_event();
 
         // Add event to timeline and select it
-        let sortable = crate::domain::nostr::SortableEvent::new(event.clone());
-        state
-            .timeline
-            .notes
-            .find_or_insert(std::cmp::Reverse(sortable));
+        let sortable = SortableEvent::new(event.clone());
+        state.timeline.notes.find_or_insert(Reverse(sortable));
         state.timeline.selected_index = Some(0);
 
         // First like should work
@@ -659,7 +608,7 @@ mod tests {
         match (&result[0], &result[1]) {
             (
                 Msg::System(SystemMsg::UpdateStatusMessage(msg)),
-                Msg::Nostr(crate::core::msg::nostr::NostrMsg::SendReaction(_)),
+                Msg::Nostr(NostrMsg::SendReaction(_)),
             ) => {
                 assert!(msg.contains("[Liked]"));
             }
@@ -675,7 +624,7 @@ mod tests {
         reaction_with_user_key.pubkey = state.user.current_user_pubkey;
 
         state.timeline.reactions.insert(event.id, {
-            let mut set = crate::domain::collections::EventSet::new();
+            let mut set = EventSet::new();
             set.insert(reaction_with_user_key);
             set
         });
@@ -700,11 +649,8 @@ mod tests {
         user_event.pubkey = state.user.current_user_pubkey;
 
         // Add user's own event to timeline and select it
-        let sortable = crate::domain::nostr::SortableEvent::new(user_event);
-        state
-            .timeline
-            .notes
-            .find_or_insert(std::cmp::Reverse(sortable));
+        let sortable = SortableEvent::new(user_event);
+        state.timeline.notes.find_or_insert(Reverse(sortable));
         state.timeline.selected_index = Some(0);
 
         // Attempt to repost own note should be prevented
@@ -724,12 +670,12 @@ mod tests {
         let mut state = create_test_state();
 
         // Cannot interact when input is showing
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        state.ui.current_mode = UiMode::Composing;
         state.timeline.selected_index = Some(0);
         assert!(!can_interact_with_timeline(&state));
 
         // Cannot interact when no note selected
-        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
+        state.ui.current_mode = UiMode::Normal;
         state.timeline.selected_index = None;
         assert!(!can_interact_with_timeline(&state));
 
@@ -739,11 +685,8 @@ mod tests {
 
         // Can interact when conditions are met
         let event = create_test_event();
-        let sortable = crate::domain::nostr::SortableEvent::new(event);
-        state
-            .timeline
-            .notes
-            .find_or_insert(std::cmp::Reverse(sortable));
+        let sortable = SortableEvent::new(event);
+        state.timeline.notes.find_or_insert(Reverse(sortable));
         assert!(can_interact_with_timeline(&state));
     }
 
@@ -758,8 +701,8 @@ mod tests {
         assert_eq!(name, event.pubkey.to_string()[0..8]);
 
         // With profile - should return profile name
-        let metadata = nostr_sdk::prelude::Metadata::new().name("Test User");
-        let profile = crate::domain::nostr::Profile::new(event.pubkey, event.created_at, metadata);
+        let metadata = Metadata::new().name("Test User");
+        let profile = Profile::new(event.pubkey, event.created_at, metadata);
         state.user.profiles.insert(event.pubkey, profile);
 
         let name = get_display_name(&event, &state);

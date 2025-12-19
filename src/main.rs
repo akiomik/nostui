@@ -1,11 +1,12 @@
 #![deny(warnings)]
 
-// use clap::Parser; // Not directly needed, used via Cli
+use clap::Parser;
 use color_eyre::eyre::Result;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use nostui::{
-    infrastructure::cli::Cli,
-    infrastructure::config::Config,
+    infrastructure::{cli::Cli, config::Config, tui::real::RealTui},
     integration::app_runner::AppRunner,
     utils::{initialize_logging, initialize_panic_handler},
 };
@@ -15,7 +16,7 @@ async fn tokio_main() -> Result<()> {
 
     initialize_panic_handler()?;
 
-    let args = <Cli as clap::Parser>::parse();
+    let args = <Cli as Parser>::parse();
 
     // Load configuration (file-based)
     let config = Config::new()?;
@@ -26,12 +27,8 @@ async fn tokio_main() -> Result<()> {
 
     // Initialize and run the new Elm AppRunner
     let mut runner = {
-        use std::sync::Arc;
-        use tokio::sync::Mutex;
         let tui = Arc::new(Mutex::new(
-            nostui::infrastructure::tui::real::RealTui::new()?
-                .tick_rate(tick_rate)
-                .frame_rate(frame_rate),
+            RealTui::new()?.tick_rate(tick_rate).frame_rate(frame_rate),
         ));
         AppRunner::new_with_real(config.clone(), tui).await?
     };

@@ -1,7 +1,13 @@
 use nostr_sdk::prelude::*;
 use nostui::{
-    core::msg::Msg, core::state::AppState, core::update::update,
-    presentation::components::home_input::HomeInput, test_helpers::TextAreaTestHelper,
+    core::{
+        msg::{ui::UiMsg, Msg},
+        state::{ui::SubmitData, AppState},
+        update::update,
+    },
+    presentation::components::home_input::HomeInput,
+    test_helpers::TextAreaTestHelper,
+    Cmd,
 };
 
 /// Test Home input layer integration with Elm architecture
@@ -41,10 +47,7 @@ fn test_reply_mode_activation() {
         .unwrap();
 
     // Show reply
-    let (new_state, cmds) = update(
-        Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(test_event)),
-        state,
-    );
+    let (new_state, cmds) = update(Msg::Ui(UiMsg::ShowReply(test_event)), state);
     state = new_state;
     assert!(cmds.is_empty());
     assert!(HomeInput::is_input_active(&state));
@@ -105,17 +108,12 @@ fn test_submission_with_reply_tags() {
         .unwrap();
 
     // Start reply
-    let (new_state, _) = update(
-        Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(original_event)),
-        state,
-    );
+    let (new_state, _) = update(Msg::Ui(UiMsg::ShowReply(original_event)), state);
     state = new_state;
 
     // Add content
     let (new_state, _) = update(
-        Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
-            "This is a reply".to_string(),
-        )),
+        Msg::Ui(UiMsg::UpdateInputContent("This is a reply".to_string())),
         state,
     );
     state = new_state;
@@ -214,15 +212,12 @@ fn test_mode_transitions() {
         .sign_with_keys(&keys)
         .unwrap();
 
-    let (new_state, _) = update(
-        Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(test_event)),
-        state,
-    );
+    let (new_state, _) = update(Msg::Ui(UiMsg::ShowReply(test_event)), state);
     state = new_state;
     assert_eq!(HomeInput::get_input_mode_description(&state), "Reply mode");
 
     // Reply → Navigation
-    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::CancelInput), state);
+    let (new_state, _) = update(Msg::Ui(UiMsg::CancelInput), state);
     state = new_state;
     assert_eq!(
         HomeInput::get_input_mode_description(&state),
@@ -232,15 +227,15 @@ fn test_mode_transitions() {
 
 #[test]
 fn test_submit_data_equality() {
-    let data1 = nostui::core::state::ui::SubmitData {
+    let data1 = SubmitData {
         content: "Hello".to_string(),
         tags: vec![],
     };
-    let data2 = nostui::core::state::ui::SubmitData {
+    let data2 = SubmitData {
         content: "Hello".to_string(),
         tags: vec![],
     };
-    let data3 = nostui::core::state::ui::SubmitData {
+    let data3 = SubmitData {
         content: "World".to_string(),
         tags: vec![],
     };
@@ -278,29 +273,24 @@ async fn test_complete_input_workflow() {
         .unwrap();
     let mut state = helper.state().clone();
 
-    let (new_state, _) = update(
-        Msg::Ui(nostui::core::msg::ui::UiMsg::ShowReply(original_post)),
-        state,
-    );
+    let (new_state, _) = update(Msg::Ui(UiMsg::ShowReply(original_post)), state);
     state = new_state;
     assert_eq!(HomeInput::get_input_mode_description(&state), "Reply mode");
 
     // 6. Type reply
     let (new_state, _) = update(
-        Msg::Ui(nostui::core::msg::ui::UiMsg::UpdateInputContent(
-            "Great point!".to_string(),
-        )),
+        Msg::Ui(UiMsg::UpdateInputContent("Great point!".to_string())),
         state,
     );
     state = new_state;
 
     // 7. Submit reply
-    let (new_state, cmds) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::SubmitNote), state);
+    let (new_state, cmds) = update(Msg::Ui(UiMsg::SubmitNote), state);
     state = new_state;
     assert_eq!(cmds.len(), 1);
 
     // Verify reply has tags
-    if let nostui::core::cmd::Cmd::SendTextNote { content, tags } = &cmds[0] {
+    if let Cmd::SendTextNote { content, tags } = &cmds[0] {
         assert_eq!(content, "Great point!");
         assert!(!tags.is_empty()); // Reply should have tags
     } else {

@@ -1,7 +1,9 @@
 use nostr_sdk::prelude::*;
 use std::collections::HashSet;
 use std::fmt;
-use std::ops::Index;
+use std::ops::{Deref, Index};
+use std::slice::Iter;
+use std::vec::IntoIter;
 
 /// A set of events with automatic deduplication
 /// Provides O(1) duplicate checking based on EventId while preserving insertion order
@@ -118,7 +120,7 @@ impl Default for EventSet {
     }
 }
 
-impl std::ops::Deref for EventSet {
+impl Deref for EventSet {
     type Target = [Event];
 
     fn deref(&self) -> &Self::Target {
@@ -142,7 +144,7 @@ impl AsRef<[Event]> for EventSet {
 
 impl IntoIterator for EventSet {
     type Item = Event;
-    type IntoIter = std::vec::IntoIter<Event>;
+    type IntoIter = IntoIter<Event>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.events.into_iter()
@@ -151,7 +153,7 @@ impl IntoIterator for EventSet {
 
 impl<'a> IntoIterator for &'a EventSet {
     type Item = &'a Event;
-    type IntoIter = std::slice::Iter<'a, Event>;
+    type IntoIter = Iter<'a, Event>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.events.iter()

@@ -2,7 +2,7 @@ use crate::core::msg::ui::UiMsg;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
 
-use crate::core::state::ui::SubmitData;
+use crate::core::state::ui::{SubmitData, UiMode};
 use crate::{
     core::msg::Msg, core::raw_msg::RawMsg, core::state::AppState,
     core::translator::translate_raw_to_domain, core::update::update,
@@ -55,14 +55,14 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Activate input mode
     pub fn activate_input(&mut self) -> &mut Self {
-        self.state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        self.state.ui.current_mode = UiMode::Composing;
         self.sync_state();
         self
     }
 
     /// Deactivate input mode
     pub fn deactivate_input(&mut self) -> &mut Self {
-        self.state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
+        self.state.ui.current_mode = UiMode::Normal;
         self.sync_state();
         self
     }

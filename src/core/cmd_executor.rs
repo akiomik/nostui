@@ -328,7 +328,7 @@ mod tests {
         let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
         executor.set_tui_sender(tui_tx);
 
-        let cmd = Cmd::Tui(crate::core::cmd::TuiCommand::Resize {
+        let cmd = Cmd::Tui(TuiCommand::Resize {
             width: 80,
             height: 24,
         });
@@ -348,7 +348,7 @@ mod tests {
     #[test]
     fn test_execute_render() {
         let mut executor = create_test_executor();
-        let cmd = Cmd::Tui(crate::core::cmd::TuiCommand::Render);
+        let cmd = Cmd::Tui(TuiCommand::Render);
         // Provide render request sender and ensure signal is emitted
         let (render_tx, mut render_rx) = mpsc::unbounded_channel::<()>();
         executor.set_render_request_sender(render_tx);
@@ -379,8 +379,8 @@ mod tests {
         executor.set_render_request_sender(render_tx);
 
         let cmds = vec![
-            Cmd::Tui(crate::core::cmd::TuiCommand::Render),
-            Cmd::Tui(crate::core::cmd::TuiCommand::Resize {
+            Cmd::Tui(TuiCommand::Render),
+            Cmd::Tui(TuiCommand::Resize {
                 width: 100,
                 height: 50,
             }),
@@ -409,7 +409,7 @@ mod tests {
         executor.set_render_request_sender(render_tx);
 
         let commands = vec![
-            Cmd::Tui(crate::core::cmd::TuiCommand::Render),
+            Cmd::Tui(TuiCommand::Render),
             Cmd::LogInfo {
                 message: "test".to_string(),
             },
@@ -432,10 +432,7 @@ mod tests {
         };
         assert_eq!(cmd.name(), "SendReaction");
 
-        let batch_cmd = Cmd::Batch(vec![
-            Cmd::Tui(crate::core::cmd::TuiCommand::Render),
-            Cmd::None,
-        ]);
+        let batch_cmd = Cmd::Batch(vec![Cmd::Tui(TuiCommand::Render), Cmd::None]);
         assert_eq!(batch_cmd.name(), "Batch(2)");
     }
 

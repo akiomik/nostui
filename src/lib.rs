@@ -74,6 +74,7 @@ pub mod integration;
 pub mod test_helpers;
 
 // Re-exports for convenience
+pub use color_eyre::eyre::Result;
 pub use core::cmd::Cmd;
 pub use core::msg::Msg;
 pub use core::raw_msg::RawMsg;
@@ -81,9 +82,6 @@ pub use core::state::AppState;
 pub use core::translator::translate_raw_to_domain;
 pub use core::update::update;
 pub use integration::runtime::{Runtime, RuntimeStats};
-
-/// Result type used throughout the library
-pub type Result<T> = color_eyre::eyre::Result<T>;
 
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use directories::ProjectDirs;
 use lazy_static::lazy_static;
@@ -6,11 +6,11 @@ use lazy_static::lazy_static;
 lazy_static! {
     pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase();
     pub static ref DATA_FOLDER: Option<PathBuf> =
-        std::env::var(format!("{}_DATA", PROJECT_NAME.clone()))
+        env::var(format!("{}_DATA", PROJECT_NAME.clone()))
             .ok()
             .map(PathBuf::from);
     pub static ref CONFIG_FOLDER: Option<PathBuf> =
-        std::env::var(format!("{}_CONFIG", PROJECT_NAME.clone()))
+        env::var(format!("{}_CONFIG", PROJECT_NAME.clone()))
             .ok()
             .map(PathBuf::from);
     pub static ref LOG_ENV: String = format!("{}_LOGLEVEL", PROJECT_NAME.clone());

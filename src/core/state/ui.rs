@@ -1,7 +1,10 @@
+use crossterm::event::KeyEvent;
 use nostr_sdk::prelude::*;
 
 use crate::core::cmd::Cmd;
 use crate::core::msg::ui::UiMsg;
+use crate::domain::nostr::nip10::ReplyTagsBuilder;
+use crate::domain::ui::{CursorPosition, TextSelection};
 
 /// High-level UI mode for keybindings and view switching
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -18,9 +21,6 @@ pub struct SubmitData {
     pub tags: Vec<nostr_sdk::Tag>,
 }
 
-use crate::domain::nostr::nip10::ReplyTagsBuilder;
-use crate::domain::ui::{CursorPosition, TextSelection};
-
 /// UI-related state
 #[derive(Debug, Clone, Default)]
 pub struct UiState {
@@ -29,7 +29,7 @@ pub struct UiState {
     pub current_mode: UiMode,
     pub cursor_position: CursorPosition,
     pub selection: Option<TextSelection>,
-    pub pending_input_keys: Vec<crossterm::event::KeyEvent>, // Queue for stateless TextArea processing
+    pub pending_input_keys: Vec<KeyEvent>, // Queue for stateless TextArea processing
 }
 
 impl UiState {
@@ -151,7 +151,6 @@ impl UiState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::state::UiState;
 
     fn create_event() -> Event {
         let keys = Keys::generate();
@@ -211,15 +210,16 @@ mod tests {
     #[test]
     fn test_update_cursor_and_selection() {
         let mut ui = UiState::default();
-        let _ = ui.update(UiMsg::UpdateCursorPosition(
-            crate::domain::ui::CursorPosition { line: 1, column: 2 },
-        ));
+        let _ = ui.update(UiMsg::UpdateCursorPosition(CursorPosition {
+            line: 1,
+            column: 2,
+        }));
         assert_eq!(ui.cursor_position.line, 1);
         assert_eq!(ui.cursor_position.column, 2);
 
-        let sel = crate::domain::ui::TextSelection {
-            start: crate::domain::ui::CursorPosition { line: 0, column: 1 },
-            end: crate::domain::ui::CursorPosition { line: 2, column: 3 },
+        let sel = TextSelection {
+            start: CursorPosition { line: 0, column: 1 },
+            end: CursorPosition { line: 2, column: 3 },
         };
         let _ = ui.update(UiMsg::UpdateSelection(Some(sel)));
         let s = ui.selection.unwrap();

@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use color_eyre::eyre::Result;
-
 use nostr_sdk::prelude::*;
+use tokio::sync::broadcast;
 
 /// Default timeout for fetching contact lists from relays
 const DEFAULT_CONTACT_LIST_TIMEOUT_SECS: u64 = 10;
@@ -23,9 +23,7 @@ impl Connection {
         Ok(Self { client })
     }
 
-    pub async fn subscribe_timeline(
-        &self,
-    ) -> Result<tokio::sync::broadcast::Receiver<RelayPoolNotification>> {
+    pub async fn subscribe_timeline(&self) -> Result<broadcast::Receiver<RelayPoolNotification>> {
         let followings = self
             .client
             .get_contact_list_public_keys(Duration::from_secs(DEFAULT_CONTACT_LIST_TIMEOUT_SECS))

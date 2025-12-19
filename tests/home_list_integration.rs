@@ -1,7 +1,9 @@
 use nostr_sdk::prelude::*;
+use ratatui::{backend::TestBackend, prelude::*};
+
 use nostui::{
     core::{
-        msg::{timeline::TimelineMsg, Msg},
+        msg::{timeline::TimelineMsg, ui::UiMsg, Msg},
         state::AppState,
         update::update,
     },
@@ -109,12 +111,12 @@ fn test_scrollable_conditions() {
     assert!(HomeList::is_scrollable(&state));
 
     // Show input - not scrollable even with notes
-    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote), state);
+    let (new_state, _) = update(Msg::Ui(UiMsg::ShowNewNote), state);
     state = new_state;
     assert!(!HomeList::is_scrollable(&state));
 
     // Hide input - scrollable again
-    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::CancelInput), state);
+    let (new_state, _) = update(Msg::Ui(UiMsg::CancelInput), state);
     state = new_state;
     assert!(HomeList::is_scrollable(&state));
 }
@@ -139,7 +141,7 @@ fn test_scroll_with_input_shown() {
     assert_eq!(state.timeline.selected_index, Some(0));
 
     // Show input
-    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote), state);
+    let (new_state, _) = update(Msg::Ui(UiMsg::ShowNewNote), state);
     state = new_state;
 
     // Try to scroll while input is shown - should not change selection
@@ -244,9 +246,9 @@ fn test_clamps_selection_to_valid_range_in_draw() {
     let list = HomeList::new();
 
     // When: we render using a test backend, draw should not panic due to OOB
-    let area = ratatui::prelude::Rect::new(0, 0, 80, 20);
-    let backend = ratatui::backend::TestBackend::new(area.width, area.height);
-    let mut terminal = ratatui::Terminal::new(backend).unwrap();
+    let area = Rect::new(0, 0, 80, 20);
+    let backend = TestBackend::new(area.width, area.height);
+    let mut terminal = Terminal::new(backend).unwrap();
 
     terminal
         .draw(|f| {
@@ -285,17 +287,14 @@ async fn test_complete_ui_workflow() {
     assert_eq!(state.timeline.selected_index, Some(0));
 
     // 5. Jump to bottom
-    let (new_state, _) = update(
-        Msg::Timeline(nostui::core::msg::timeline::TimelineMsg::ScrollToBottom),
-        state,
-    );
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::ScrollToBottom), state);
     state = new_state;
     let info = HomeList::get_selection_info(&state);
     assert!(info.is_at_bottom);
     assert_eq!(info.selected_index, Some(9));
 
     // 6. Show input (disables scrolling)
-    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::ShowNewNote), state);
+    let (new_state, _) = update(Msg::Ui(UiMsg::ShowNewNote), state);
     state = new_state;
     assert!(!HomeList::is_scrollable(&state));
 
@@ -306,15 +305,12 @@ async fn test_complete_ui_workflow() {
     assert_eq!(state.timeline.selected_index, old_selection);
 
     // 8. Cancel input (re-enables scrolling)
-    let (new_state, _) = update(Msg::Ui(nostui::core::msg::ui::UiMsg::CancelInput), state);
+    let (new_state, _) = update(Msg::Ui(UiMsg::CancelInput), state);
     state = new_state;
     assert!(HomeList::is_scrollable(&state));
 
     // 9. Final navigation test
-    let (new_state, _) = update(
-        Msg::Timeline(nostui::core::msg::timeline::TimelineMsg::ScrollToTop),
-        state,
-    );
+    let (new_state, _) = update(Msg::Timeline(TimelineMsg::ScrollToTop), state);
     state = new_state;
     let final_info = HomeList::get_selection_info(&state);
     assert!(final_info.is_at_top);

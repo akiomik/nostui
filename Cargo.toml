@@ -53,6 +53,7 @@ pretty_assertions = "1.4.1"
 rstest = "0.22.0"
 
 [lints.clippy]
+absolute_paths = "warn"
 clone_on_ref_ptr = "warn"
 redundant_clone = "warn"
 uninlined_format_args = "warn"

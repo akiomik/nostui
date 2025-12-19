@@ -1,13 +1,16 @@
-use crate::infrastructure::tui;
-use std::collections::VecDeque;
+use std::{collections::VecDeque, sync::Arc};
+
+use tokio::sync::Mutex;
+
+use crate::infrastructure::tui::{self, TuiLike};
 
 pub enum EventSource {
-    Real(std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>),
+    Real(Arc<Mutex<dyn TuiLike + Send>>),
     Test(VecDeque<tui::Event>),
 }
 
 impl EventSource {
-    pub fn real(tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>) -> Self {
+    pub fn real(tui: Arc<Mutex<dyn TuiLike + Send>>) -> Self {
         EventSource::Real(tui)
     }
     pub fn test(events: impl IntoIterator<Item = tui::Event>) -> Self {

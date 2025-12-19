@@ -1,6 +1,6 @@
 use crossterm::event::KeyEvent;
 use nostr_sdk::prelude::*;
-use ratatui::Frame;
+use ratatui::prelude::*;
 
 use crate::{core::cmd::Cmd, core::msg::Msg, core::state::AppState};
 
@@ -36,7 +36,7 @@ impl<'a> Home<'a> {
     }
 
     /// Render the complete home view
-    pub fn render(&mut self, frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
+    pub fn render(&mut self, frame: &mut Frame, area: Rect, state: &AppState) {
         // Render timeline first (always full area for scrolling continuity like original)
         if let Err(e) = self.list.draw(state, frame, area) {
             log::error!("Failed to render timeline: {e}");
@@ -58,7 +58,7 @@ impl<'a> Home<'a> {
 
     /// Process navigation key directly for cursor movement
     /// This bypasses the normal update cycle to preserve cursor position
-    pub fn process_navigation_key(&mut self, key: crossterm::event::KeyEvent) {
+    pub fn process_navigation_key(&mut self, key: KeyEvent) {
         self.input.process_navigation_key(key);
     }
 
@@ -179,6 +179,8 @@ pub struct HomeStatusInfo {
 
 #[cfg(test)]
 mod tests {
+    use crate::core::state::ui::UiMode;
+
     use super::*;
 
     fn create_test_state() -> AppState {
@@ -206,16 +208,16 @@ mod tests {
         let mut state = create_test_state();
 
         // Cannot interact when input is showing
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        state.ui.current_mode = UiMode::Composing;
         assert!(!home.can_interact(&state));
 
         // Cannot interact when no note is selected
-        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
+        state.ui.current_mode = UiMode::Normal;
         state.timeline.selected_index = None;
         assert!(!home.can_interact(&state));
 
         // Can interact when not in input mode and note is selected
-        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
+        state.ui.current_mode = UiMode::Normal;
         state.timeline.selected_index = Some(0);
         assert!(home.can_interact(&state));
     }
@@ -235,11 +237,11 @@ mod tests {
         let mut state = create_test_state();
 
         // Cannot submit when input is not showing
-        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
+        state.ui.current_mode = UiMode::Normal;
         assert!(!home.can_submit_input(&state));
 
         // Check when input is showing (depends on input component implementation)
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        state.ui.current_mode = UiMode::Composing;
         state.ui.input_content = "test content".to_string();
         // Result depends on input validation logic
     }
@@ -250,13 +252,13 @@ mod tests {
         let mut state = create_test_state();
 
         // Actions when in input mode
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        state.ui.current_mode = UiMode::Composing;
         let actions = home.get_available_actions(&state);
         assert!(actions.contains(&HomeAction::SubmitNote));
         assert!(actions.contains(&HomeAction::CancelInput));
 
         // Actions when in normal mode with empty timeline
-        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
+        state.ui.current_mode = UiMode::Normal;
         state.timeline.selected_index = None;
         let actions = home.get_available_actions(&state);
         assert!(actions.contains(&HomeAction::ShowNewNote));
@@ -269,13 +271,13 @@ mod tests {
         let mut state = create_test_state();
 
         // Help text for input mode
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        state.ui.current_mode = UiMode::Composing;
         let help = home.get_help_text(&state);
         assert!(help.contains("Enter"));
         assert!(help.contains("Esc"));
 
         // Help text for empty timeline
-        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
+        state.ui.current_mode = UiMode::Normal;
         let help = home.get_help_text(&state);
         assert!(help.contains("New note"));
     }
@@ -293,7 +295,7 @@ mod tests {
         assert!(!status.can_interact);
 
         // Change state and verify status updates
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        state.ui.current_mode = UiMode::Composing;
         state.ui.reply_to = Some(create_test_event());
         let status = home.get_status_info(&state);
         assert!(status.input_mode);

@@ -1,8 +1,11 @@
+use std::collections::HashSet;
+
 use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets::*};
 
 use crate::{
     core::state::AppState, domain::collections::EventSet,
+    presentation::widgets::public_key::PublicKey as PublicKeyWidget,
     presentation::widgets::text_note::TextNote,
 };
 
@@ -141,7 +144,7 @@ impl HomeData {
     /// Get all unique authors in timeline
     /// Pure function for UI information (doesn't trigger actions)
     pub fn get_timeline_authors(state: &AppState) -> Vec<PublicKey> {
-        let mut authors: std::collections::HashSet<PublicKey> = std::collections::HashSet::new();
+        let mut authors: HashSet<PublicKey> = HashSet::new();
         for sortable_event in &state.timeline.notes {
             authors.insert(sortable_event.0.event.pubkey);
         }
@@ -206,9 +209,7 @@ impl HomeData {
             .profiles
             .get(pubkey)
             .map(|profile| profile.name())
-            .unwrap_or_else(|| {
-                crate::presentation::widgets::public_key::PublicKey::new(*pubkey).shortened()
-            })
+            .unwrap_or_else(|| PublicKeyWidget::new(*pubkey).shortened())
     }
 }
 
@@ -240,9 +241,15 @@ pub struct EventEngagement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::nostr::SortableEvent;
-    use nostr_sdk::{EventBuilder, Keys, Metadata, Timestamp};
+
     use std::cmp::Reverse;
+
+    use nostr_sdk::{EventBuilder, Keys, Metadata, Timestamp};
+
+    use crate::{
+        core::state::ui::UiMode,
+        domain::nostr::{Profile, SortableEvent},
+    };
 
     fn create_test_state_with_notes(note_count: usize) -> AppState {
         let keys = Keys::generate();
@@ -262,8 +269,7 @@ mod tests {
         let metadata = Metadata::new()
             .name("Test User")
             .display_name("Test Display");
-        let profile =
-            crate::domain::nostr::Profile::new(keys.public_key(), Timestamp::now(), metadata);
+        let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
         state.user.profiles.insert(keys.public_key(), profile);
 
         state
@@ -391,11 +397,11 @@ mod tests {
         assert!(HomeData::can_interact_with_timeline(&state));
 
         // Cannot interact when input is shown
-        state.ui.current_mode = crate::core::state::ui::UiMode::Composing;
+        state.ui.current_mode = UiMode::Composing;
         assert!(!HomeData::can_interact_with_timeline(&state));
 
         // Cannot interact when no notes (even if input hidden)
-        state.ui.current_mode = crate::core::state::ui::UiMode::Normal;
+        state.ui.current_mode = UiMode::Normal;
         state.timeline.notes.clear();
         assert!(!HomeData::can_interact_with_timeline(&state));
     }
@@ -462,9 +468,9 @@ mod tests {
             .sign_with_keys(&keys1)
             .unwrap(); // Same author as event1
 
-        let sortable1 = crate::domain::nostr::SortableEvent::new(event1);
-        let sortable2 = crate::domain::nostr::SortableEvent::new(event2);
-        let sortable3 = crate::domain::nostr::SortableEvent::new(event3);
+        let sortable1 = SortableEvent::new(event1);
+        let sortable2 = SortableEvent::new(event2);
+        let sortable3 = SortableEvent::new(event3);
 
         state.timeline.notes.find_or_insert(Reverse(sortable1));
         state.timeline.notes.find_or_insert(Reverse(sortable2));
