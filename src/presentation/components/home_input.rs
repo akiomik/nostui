@@ -4,62 +4,13 @@ use ratatui::{prelude::*, widgets::*};
 use tui_textarea::{CursorMove, TextArea};
 
 use crate::{
-    core::state::{AppState, UiState},
+    core::state::{ui::TextAreaState, AppState},
     domain::{
         text::shorten_hex,
         ui::{CursorPosition, TextSelection},
     },
     infrastructure::tui::Frame,
 };
-
-/// Complete state representation of a TextArea component
-/// This struct encapsulates all mutable state that needs to be
-/// preserved across TextArea recreation in the stateless approach
-#[derive(Debug, Clone, PartialEq)]
-pub struct TextAreaState {
-    /// The complete text content
-    pub content: String,
-    /// Current cursor position within the text
-    pub cursor_position: CursorPosition,
-    /// Active text selection range, if any
-    pub selection: Option<TextSelection>,
-}
-
-impl TextAreaState {
-    /// Create new TextAreaState
-    pub fn new(
-        content: String,
-        cursor_position: CursorPosition,
-        selection: Option<TextSelection>,
-    ) -> Self {
-        Self {
-            content,
-            cursor_position,
-            selection,
-        }
-    }
-
-    /// Create TextAreaState from AppState's UI state
-    pub fn from_ui_state(ui_state: &UiState) -> Self {
-        Self::new(
-            ui_state.input_content.clone(),
-            ui_state.cursor_position,
-            ui_state.selection.clone(),
-        )
-    }
-
-    /// Apply this TextAreaState to AppState's UI state
-    pub fn apply_to_ui_state(&self, ui_state: &mut UiState) {
-        ui_state.input_content = self.content.clone();
-        ui_state.cursor_position = self.cursor_position;
-        ui_state.selection = self.selection.clone();
-    }
-
-    /// Create empty TextAreaState
-    pub fn empty() -> Self {
-        Self::new(String::new(), CursorPosition { line: 0, column: 0 }, None)
-    }
-}
 
 /// Elm-architecture compatible input component for Home timeline
 /// This component handles pure input operations: text input, reply management, submission
