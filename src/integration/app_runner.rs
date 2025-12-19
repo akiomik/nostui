@@ -1,15 +1,20 @@
+use std::sync::Arc;
+
 use color_eyre::eyre::Result;
 use nostr_sdk::prelude::*;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 
 use crate::{
     core::{raw_msg::RawMsg, state::AppState},
     infrastructure::{
-        config::Config, fps_service::FpsService, nostr_service::NostrService, tui,
-        tui::event_source::EventSource,
+        config::Config,
+        fps_service::FpsService,
+        nostr_service::NostrService,
+        tui::{self, event_source::EventSource},
     },
-    integration::renderer::Renderer,
-    integration::{coalescer::Coalescer, runtime::Runtime, update_executor::UpdateExecutor},
+    integration::{
+        coalescer::Coalescer, renderer::Renderer, runtime::Runtime, update_executor::UpdateExecutor,
+    },
 };
 
 /// Experimental runner that drives the Elm architecture directly without legacy App
@@ -19,7 +24,7 @@ pub struct AppRunner<'a> {
     runtime: Runtime,
     render_req_rx: mpsc::UnboundedReceiver<()>,
     // NOTE: In tests or non-interactive environments, TUI can be absent.
-    tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
+    tui: Arc<Mutex<dyn tui::TuiLike + Send>>,
     event_source: EventSource,
     // Presentation components (stateless/pure rendering)
     renderer: Renderer<'a>,
@@ -36,9 +41,9 @@ pub struct AppRunner<'a> {
 impl<'a> AppRunner<'a> {
     pub async fn new_with_real(
         config: Config,
-        tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
+        tui: Arc<Mutex<dyn tui::TuiLike + Send>>,
     ) -> Result<Self> {
-        let event_source = EventSource::real(tui.clone());
+        let event_source = EventSource::real(Arc::clone(&tui));
         Self::new_with_config(config, tui, event_source).await
     }
 
@@ -53,7 +58,7 @@ impl<'a> AppRunner<'a> {
     /// Create a new AppRunner with Runtime and infrastructure initialized.
     pub async fn new_with_config(
         config: Config,
-        tui: std::sync::Arc<tokio::sync::Mutex<dyn tui::TuiLike + Send>>,
+        tui: Arc<Mutex<dyn tui::TuiLike + Send>>,
         event_source: EventSource,
     ) -> Result<Self> {
         let keys = Keys::parse(&config.privatekey)?;
@@ -85,7 +90,7 @@ impl<'a> AppRunner<'a> {
         let tui = tui;
         // Wire TuiService with channel (Nostr-like pattern)
         let (tui_cmd_tx, tui_cmd_rx, tui_service) =
-            crate::infrastructure::tui_service::TuiService::new_with_channel(tui.clone());
+            crate::infrastructure::tui_service::TuiService::new_with_channel(Arc::clone(&tui));
         // Start TuiService background loop
         let _tui_handle = tui_service.clone().run(tui_cmd_rx);
         // Route TUI commands from CmdExecutor
@@ -256,27 +261,27 @@ mod tests {
     }
 
     async fn make_runner_with_test_tui() -> AppRunner<'static> {
-        use std::sync::Arc;
-        use tokio::sync::Mutex;
         let tui = Arc::new(Mutex::new(
             TestTui::new(80, 24).expect("failed to create TestTui"),
         ));
-        AppRunner::new_with_config(make_test_config(), tui.clone(), TestEventSource::real(tui))
-            .await
-            .expect("failed to create AppRunner")
+        AppRunner::new_with_config(
+            make_test_config(),
+            Arc::<Mutex<TestTui>>::clone(&tui),
+            TestEventSource::real(tui),
+        )
+        .await
+        .expect("failed to create AppRunner")
     }
 
     #[tokio::test]
     async fn app_runner_one_cycle_quit_sets_should_quit() {
-        use std::sync::Arc;
-        use tokio::sync::Mutex;
         let test_tui = Arc::new(Mutex::new(
             TestTui::new(80, 24).expect("failed to create TestTui"),
         ));
         // Create runner with a test event source that yields a single Quit
         let mut runner = AppRunner::new_with_config(
             make_test_config(),
-            test_tui.clone(),
+            Arc::<Mutex<TestTui>>::clone(&test_tui),
             TestEventSource::test([tui::Event::Quit]),
         )
         .await
@@ -340,19 +345,16 @@ mod tests {
 
     #[tokio::test]
     async fn app_runner_render_happens_on_render_event_then_quit() {
-        use std::sync::Arc;
-        use tokio::sync::Mutex;
-
         // Prepare TestTui to observe draw count
         let test_tui = Arc::new(Mutex::new(
             TestTui::new(80, 24).expect("failed to create TestTui"),
         ));
-        let draw_counter_handle = test_tui.clone();
+        let draw_counter_handle = Arc::clone(&test_tui);
 
         // Drive the loop with events: Render -> Quit using a test event source
         let mut runner = AppRunner::new_with_config(
             make_test_config(),
-            test_tui.clone(),
+            Arc::<Mutex<TestTui>>::clone(&test_tui),
             TestEventSource::test([tui::Event::Render, tui::Event::Quit]),
         )
         .await

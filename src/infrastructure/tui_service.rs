@@ -95,7 +95,8 @@ mod tests {
     fn make_service_with_test_tui(w: u16, h: u16) -> (TuiService, Arc<Mutex<TestTui>>) {
         let tui = TestTui::new(w, h).expect("failed to create TestTui");
         let concrete = Arc::new(Mutex::new(tui));
-        let dyn_shared: Arc<Mutex<dyn tui::TuiLike + Send>> = concrete.clone();
+        let dyn_shared: Arc<Mutex<dyn tui::TuiLike + Send>> =
+            Arc::<Mutex<TestTui>>::clone(&concrete);
         (TuiService::new(dyn_shared), concrete)
     }
 
