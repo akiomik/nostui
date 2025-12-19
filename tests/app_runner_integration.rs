@@ -1,5 +1,6 @@
 use nostr_sdk::ToBech32;
 use nostui::core::raw_msg::RawMsg;
+use nostui::infrastructure::tui::test::TestTui;
 use nostui::integration::app_runner::AppRunner;
 
 // Note: This test avoids opening a real interactive TUI by injecting a TestTui when needed.
@@ -23,7 +24,7 @@ async fn test_app_runner_headless_initialization() {
     ));
     let runner = AppRunner::new_with_config(
         cfg,
-        tui.clone(),
+        Arc::<Mutex<TestTui>>::clone(&tui),
         nostui::infrastructure::tui::event_source::EventSource::real(tui),
     )
     .await
@@ -53,7 +54,7 @@ async fn test_app_runner_headless_one_loop_quit() {
     ));
     let mut runner = AppRunner::new_with_config(
         cfg,
-        tui.clone(),
+        Arc::<Mutex<TestTui>>::clone(&tui),
         nostui::infrastructure::tui::event_source::EventSource::real(tui),
     )
     .await
