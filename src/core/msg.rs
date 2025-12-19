@@ -55,7 +55,6 @@ mod tests {
         // Domain messages are not frequent
         assert!(!Msg::System(SystemMsg::Quit).is_frequent());
         assert!(!Msg::Timeline(TimelineMsg::ScrollUp).is_frequent());
-        use crate::core::msg::ui::UiMsg;
         assert!(!Msg::Ui(UiMsg::ShowNewNote).is_frequent());
     }
 
