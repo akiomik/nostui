@@ -1,3 +1,5 @@
+use std::mem;
+
 use crate::{
     core::{
         cmd::Cmd,
@@ -64,7 +66,9 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             UiMsg::ProcessTextAreaInput(key) => {
                 if state.ui.is_composing() {
                     state.ui.pending_input_keys.push(key);
-                    let textarea_state = HomeInput::process_pending_keys(&mut state);
+                    let keys = mem::take(&mut state.ui.pending_input_keys);
+                    let textarea_state =
+                        HomeInput::compute_textarea_snapshot_after_keys(&state, keys);
                     textarea_state.apply_to_ui_state(&mut state.ui);
                 }
                 (state, vec![])
