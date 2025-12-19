@@ -91,8 +91,7 @@ impl<'a> HomeInput<'a> {
         self.sync_textarea_with_state(state);
 
         // No side effects in draw: do not consume or mutate input state here.
-        // TODO(architecture): pending_navigation_key is legacy. Route all navigation keys via Translator→update
-        // and remove this field in a follow-up cleanup.
+        // NOTE: Navigation keys are handled via Translator→update and reflected through state hydration.
 
         // Calculate input area like the original implementation (home.rs:265-270)
         let mut input_area = area;
