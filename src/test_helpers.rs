@@ -48,7 +48,7 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Set the input content and sync with textarea
     pub fn set_content(&mut self, content: &str) -> &mut Self {
-        self.state.ui.input_content = content.to_string();
+        self.state.ui.textarea.content = content.to_string();
         self.sync_state();
         self
     }
@@ -160,19 +160,19 @@ impl<'a> TextAreaTestHelper<'a> {
     /// Assert the current input content
     pub fn assert_content(&self, expected: &str) {
         assert_eq!(
-            self.state.ui.input_content, expected,
+            self.state.ui.textarea.content, expected,
             "Expected content '{}', got '{}'",
-            expected, self.state.ui.input_content
+            expected, self.state.ui.textarea.content
         );
     }
 
     /// Assert that content contains the given substring
     pub fn assert_content_contains(&self, substring: &str) {
         assert!(
-            self.state.ui.input_content.contains(substring),
+            self.state.ui.textarea.content.contains(substring),
             "Expected content to contain '{}', got '{}'",
             substring,
-            self.state.ui.input_content
+            self.state.ui.textarea.content
         );
     }
 
@@ -277,7 +277,7 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Assert cursor position
     pub fn assert_cursor_position(&self, line: usize, column: usize) {
-        let cursor = &self.state.ui.cursor_position;
+        let cursor = &self.state.ui.textarea.cursor_position;
         assert_eq!(
             cursor.line, line,
             "Expected cursor row {}, got {}",
@@ -298,7 +298,7 @@ impl<'a> TextAreaTestHelper<'a> {
     /// Assert no selection
     pub fn assert_no_selection(&self) {
         assert!(
-            self.state.ui.selection.is_none(),
+            self.state.ui.textarea.selection.is_none(),
             "Expected no selection, but selection is present"
         );
     }
@@ -306,7 +306,7 @@ impl<'a> TextAreaTestHelper<'a> {
     /// Assert selection exists
     pub fn assert_has_selection(&self) {
         assert!(
-            self.state.ui.selection.is_some(),
+            self.state.ui.textarea.selection.is_some(),
             "Expected selection to exist, but none found"
         );
     }
@@ -315,7 +315,7 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Get the current input content
     pub fn content(&self) -> &str {
-        &self.state.ui.input_content
+        &self.state.ui.textarea.content
     }
 
     /// Get the current state (for advanced assertions)

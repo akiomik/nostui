@@ -409,7 +409,7 @@ mod tests {
         // Update input content
         let content = "Hello, Nostr!";
         runtime.process_message(Msg::Ui(UiMsg::UpdateInputContent(content.to_string())));
-        assert_eq!(runtime.state().ui.input_content, content);
+        assert_eq!(runtime.state().ui.textarea.content, content);
 
         // Submit post
         let commands = runtime.process_message(Msg::Ui(UiMsg::SubmitNote));
@@ -427,7 +427,7 @@ mod tests {
 
         // Check if UI is reset
         assert!(runtime.state().ui.is_normal());
-        assert!(runtime.state().ui.input_content.is_empty());
+        assert!(runtime.state().ui.textarea.content.is_empty());
     }
 
     #[test]
@@ -492,7 +492,7 @@ mod tests {
 
         // State has been updated
         assert!(runtime.state().ui.is_composing());
-        assert_eq!(runtime.state().ui.input_content, "test");
+        assert_eq!(runtime.state().ui.textarea.content, "test");
         assert!(commands.is_empty());
     }
 

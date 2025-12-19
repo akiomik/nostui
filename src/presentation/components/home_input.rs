@@ -79,15 +79,15 @@ impl<'a> HomeInput<'a> {
         let current_cursor = self.get_cursor_position();
 
         // Update content if it differs
-        if current_content != state.ui.input_content {
+        if current_content != state.ui.textarea.content {
             // Clear current content and replace with state content
             // This is necessary to keep TextArea in sync with AppState
             self.textarea.select_all();
             self.textarea.delete_str(usize::MAX);
 
             // Set new content
-            if !state.ui.input_content.is_empty() {
-                self.textarea.insert_str(&state.ui.input_content);
+            if !state.ui.textarea.content.is_empty() {
+                self.textarea.insert_str(&state.ui.textarea.content);
                 log::debug!(
                     "HomeInput::sync_textarea_with_state: Inserted content, cursor now at: {:?}",
                     self.textarea.cursor()
@@ -97,18 +97,20 @@ impl<'a> HomeInput<'a> {
 
         // Update cursor position if it differs
         // Re-enabled after pending_keys approach fixed the cursor sync issue
-        if current_cursor != state.ui.cursor_position {
-            self.set_cursor_position(&state.ui.cursor_position);
+        if current_cursor != state.ui.textarea.cursor_position {
+            self.set_cursor_position(&state.ui.textarea.cursor_position);
             log::debug!(
                 "HomeInput::sync_textarea_with_state: Updated cursor to {:?}",
-                state.ui.cursor_position
+                state.ui.textarea.cursor_position
             );
         }
 
         // Update selection if present
-        self.set_selection(&state.ui.selection);
+        self.set_selection(&state.ui.textarea.selection);
 
-        if current_content == state.ui.input_content && current_cursor == state.ui.cursor_position {
+        if current_content == state.ui.textarea.content
+            && current_cursor == state.ui.textarea.cursor_position
+        {
             log::debug!(
                 "HomeInput::sync_textarea_with_state: Content and cursor are the same, no update needed"
             );
@@ -168,7 +170,7 @@ impl<'a> HomeInput<'a> {
     /// Get current input statistics
     /// Pure function for UI display (character count, line count, etc.)
     pub fn get_input_stats(state: &AppState) -> InputStats {
-        let content = &state.ui.input_content;
+        let content = &state.ui.textarea.content;
         let char_count = content.chars().count();
         let line_count = content.lines().count().max(1); // At least 1 line
         let word_count = content.split_whitespace().count();
@@ -236,19 +238,19 @@ impl<'a> HomeInput<'a> {
     /// Restore TextArea state from AppState
     fn restore_textarea_from_state(textarea: &mut TextArea, state: &AppState) {
         // Restore content if present
-        if !state.ui.input_content.is_empty() {
-            textarea.insert_str(&state.ui.input_content);
+        if !state.ui.textarea.content.is_empty() {
+            textarea.insert_str(&state.ui.textarea.content);
         }
 
         // Restore cursor position directly from AppState (single source of truth)
         // AppState cursor position should always be valid as it's maintained by the update cycle
         textarea.move_cursor(CursorMove::Jump(
-            state.ui.cursor_position.line as u16,
-            state.ui.cursor_position.column as u16,
+            state.ui.textarea.cursor_position.line as u16,
+            state.ui.textarea.cursor_position.column as u16,
         ));
 
         // Restore selection range if present
-        if let Some(selection) = &state.ui.selection {
+        if let Some(selection) = &state.ui.textarea.selection {
             Self::restore_selection(textarea, selection);
         }
     }
@@ -344,9 +346,9 @@ mod tests {
 
         let mut state = AppState::new(Keys::generate().public_key());
         state.ui.current_mode = UiMode::Composing;
-        state.ui.input_content = String::from("ab");
-        state.ui.cursor_position = CursorPosition { line: 0, column: 2 }; // end
-        state.ui.selection = None;
+        state.ui.textarea.content = String::from("ab");
+        state.ui.textarea.cursor_position = CursorPosition { line: 0, column: 2 }; // end
+        state.ui.textarea.selection = None;
 
         // Apply: Left, Char('X') => aXb
         let keys = vec![
@@ -361,9 +363,9 @@ mod tests {
             CursorPosition { line: 0, column: 2 }
         );
         // Original state must remain unchanged (purity)
-        assert_eq!(state.ui.input_content, "ab");
+        assert_eq!(state.ui.textarea.content, "ab");
         assert_eq!(
-            state.ui.cursor_position,
+            state.ui.textarea.cursor_position,
             CursorPosition { line: 0, column: 2 }
         );
     }
@@ -374,9 +376,9 @@ mod tests {
 
         let mut state = AppState::new(Keys::generate().public_key());
         state.ui.current_mode = UiMode::Composing;
-        state.ui.input_content = String::from("ab");
-        state.ui.cursor_position = CursorPosition { line: 0, column: 2 }; // end
-        state.ui.selection = None;
+        state.ui.textarea.content = String::from("ab");
+        state.ui.textarea.cursor_position = CursorPosition { line: 0, column: 2 }; // end
+        state.ui.textarea.selection = None;
 
         let keys = vec![KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)];
         let snapshot = HomeInput::compute_textarea_snapshot_after_keys(&state, keys);
@@ -388,7 +390,7 @@ mod tests {
             CursorPosition { line: 0, column: 1 }
         );
         // Original state unchanged
-        assert_eq!(state.ui.input_content, "ab");
+        assert_eq!(state.ui.textarea.content, "ab");
     }
 
     #[test]
@@ -397,9 +399,9 @@ mod tests {
 
         let mut state = AppState::new(Keys::generate().public_key());
         state.ui.current_mode = UiMode::Composing;
-        state.ui.input_content = String::from("hello");
-        state.ui.cursor_position = CursorPosition { line: 0, column: 5 }; // end
-        state.ui.selection = Some(TextSelection {
+        state.ui.textarea.content = String::from("hello");
+        state.ui.textarea.cursor_position = CursorPosition { line: 0, column: 5 }; // end
+        state.ui.textarea.selection = Some(TextSelection {
             start: CursorPosition { line: 0, column: 1 },
             end: CursorPosition { line: 0, column: 4 },
         }); // select 'ell'
@@ -415,7 +417,7 @@ mod tests {
             CursorPosition { line: 0, column: 1 }
         );
         // Original state unchanged
-        assert_eq!(state.ui.input_content, "hello");
+        assert_eq!(state.ui.textarea.content, "hello");
     }
 
     #[test]
@@ -430,11 +432,11 @@ mod tests {
         assert!(!HomeInput::can_submit(&state));
 
         // Cannot submit with only whitespace
-        state.ui.input_content = "   \n  \t  ".to_string();
+        state.ui.textarea.content = "   \n  \t  ".to_string();
         assert!(!HomeInput::can_submit(&state));
 
         // Can submit with actual content
-        state.ui.input_content = "Hello, Nostr!".to_string();
+        state.ui.textarea.content = "Hello, Nostr!".to_string();
         assert!(HomeInput::can_submit(&state));
     }
 
@@ -450,7 +452,7 @@ mod tests {
         assert!(stats.is_empty);
 
         // Simple content
-        state.ui.input_content = "Hello, world!".to_string();
+        state.ui.textarea.content = "Hello, world!".to_string();
         let stats = HomeInput::get_input_stats(&state);
         assert_eq!(stats.char_count, 13);
         assert_eq!(stats.line_count, 1);
@@ -458,13 +460,13 @@ mod tests {
         assert!(!stats.is_empty);
 
         // Multi-line content
-        state.ui.input_content = "Line 1\nLine 2\nLine 3".to_string();
+        state.ui.textarea.content = "Line 1\nLine 2\nLine 3".to_string();
         let stats = HomeInput::get_input_stats(&state);
         assert_eq!(stats.line_count, 3);
         assert_eq!(stats.word_count, 6);
 
         // Whitespace only
-        state.ui.input_content = "   \n  \t  ".to_string();
+        state.ui.textarea.content = "   \n  \t  ".to_string();
         let stats = HomeInput::get_input_stats(&state);
         assert!(stats.is_empty); // Trimmed empty
         assert!(stats.char_count > 0); // But has characters
@@ -513,13 +515,13 @@ mod tests {
         let mut state = AppState::new(Keys::generate().public_key());
 
         // Unicode content
-        state.ui.input_content = "こんにちは世界！".to_string();
+        state.ui.textarea.content = "こんにちは世界！".to_string();
         let stats = HomeInput::get_input_stats(&state);
         assert_eq!(stats.char_count, 8); // Unicode characters
         assert!(!stats.is_empty);
 
         // Emoji content
-        state.ui.input_content = "🚀🌟💫".to_string();
+        state.ui.textarea.content = "🚀🌟💫".to_string();
         let stats = HomeInput::get_input_stats(&state);
         assert_eq!(stats.char_count, 3); // Emoji count
         assert_eq!(stats.word_count, 1); // Emojis as one word

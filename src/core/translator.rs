@@ -449,7 +449,7 @@ mod tests {
         assert_eq!(result, vec![Msg::Ui(UiMsg::SubmitNote)]);
 
         // Test plain Enter in input mode (now delegated to TextArea)
-        state.ui.input_content = "Test".to_string();
+        state.ui.textarea.content = "Test".to_string();
         let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result, vec![Msg::Ui(UiMsg::ProcessTextAreaInput(key))]);
@@ -460,7 +460,7 @@ mod tests {
         assert_eq!(result, vec![Msg::Ui(UiMsg::CancelInput)]);
 
         // Test character input (now delegated to TextArea)
-        state.ui.input_content = "Hello".to_string();
+        state.ui.textarea.content = "Hello".to_string();
         let key = KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result, vec![Msg::Ui(UiMsg::ProcessTextAreaInput(key))]);
@@ -471,7 +471,7 @@ mod tests {
         assert_eq!(result, vec![Msg::Ui(UiMsg::ProcessTextAreaInput(key))]);
 
         // Test Shift+Enter (now delegated to TextArea)
-        state.ui.input_content = "Line 1".to_string();
+        state.ui.textarea.content = "Line 1".to_string();
         let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
         assert_eq!(result, vec![Msg::Ui(UiMsg::ProcessTextAreaInput(key))]);
@@ -576,7 +576,7 @@ mod tests {
 
         // Cannot reply when in input mode - 'r' should be delegated to TextArea
         state.ui.current_mode = UiMode::Composing;
-        state.ui.input_content = "Hello".to_string();
+        state.ui.textarea.content = "Hello".to_string();
         state.timeline.selected_index = Some(0);
         let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);

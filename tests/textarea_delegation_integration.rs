@@ -60,7 +60,7 @@ fn test_cursor_position_integration() {
 
     // Cursor updates with typing
     helper.type_text("Hello");
-    let cursor = &helper.state().ui.cursor_position;
+    let cursor = &helper.state().ui.textarea.cursor_position;
     // Cursor should be somewhere reasonable (usize is always >= 0)
     assert!(cursor.line < 1000 && cursor.column < 1000); // Basic sanity check
 
@@ -218,8 +218,8 @@ fn test_elm_architecture_compliance() {
     // State as single source of truth
     let state = helper.state();
     assert!(!state.ui.is_composing());
-    assert_eq!(state.ui.input_content, "");
-    assert_eq!(state.ui.cursor_position.line, 0);
-    assert_eq!(state.ui.cursor_position.column, 0);
-    assert_eq!(state.ui.selection, None);
+    assert_eq!(state.ui.textarea.content, "");
+    assert_eq!(state.ui.textarea.cursor_position.line, 0);
+    assert_eq!(state.ui.textarea.cursor_position.column, 0);
+    assert_eq!(state.ui.textarea.selection, None);
 }

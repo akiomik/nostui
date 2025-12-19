@@ -29,7 +29,7 @@ fn test_library_basic_flow() {
         Msg::Ui(UiMsg::UpdateInputContent("Hello".to_string())),
         state,
     );
-    assert_eq!(state.ui.input_content, "Hello");
+    assert_eq!(state.ui.textarea.content, "Hello");
     assert!(cmds.is_empty());
 
     // Test submission
@@ -99,7 +99,7 @@ fn test_complex_workflow() {
     // Verification
     assert_eq!(runtime.state().timeline_len(), 1);
     assert!(runtime.state().ui.is_normal());
-    assert!(runtime.state().ui.input_content.is_empty());
+    assert!(runtime.state().ui.textarea.content.is_empty());
 
     // Two commands should be generated (reaction + reply)
     assert_eq!(commands.len(), 2);
