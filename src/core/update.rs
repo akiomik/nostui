@@ -56,7 +56,10 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             (state, commands)
         }
 
-        // New UI path (delegates to existing behavior for now)
+        // UI messages (Elm contract):
+        // - All key handling is delegated to Translator→UiMsg events.
+        // - ProcessTextAreaInput accumulates keys and computes a new snapshot via HomeInput::process_pending_keys.
+        // - AppState is updated only via applying that snapshot here; presentation code is not invoked from draw.
         Msg::Ui(ui_msg) => match ui_msg {
             UiMsg::ProcessTextAreaInput(key) => {
                 if state.ui.is_composing() {
