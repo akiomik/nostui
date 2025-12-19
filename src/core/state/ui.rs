@@ -6,6 +6,55 @@ use crate::core::msg::ui::UiMsg;
 use crate::domain::nostr::nip10::ReplyTagsBuilder;
 use crate::domain::ui::{CursorPosition, TextSelection};
 
+/// Complete state representation of a TextArea component
+/// This struct encapsulates all mutable state that needs to be
+/// preserved across TextArea recreation in the stateless approach
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextAreaState {
+    /// The complete text content
+    pub content: String,
+    /// Current cursor position within the text
+    pub cursor_position: CursorPosition,
+    /// Active text selection range, if any
+    pub selection: Option<TextSelection>,
+}
+
+impl TextAreaState {
+    /// Create new TextAreaState
+    pub fn new(
+        content: String,
+        cursor_position: CursorPosition,
+        selection: Option<TextSelection>,
+    ) -> Self {
+        Self {
+            content,
+            cursor_position,
+            selection,
+        }
+    }
+
+    /// Create TextAreaState from UiState (temporary helper during migration)
+    pub fn from_ui_state(ui_state: &UiState) -> Self {
+        Self::new(
+            ui_state.input_content.clone(),
+            ui_state.cursor_position,
+            ui_state.selection.clone(),
+        )
+    }
+
+    /// Apply this TextAreaState to UiState (temporary helper during migration)
+    pub fn apply_to_ui_state(&self, ui_state: &mut UiState) {
+        ui_state.input_content = self.content.clone();
+        ui_state.cursor_position = self.cursor_position;
+        ui_state.selection = self.selection.clone();
+    }
+
+    /// Create empty TextAreaState
+    pub fn empty() -> Self {
+        Self::new(String::new(), CursorPosition { line: 0, column: 0 }, None)
+    }
+}
+
 /// High-level UI mode for keybindings and view switching
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum UiMode {
