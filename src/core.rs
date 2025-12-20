@@ -7,7 +7,6 @@
 //! - Message translation layer
 
 pub mod cmd;
-pub mod cmd_executor;
 pub mod msg;
 pub mod raw_msg;
 pub mod state;

@@ -12,11 +12,11 @@ use nostui::core::msg::system::SystemMsg;
 use nostui::core::msg::ui::UiMsg;
 use nostui::domain::nostr::SortableEvent;
 use nostui::infrastructure::config::Config;
+use nostui::integration::cmd_executor::CmdExecutor;
 use nostui::presentation::config::keybindings::{Action, KeyBindings};
 use nostui::{
     core::{
         cmd::Cmd,
-        cmd_executor::CmdExecutor,
         msg::{timeline::TimelineMsg, Msg},
         raw_msg::RawMsg,
         state::AppState,

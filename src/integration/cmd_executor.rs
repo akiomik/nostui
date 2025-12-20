@@ -2,11 +2,9 @@ use color_eyre::eyre::Result;
 use tokio::sync::mpsc;
 
 use crate::{
-    core::cmd::{Cmd, TuiCmd},
+    core::cmd::{Cmd, NostrCmd, TuiCmd},
     infrastructure::nostr::NostrOperation,
 };
-
-use super::cmd::NostrCmd;
 
 /// Command executor that bridges Elm commands to Action and NostrOperation systems
 #[derive(Clone, Default)]

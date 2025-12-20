@@ -4,7 +4,6 @@ use tokio::sync::mpsc;
 use crate::{
     core::{
         cmd::{Cmd, TuiCmd},
-        cmd_executor::CmdExecutor,
         msg::Msg,
         raw_msg::RawMsg,
         state::AppState,
@@ -13,6 +12,8 @@ use crate::{
     },
     infrastructure::{nostr::NostrOperation, tui::textarea_engine::TuiTextAreaEngine},
 };
+
+use super::cmd_executor::CmdExecutor;
 
 /// Integration point between Elm architecture runtime and existing app
 pub struct Runtime {
