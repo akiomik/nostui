@@ -258,6 +258,8 @@ impl TuiLike for RealTui {
 
 impl Drop for RealTui {
     fn drop(&mut self) {
-        self.exit().unwrap();
+        if let Err(e) = self.exit() {
+            log::error!("Failed to exit: {e}");
+        }
     }
 }
