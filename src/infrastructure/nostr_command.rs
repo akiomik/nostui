@@ -1,7 +1,11 @@
 use nostr_sdk::prelude::*;
 
-/// Commands for NostrService - rich data approach
-/// Contains complete Event objects to support nostr-sdk API requirements
+/// Infrastructure-level Nostr commands.
+/// Some names intentionally mirror domain-level Cmd (e.g. SendReaction, SendRepost).
+/// This duplication reflects different concerns: domain Cmd expresses application intent (what),
+/// while NostrCommand expresses concrete execution for the Nostr infrastructure (how).
+/// Keeping these layers separate avoids leaking external SDK types into the domain and
+/// improves testability/substitutability of the infrastructure.
 #[derive(Debug, Clone)]
 pub enum NostrCommand {
     /// Send a reaction (like/dislike) to a specific event
