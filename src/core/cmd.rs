@@ -6,7 +6,9 @@ use crate::core::msg::Msg;
 /// UI (TUI) specific sub-commands executed by the host/runtime
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TuiCommand {
-    Render,
+    // Render is orchestrated exclusively by AppRunner, not via TuiCommand.
+    // Render requests are coalesced and delivered via a bounded render_req_sender signal.
+    // This removes the duplicate path (via TuiService) to avoid contention and spamming.
     Resize { width: u16, height: u16 },
 }
 
@@ -15,27 +17,47 @@ pub enum TuiCommand {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Cmd {
     // Nostr-related commands
-    SendReaction { target_event: Event },
-    SendRepost { target_event: Event },
-    SendTextNote { content: String, tags: Vec<Tag> },
-    ConnectToRelays { relays: Vec<String> },
+    SendReaction {
+        target_event: Event,
+    },
+    SendRepost {
+        target_event: Event,
+    },
+    SendTextNote {
+        content: String,
+        tags: Vec<Tag>,
+    },
+    ConnectToRelays {
+        relays: Vec<String>,
+    },
     DisconnectFromRelays,
     SubscribeToTimeline,
 
     // UI-related commands
     Tui(TuiCommand),
+    /// Request a render; delivered via bounded render_req_sender and coalesced by AppRunner
+    RequestRender,
 
     // File/configuration related
     SaveConfig,
     LoadConfig,
 
     // Logging related
-    LogError { message: String },
-    LogInfo { message: String },
+    LogError {
+        message: String,
+    },
+    LogInfo {
+        message: String,
+    },
 
     // Time related
-    StartTimer { id: String, duration_ms: u64 },
-    StopTimer { id: String },
+    StartTimer {
+        id: String,
+        duration_ms: u64,
+    },
+    StopTimer {
+        id: String,
+    },
 
     // Batch command (execute multiple commands together)
     Batch(Vec<Cmd>),
@@ -67,6 +89,7 @@ impl Cmd {
             | Cmd::LoadConfig => true,
 
             Cmd::Tui(..)
+            | Cmd::RequestRender
             | Cmd::LogError { .. }
             | Cmd::LogInfo { .. }
             | Cmd::StartTimer { .. }
@@ -81,7 +104,7 @@ impl Cmd {
     pub fn priority(&self) -> u8 {
         match self {
             // UI-related has highest priority
-            Cmd::Tui(..) => 0,
+            Cmd::Tui(..) | Cmd::RequestRender => 0,
 
             // User actions have high priority
             Cmd::SendReaction { .. } | Cmd::SendRepost { .. } | Cmd::SendTextNote { .. } => 1,
@@ -136,14 +159,15 @@ mod tests {
 
     #[test]
     fn test_cmd_batch_single() {
-        let original_cmd = Cmd::Tui(TuiCommand::Render);
+        let original_cmd = Cmd::SaveConfig;
         let cmd = Cmd::batch(vec![original_cmd.clone()]);
         assert_eq!(cmd, original_cmd);
     }
 
     #[test]
     fn test_cmd_batch_multiple() {
-        let cmds = vec![Cmd::Tui(TuiCommand::Render), Cmd::SaveConfig];
+        // Batch should wrap when there are 2+ commands
+        let cmds = vec![Cmd::SaveConfig, Cmd::LoadConfig];
         let batch_cmd = Cmd::batch(cmds.clone());
         assert_eq!(batch_cmd, Cmd::Batch(cmds));
     }
@@ -161,7 +185,6 @@ mod tests {
         }
         .is_async());
 
-        assert!(!Cmd::Tui(TuiCommand::Render).is_async());
         assert!(!Cmd::Tui(TuiCommand::Resize {
             width: 100,
             height: 50
@@ -171,7 +194,6 @@ mod tests {
 
     #[test]
     fn test_cmd_priority() {
-        assert_eq!(Cmd::Tui(TuiCommand::Render).priority(), 0);
         assert_eq!(
             Cmd::SendReaction {
                 target_event: create_test_event()
@@ -197,12 +219,11 @@ mod tests {
             Cmd::LogInfo {
                 message: "test".to_string(),
             }, // priority 4
-            Cmd::Tui(TuiCommand::Render), // priority 0
-            Cmd::SaveConfig,              // priority 3
+            Cmd::SaveConfig, // priority 3
         ]);
 
-        // バッチの優先度は含まれるコマンドの最高優先度（最小値）
-        assert_eq!(batch.priority(), 0);
+        // Batch priority should be the minimum of its children (lower = higher priority)
+        assert_eq!(batch.priority(), 3);
     }
 
     #[test]
@@ -219,21 +240,15 @@ mod tests {
 
     #[test]
     fn test_cmd_batch_is_async() {
-        let sync_batch = Cmd::Batch(vec![
-            Cmd::Tui(TuiCommand::Render),
-            Cmd::LogInfo {
-                message: "test".to_string(),
-            },
-        ]);
+        let sync_batch = Cmd::Batch(vec![Cmd::LogInfo {
+            message: "test".to_string(),
+        }]);
         assert!(!sync_batch.is_async());
 
-        let async_batch = Cmd::Batch(vec![
-            Cmd::Tui(TuiCommand::Render),
-            Cmd::SendTextNote {
-                content: "test".to_string(),
-                tags: vec![],
-            },
-        ]);
+        let async_batch = Cmd::Batch(vec![Cmd::SendTextNote {
+            content: "test".to_string(),
+            tags: vec![],
+        }]);
         assert!(async_batch.is_async());
     }
 }

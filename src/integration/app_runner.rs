@@ -205,6 +205,7 @@ impl<'a> AppRunner<'a> {
 
         loop {
             // 1) Coalesce render requests (at most one render per loop)
+            // Coalesced render requests from Elm (via Cmd::RequestRender)
             let queued = self.drain_render_req_count();
             let mut render_flag = false;
 

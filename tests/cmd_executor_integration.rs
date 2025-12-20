@@ -233,7 +233,7 @@ fn test_batch_command_execution() -> Result<()> {
 
     // Create a batch command
     let batch_cmd = Cmd::batch(vec![
-        Cmd::Tui(TuiCommand::Render),
+        Cmd::RequestRender,
         Cmd::Tui(TuiCommand::Resize {
             width: 80,
             height: 24,
@@ -251,7 +251,7 @@ fn test_batch_command_execution() -> Result<()> {
 
     executor.execute_command(&batch_cmd)?;
 
-    // Should receive Render signal and Resize TUI command (LogInfo doesn't generate actions)
+    // Should receive RequestRender signal and Resize TUI command (LogInfo doesn't generate actions)
     render_rx.try_recv()?;
     let tui_cmd = tui_rx.try_recv()?;
     assert!(matches!(
@@ -262,7 +262,7 @@ fn test_batch_command_execution() -> Result<()> {
         }
     ));
 
-    // No more TUI commands or render signals should be available
+    // No more TUI commands or render signals should be available (coalesced channel)
     assert!(tui_rx.try_recv().is_err());
     assert!(render_rx.try_recv().is_err());
 
@@ -370,7 +370,6 @@ fn test_performance_with_many_commands() -> Result<()> {
                 assert_eq!(width, 100 + (i as u16));
                 assert_eq!(height, 50 + (i as u16));
             }
-            _ => panic!("Expected TuiCommand::Resize"),
         }
     }
 

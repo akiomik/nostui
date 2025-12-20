@@ -38,12 +38,10 @@ impl TuiService {
         tokio::spawn(async move {
             while let Some(cmd) = rx.recv().await {
                 match cmd {
+                    // Render variant does not exist (rendering is orchestrated by AppRunner)
                     TuiCommand::Resize { width, height } => {
                         let mut tui = self.inner.lock().await;
                         let _ = tui.resize(Rect::new(0, 0, width, height));
-                    }
-                    TuiCommand::Render => {
-                        // Rendering stays orchestrated by AppRunner; ignore here.
                     }
                 }
             }
