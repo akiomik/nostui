@@ -48,6 +48,56 @@ impl CmdExecutor {
         self.render_req_sender = Some(sender);
     }
 
+    fn execute_nostr_command(&self, nostr_cmd: &NostrCmd) -> Result<()> {
+        if let Some(nostr_sender) = &self.nostr_sender {
+            let nostr_op = match nostr_cmd {
+                NostrCmd::SendReaction { target_event } => {
+                    NostrOperation::like(target_event.clone())
+                }
+
+                NostrCmd::SendRepost { target_event } => {
+                    NostrOperation::repost(target_event.clone(), None)
+                }
+
+                NostrCmd::SendTextNote { content, tags } => {
+                    NostrOperation::text_note(content.clone(), tags.clone())
+                }
+
+                NostrCmd::ConnectToRelays { relays } => {
+                    NostrOperation::connect_relays(relays.clone())
+                }
+
+                NostrCmd::DisconnectFromRelays => NostrOperation::DisconnectFromRelays,
+
+                NostrCmd::SubscribeToTimeline => NostrOperation::SubscribeToTimeline,
+            };
+            nostr_sender.send(nostr_op)?;
+        } else {
+            // No NostrService available: drop with warning
+            log::warn!("NostrCmd ignored: NostrService not available");
+        }
+
+        Ok(())
+    }
+
+    fn execute_tui_command(&self, tui_cmd: &TuiCmd) -> Result<()> {
+        if let Some(tx) = &self.tui_sender {
+            match tui_cmd {
+                TuiCmd::Resize { width, height } => {
+                    tx.send(TuiCmd::Resize {
+                        width: *width,
+                        height: *height,
+                    })?;
+                }
+            }
+        } else {
+            // No TUI sender available: drop with warning
+            log::warn!("TuiCmd ignored: TUI sender not available");
+        }
+
+        Ok(())
+    }
+
     /// Execute a single command by converting it to appropriate Action or NostrOperation
     pub fn execute_command(&self, cmd: &Cmd) -> Result<()> {
         match cmd {
@@ -56,80 +106,7 @@ impl CmdExecutor {
             }
 
             // Nostr protocol commands - route to NostrService
-            Cmd::Nostr(nostr_cmd) => {
-                match nostr_cmd {
-                    NostrCmd::SendReaction { target_event } => {
-                        if let Some(nostr_sender) = &self.nostr_sender {
-                            let nostr_cmd = NostrOperation::like(target_event.clone());
-                            nostr_sender.send(nostr_cmd)?;
-                        } else {
-                            // No NostrService available: drop with warning (no legacy Action fallback)
-                            log::warn!("SendReaction ignored: NostrService not available");
-                        }
-                    }
-
-                    NostrCmd::SendRepost { target_event } => {
-                        if let Some(nostr_sender) = &self.nostr_sender {
-                            let nostr_cmd = NostrOperation::repost(target_event.clone(), None);
-                            nostr_sender.send(nostr_cmd)?;
-                        } else {
-                            // No NostrService available: drop with warning (no legacy Action fallback)
-                            log::warn!("SendRepost ignored: NostrService not available");
-                        }
-                    }
-
-                    NostrCmd::SendTextNote { content, tags } => {
-                        log::info!(
-                            "CmdExecutor: Processing SendTextNote - content: '{content}', tags: {tags:?}",
-                            );
-                        if let Some(nostr_sender) = &self.nostr_sender {
-                            log::info!("CmdExecutor: Routing to NostrService");
-                            let nostr_cmd =
-                                NostrOperation::text_note(content.clone(), tags.clone());
-                            nostr_sender.send(nostr_cmd)?;
-                            log::info!(
-                                "CmdExecutor: Successfully sent NostrOperation::SendTextNote"
-                            );
-                        } else {
-                            // No NostrService available: drop with warning (no legacy Action fallback)
-                            log::warn!("SendTextNote ignored: NostrService not available");
-                        }
-                    }
-
-                    NostrCmd::ConnectToRelays { relays } => {
-                        if let Some(nostr_sender) = &self.nostr_sender {
-                            let nostr_cmd = NostrOperation::connect_relays(relays.clone());
-                            nostr_sender.send(nostr_cmd)?;
-                        } else {
-                            log::warn!(
-                                "ConnectToRelays command ignored: NostrService not available"
-                            );
-                        }
-                    }
-
-                    NostrCmd::DisconnectFromRelays => {
-                        if let Some(nostr_sender) = &self.nostr_sender {
-                            let nostr_cmd = NostrOperation::DisconnectFromRelays;
-                            nostr_sender.send(nostr_cmd)?;
-                        } else {
-                            log::warn!(
-                                "DisconnectFromRelays command ignored: NostrService not available"
-                            );
-                        }
-                    }
-
-                    NostrCmd::SubscribeToTimeline => {
-                        if let Some(nostr_sender) = &self.nostr_sender {
-                            let nostr_cmd = NostrOperation::SubscribeToTimeline;
-                            nostr_sender.send(nostr_cmd)?;
-                        } else {
-                            log::warn!(
-                                "SubscribeToTimeline command ignored: NostrService not available"
-                            );
-                        }
-                    }
-                }
-            }
+            Cmd::Nostr(nostr_cmd) => self.execute_nostr_command(nostr_cmd)?,
 
             Cmd::SaveConfig => {
                 log::info!("Command to save config");
@@ -143,23 +120,7 @@ impl CmdExecutor {
                 // This remains as TODO since it's not Nostr-related
             }
 
-            Cmd::Tui(tui_cmd) => {
-                match tui_cmd {
-                    TuiCmd::Resize { width, height } => {
-                        if let Some(tx) = &self.tui_sender {
-                            let _ = tx.send(TuiCmd::Resize {
-                                width: *width,
-                                height: *height,
-                            });
-                            return Ok(());
-                        }
-                        // No TUI sender configured: drop with warning (no legacy Action fallback)
-                        log::warn!(
-                            "CmdExecutor: TUI sender not configured; dropping Resize command {width}x{height}"
-                        );
-                    }
-                }
-            }
+            Cmd::Tui(tui_cmd) => self.execute_tui_command(tui_cmd)?,
 
             Cmd::RequestRender => {
                 if let Some(rtx) = &self.render_req_sender {
