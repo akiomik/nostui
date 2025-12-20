@@ -3,6 +3,7 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 use nostr_sdk::prelude::*;
 use tokio::sync::{mpsc, Mutex};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     core::{raw_msg::RawMsg, state::AppState},
@@ -31,7 +32,7 @@ pub struct AppRunner<'a> {
     // Presentation components (stateless/pure rendering)
     renderer: Renderer<'a>,
     // For service termination
-    nostr_terminate_tx: mpsc::UnboundedSender<()>,
+    nostr_cancel_token: CancellationToken,
     // FPS service sending RawMsg updates
     fps_service: FpsService,
     // Coalesced pending resize (last-only within a loop)
@@ -73,7 +74,7 @@ impl<'a> AppRunner<'a> {
 
         // Initialize NostrService and start it in background
         let conn = Connection::new(keys.clone(), config.relays.clone()).await?;
-        let (nostr_cmd_tx, nostr_terminate_tx, nostr_service) =
+        let (nostr_cmd_tx, nostr_cancel_token, nostr_service) =
             NostrService::new(conn, keys.clone(), raw_tx.clone())?;
         nostr_service.run();
 
@@ -105,7 +106,7 @@ impl<'a> AppRunner<'a> {
             // Keep service for future direct Cmd::Tui execution
             // (currently CmdExecutor falls back to Action until wiring is complete)
             renderer: Renderer::new(),
-            nostr_terminate_tx,
+            nostr_cancel_token,
             fps_service,
             pending_resize: None,
         })
@@ -186,7 +187,7 @@ impl<'a> AppRunner<'a> {
     }
 
     fn shutdown_services(&self) {
-        let _ = self.nostr_terminate_tx.send(());
+        self.nostr_cancel_token.cancel();
     }
 
     /// Run the main loop: handle TUI events, Nostr events, update Elm state and render.
