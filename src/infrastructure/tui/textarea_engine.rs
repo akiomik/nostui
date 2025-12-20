@@ -29,10 +29,18 @@ impl TuiTextAreaEngine {
     }
 
     fn extract_selection(textarea: &tui_textarea::TextArea<'_>) -> Option<TextSelection> {
-        textarea.selection_range().map(|((sr, sc), (er, ec))| TextSelection {
-            start: CursorPosition { line: sr, column: sc },
-            end: CursorPosition { line: er, column: ec },
-        })
+        textarea
+            .selection_range()
+            .map(|((sr, sc), (er, ec))| TextSelection {
+                start: CursorPosition {
+                    line: sr,
+                    column: sc,
+                },
+                end: CursorPosition {
+                    line: er,
+                    column: ec,
+                },
+            })
     }
 
     fn restore_selection(textarea: &mut TextArea<'_>, selection: &TextSelection) {
@@ -70,11 +78,7 @@ mod tests {
     #[test]
     fn applies_basic_editing_with_left_and_char() {
         let engine = TuiTextAreaEngine;
-        let snap = TextAreaState::new(
-            "ab".into(),
-            CursorPosition { line: 0, column: 2 },
-            None,
-        );
+        let snap = TextAreaState::new("ab".into(), CursorPosition { line: 0, column: 2 }, None);
         let keys = vec![
             KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
             KeyEvent::new(KeyCode::Char('X'), KeyModifiers::NONE),
@@ -90,12 +94,11 @@ mod tests {
     fn applies_backspace_and_selection_delete() {
         let engine = TuiTextAreaEngine;
         // Backspace at end
-        let snap = TextAreaState::new(
-            "ab".into(),
-            CursorPosition { line: 0, column: 2 },
-            None,
+        let snap = TextAreaState::new("ab".into(), CursorPosition { line: 0, column: 2 }, None);
+        let out = engine.apply_keys(
+            &snap,
+            &[KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)],
         );
-        let out = engine.apply_keys(&snap, &[KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)]);
         assert_eq!(out.content, "a");
         assert_eq!(out.cursor_position, CursorPosition { line: 0, column: 1 });
 
@@ -108,7 +111,10 @@ mod tests {
                 end: CursorPosition { line: 0, column: 4 },
             }),
         );
-        let out2 = engine.apply_keys(&with_sel, &[KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)]);
+        let out2 = engine.apply_keys(
+            &with_sel,
+            &[KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)],
+        );
         assert_eq!(out2.content, "ho");
         assert_eq!(out2.cursor_position, CursorPosition { line: 0, column: 1 });
     }

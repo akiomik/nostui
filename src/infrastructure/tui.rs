@@ -1,6 +1,7 @@
 pub mod event_source;
 pub mod real;
 pub mod test;
+pub mod textarea_engine;
 
 use std::future::Future;
 use std::io::{stdout, Stdout};

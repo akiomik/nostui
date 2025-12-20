@@ -1,17 +1,31 @@
 use std::mem;
 
-use crate::{
-    core::{
-        cmd::Cmd,
-        msg::{timeline::TimelineMsg, ui::UiMsg, user::UserMsg, Msg},
-        state::AppState,
-    },
-    presentation::components::home_input::HomeInput,
+use crate::core::{
+    cmd::Cmd,
+    msg::{timeline::TimelineMsg, ui::UiMsg, user::UserMsg, Msg},
+    state::AppState,
+    textarea_engine::{NoopTextAreaEngine, TextAreaEngine},
 };
 
-/// Elm-like update function
-/// Returns new state and list of commands from current state and message
-pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
+/// Dependencies required by the update function.
+pub struct UpdateContext<'a> {
+    pub text_area: &'a dyn TextAreaEngine,
+}
+
+impl<'a> Default for UpdateContext<'a> {
+    fn default() -> Self {
+        static NOOP: NoopTextAreaEngine = NoopTextAreaEngine;
+        UpdateContext { text_area: &NOOP }
+    }
+}
+
+/// Elm-like update function with explicit context dependencies
+#[allow(clippy::needless_pass_by_value)]
+pub fn update_with_context(
+    msg: Msg,
+    mut state: AppState,
+    ctx: &UpdateContext,
+) -> (AppState, Vec<Cmd>) {
     match msg {
         // System messages (delegated to SystemState)
         Msg::System(system_msg) => {
@@ -67,8 +81,7 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
                 if state.ui.is_composing() {
                     state.ui.pending_input_keys.push(key);
                     let keys = mem::take(&mut state.ui.pending_input_keys);
-                    state.ui.textarea =
-                        HomeInput::compute_textarea_snapshot_after_keys(&state, keys);
+                    state.ui.textarea = ctx.text_area.apply_keys(&state.ui.textarea, &keys);
                 }
                 (state, vec![])
             }
@@ -89,6 +102,12 @@ pub fn update(msg: Msg, mut state: AppState) -> (AppState, Vec<Cmd>) {
             (state, commands)
         }
     }
+}
+
+/// Backward-compatible wrapper using default UpdateContext
+pub fn update(msg: Msg, state: AppState) -> (AppState, Vec<Cmd>) {
+    let ctx = UpdateContext::default();
+    update_with_context(msg, state, &ctx)
 }
 
 // Timeline-related helper functions moved to src/core/state/timeline.rs
