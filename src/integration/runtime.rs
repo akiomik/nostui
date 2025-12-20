@@ -623,7 +623,7 @@ mod tests {
     #[test]
     fn test_execute_command_without_executor() {
         let runtime = create_test_runtime();
-        let cmd = Cmd::Tui(TuiCommand::Render);
+        let cmd = Cmd::LoadConfig;
 
         // Should fail without executor
         let result = runtime.execute_command(&cmd);
@@ -646,7 +646,7 @@ mod tests {
         assert!(runtime.get_stats().has_executor);
 
         // Should now be able to execute commands
-        let cmd = Cmd::Tui(TuiCommand::Render);
+        let cmd = Cmd::LoadConfig;
         let result = runtime.execute_command(&cmd);
         assert!(result.is_ok());
     }

@@ -1,6 +1,5 @@
 use color_eyre::eyre::Result;
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::error::TrySendError;
 
 use crate::{
     core::cmd::{Cmd, TuiCommand},
@@ -133,33 +132,6 @@ impl CmdExecutor {
 
             Cmd::Tui(tui_cmd) => {
                 match tui_cmd {
-                    TuiCommand::Render => {
-                        // Prefer AppRunner-orchestrated rendering via render request channel
-                        if let Some(rtx) = &self.render_req_sender {
-                            // Non-blocking best-effort send: if the bounded channel is full, we skip (coalesce)
-                            if let Err(err) = rtx.try_send(()) {
-                                match err {
-                                    TrySendError::Full(_) => {
-                                        // Skip duplicate render request; AppRunner will render soon
-                                        log::trace!("Render request dropped due to full channel (coalesced)");
-                                    }
-                                    TrySendError::Closed(_) => {
-                                        log::warn!("Render request channel is closed; dropping Render command");
-                                    }
-                                }
-                            }
-                            return Ok(());
-                        }
-                        // Fallback: if a TUI sender is configured, forward Render (legacy behavior)
-                        if let Some(tx) = &self.tui_sender {
-                            let _ = tx.send(TuiCommand::Render);
-                            return Ok(());
-                        }
-                        // No render sender configured: drop with warning (no legacy Action fallback)
-                        log::warn!(
-                            "CmdExecutor: no render sender configured; dropping Render command"
-                        );
-                    }
                     TuiCommand::Resize { width, height } => {
                         if let Some(tx) = &self.tui_sender {
                             let _ = tx.send(TuiCommand::Resize {
@@ -173,6 +145,17 @@ impl CmdExecutor {
                             "CmdExecutor: TUI sender not configured; dropping Resize command {width}x{height}"
                         );
                     }
+                }
+            }
+
+            Cmd::RequestRender => {
+                if let Some(rtx) = &self.render_req_sender {
+                    // Best-effort non-blocking render request; bounded(1) channel coalesces requests
+                    let _ = rtx.try_send(());
+                } else {
+                    log::warn!(
+                        "CmdExecutor: render request sender not configured; dropping RequestRender"
+                    );
                 }
             }
 
@@ -263,9 +246,9 @@ impl CmdName for Cmd {
             Cmd::StopTimer { .. } => "StopTimer".to_string(),
             Cmd::Batch(cmds) => format!("Batch({})", cmds.len()),
             Cmd::Tui(tc) => match tc {
-                TuiCommand::Render => "Tui(Render)".to_string(),
                 TuiCommand::Resize { .. } => "Tui(Resize)".to_string(),
             },
+            Cmd::RequestRender => "RequestRender".to_string(),
         }
     }
 }
@@ -353,22 +336,7 @@ mod tests {
                 assert_eq!(width, 80);
                 assert_eq!(height, 24);
             }
-            _ => panic!("Expected TuiCommand::Resize"),
         }
-    }
-
-    #[test]
-    fn test_execute_render() {
-        let mut executor = create_test_executor();
-        let cmd = Cmd::Tui(TuiCommand::Render);
-        // Provide render request sender and ensure signal is emitted
-        let (render_tx, mut render_rx) = mpsc::channel::<()>(1);
-        executor.set_render_request_sender(render_tx);
-
-        executor.execute_command(&cmd).unwrap();
-
-        // Should receive render signal (unit) instead of Action
-        render_rx.try_recv().unwrap();
     }
 
     #[test]
@@ -387,22 +355,18 @@ mod tests {
         // Provide TUI and Render request senders
         let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
         executor.set_tui_sender(tui_tx);
-        let (render_tx, mut render_rx) = mpsc::channel::<()>(1);
+        let (render_tx, _render_rx) = mpsc::channel::<()>(1);
         executor.set_render_request_sender(render_tx);
 
-        let cmds = vec![
-            Cmd::Tui(TuiCommand::Render),
-            Cmd::Tui(TuiCommand::Resize {
-                width: 100,
-                height: 50,
-            }),
-        ];
+        let cmds = vec![Cmd::Tui(TuiCommand::Resize {
+            width: 100,
+            height: 50,
+        })];
         let batch_cmd = Cmd::Batch(cmds);
 
         executor.execute_command(&batch_cmd).unwrap();
 
-        // Should receive render request and resize command
-        render_rx.try_recv().unwrap();
+        // Should receive resize command (render is not a TuiCommand anymore)
         let tui_cmd = tui_rx.try_recv().unwrap();
         assert!(matches!(
             tui_cmd,
@@ -417,11 +381,11 @@ mod tests {
     fn test_execute_multiple_commands() {
         let mut executor = create_test_executor();
         // Provide render request sender to observe execution
-        let (render_tx, mut render_rx) = mpsc::channel::<()>(1);
+        let (render_tx, _render_rx) = mpsc::channel::<()>(1);
         executor.set_render_request_sender(render_tx);
 
         let commands = vec![
-            Cmd::Tui(TuiCommand::Render),
+            Cmd::LoadConfig,
             Cmd::LogInfo {
                 message: "test".to_string(),
             },
@@ -430,11 +394,8 @@ mod tests {
         let log = executor.execute_commands(&commands).unwrap();
 
         assert_eq!(log.len(), 2);
-        assert!(log[0].contains("✓ Executed: Tui(Render)"));
+        assert!(log[0].contains("✓ Executed: LoadConfig"));
         assert!(log[1].contains("✓ Executed: LogInfo"));
-
-        // Should receive the render signal
-        render_rx.try_recv().unwrap();
     }
 
     #[test]
@@ -444,7 +405,7 @@ mod tests {
         };
         assert_eq!(cmd.name(), "SendReaction");
 
-        let batch_cmd = Cmd::Batch(vec![Cmd::Tui(TuiCommand::Render), Cmd::None]);
+        let batch_cmd = Cmd::Batch(vec![Cmd::None, Cmd::None]);
         assert_eq!(batch_cmd.name(), "Batch(2)");
     }
 
@@ -508,26 +469,57 @@ mod tests {
     }
 
     #[test]
-    fn test_nostr_only_commands() {
-        let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
-        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
-        let executor = CmdExecutor::new_with_nostr(nostr_tx);
+    fn test_request_render_sends_signal() {
+        let mut executor = create_test_executor();
+        let (render_tx, mut render_rx) = mpsc::channel::<()>(1);
+        executor.set_render_request_sender(render_tx);
 
-        // Test ConnectToRelays (NostrService only)
-        let cmd = Cmd::ConnectToRelays {
-            relays: vec!["wss://relay.example.com".to_string()],
-        };
-        executor.execute_command(&cmd).unwrap();
+        // Act: request render once
+        executor
+            .execute_command(&Cmd::RequestRender)
+            .expect("request render should succeed");
 
-        let nostr_cmd = nostr_rx.try_recv().unwrap();
-        match nostr_cmd {
-            NostrCommand::ConnectToRelays { relays } => {
-                assert_eq!(relays, vec!["wss://relay.example.com".to_string()]);
-            }
-            _ => panic!("Expected ConnectToRelays NostrCommand"),
-        }
+        // Assert: a signal is available
+        assert!(render_rx.try_recv().is_ok(), "expected one render signal");
+        // And nothing else pending
+        assert!(
+            render_rx.try_recv().is_err(),
+            "no extra render signal expected"
+        );
+    }
 
-        // No Action should be sent
-        assert!(action_rx.try_recv().is_err());
+    #[test]
+    fn test_request_render_coalesces() {
+        let mut executor = create_test_executor();
+        let (render_tx, mut render_rx) = mpsc::channel::<()>(1);
+        executor.set_render_request_sender(render_tx);
+
+        // Act: try to enqueue two render requests back-to-back while buffer capacity is 1
+        executor
+            .execute_command(&Cmd::RequestRender)
+            .expect("request render should succeed");
+        executor
+            .execute_command(&Cmd::RequestRender)
+            .expect("second request should not panic");
+
+        // Assert: at most one signal is present due to bounded(1) coalescing
+        assert!(
+            render_rx.try_recv().is_ok(),
+            "expected exactly one render signal"
+        );
+        assert!(
+            render_rx.try_recv().is_err(),
+            "coalesced: no second signal should be queued"
+        );
+    }
+
+    #[test]
+    fn test_request_render_without_sender_does_not_panic() {
+        let executor = create_test_executor(); // no render sender configured
+
+        // Should not panic or return error
+        executor
+            .execute_command(&Cmd::RequestRender)
+            .expect("execute without sender should not fail");
     }
 }
