@@ -54,15 +54,6 @@ pub enum Cmd {
         message: String,
     },
 
-    // Time related
-    StartTimer {
-        id: String,
-        duration_ms: u64,
-    },
-    StopTimer {
-        id: String,
-    },
-
     // Batch command (execute multiple commands together)
     Batch(Vec<Cmd>),
 
@@ -96,8 +87,6 @@ impl Cmd {
             | Cmd::RequestRender
             | Cmd::LogError { .. }
             | Cmd::LogInfo { .. }
-            | Cmd::StartTimer { .. }
-            | Cmd::StopTimer { .. }
             | Cmd::None => false,
 
             Cmd::Batch(cmds) => cmds.iter().any(|cmd| cmd.is_async()),
@@ -119,11 +108,8 @@ impl Cmd {
             // File operations have low priority
             Cmd::SaveConfig | Cmd::LoadConfig => 3,
 
-            // Logging and timers have lowest priority
-            Cmd::LogError { .. }
-            | Cmd::LogInfo { .. }
-            | Cmd::StartTimer { .. }
-            | Cmd::StopTimer { .. } => 4,
+            // Logging have lowest priority
+            Cmd::LogError { .. } | Cmd::LogInfo { .. } => 4,
 
             // Batch takes highest priority of contained commands
             Cmd::Batch(cmds) => cmds.iter().map(|cmd| cmd.priority()).min().unwrap_or(255),
