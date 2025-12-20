@@ -246,7 +246,7 @@ fn test_batch_command_execution() -> Result<()> {
     // Route TUI and Render requests through dedicated channels BEFORE execution
     let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
     executor.set_tui_sender(tui_tx);
-    let (render_tx, mut render_rx) = mpsc::unbounded_channel::<()>();
+    let (render_tx, mut render_rx) = mpsc::channel::<()>(1);
     executor.set_render_request_sender(render_tx);
 
     executor.execute_command(&batch_cmd)?;
