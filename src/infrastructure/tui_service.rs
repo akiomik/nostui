@@ -6,7 +6,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::{core::cmd::TuiCommand, infrastructure::tui};
+use crate::{core::cmd::TuiCmd, infrastructure::tui};
 
 /// Thin facade around the TUI backend to execute rendering-related commands.
 /// When no TUI is available (headless), methods are no-ops.
@@ -25,21 +25,21 @@ impl TuiService {
     pub fn new_with_channel(
         inner: Arc<Mutex<dyn tui::TuiLike + Send>>,
     ) -> (
-        mpsc::UnboundedSender<TuiCommand>,
-        mpsc::UnboundedReceiver<TuiCommand>,
+        mpsc::UnboundedSender<TuiCmd>,
+        mpsc::UnboundedReceiver<TuiCmd>,
         Self,
     ) {
         let (tx, rx) = mpsc::unbounded_channel();
         (tx, rx, Self { inner })
     }
 
-    /// Run background loop consuming TuiCommand from the given receiver.
-    pub fn run(self, mut rx: mpsc::UnboundedReceiver<TuiCommand>) -> JoinHandle<()> {
+    /// Run background loop consuming TuiCmd from the given receiver.
+    pub fn run(self, mut rx: mpsc::UnboundedReceiver<TuiCmd>) -> JoinHandle<()> {
         tokio::spawn(async move {
             while let Some(cmd) = rx.recv().await {
                 match cmd {
                     // Render variant does not exist (rendering is orchestrated by AppRunner)
-                    TuiCommand::Resize { width, height } => {
+                    TuiCmd::Resize { width, height } => {
                         let mut tui = self.inner.lock().await;
                         let _ = tui.resize(Rect::new(0, 0, width, height));
                     }
@@ -122,7 +122,7 @@ mod tests {
         let (svc, _t) = make_service_with_test_tui(80, 24);
         let (tx, rx) = mpsc::unbounded_channel();
         let _h = svc.clone().run(rx);
-        tx.send(TuiCommand::Resize {
+        tx.send(TuiCmd::Resize {
             width: 100,
             height: 40,
         })

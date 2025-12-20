@@ -1,5 +1,5 @@
 use crate::core::{
-    cmd::{Cmd, TuiCommand},
+    cmd::{Cmd, TuiCmd},
     msg::system::SystemMsg,
 };
 
@@ -69,7 +69,7 @@ impl SystemState {
 
             SystemMsg::Resize(width, height) => {
                 // Resize generates a TUI resize command
-                vec![Cmd::Tui(TuiCommand::Resize { width, height })]
+                vec![Cmd::Tui(TuiCmd::Resize { width, height })]
             }
 
             // Status management
@@ -145,7 +145,7 @@ mod tests {
 
         assert_eq!(cmds.len(), 1);
         match &cmds[0] {
-            Cmd::Tui(TuiCommand::Resize { width, height }) => {
+            Cmd::Tui(TuiCmd::Resize { width, height }) => {
                 assert_eq!(*width, 80);
                 assert_eq!(*height, 24);
             }
