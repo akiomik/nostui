@@ -14,6 +14,10 @@ pub enum TuiCommand {
 
 /// Elm-like command definitions
 /// Represents side effects (network communication, file I/O, etc.)
+/// Note on duplication: Some command names also appear in infrastructure-level commands (e.g. NostrCommand).
+/// This is intentional — Cmd captures application intent (what to do), while infrastructure commands capture
+/// execution details (how to do it). Keeping both layers separate improves testability and allows swapping
+/// infrastructure without leaking external types into the domain.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Cmd {
     // Nostr-related commands
