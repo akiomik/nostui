@@ -167,16 +167,6 @@ impl CmdExecutor {
                 log::info!("Elm command info: {message}");
             }
 
-            Cmd::StartTimer { id, duration_ms } => {
-                log::info!("Start timer {id} for {duration_ms}ms");
-                // TODO: Implement timer system
-            }
-
-            Cmd::StopTimer { id } => {
-                log::info!("Stop timer {id}");
-                // TODO: Implement timer system
-            }
-
             Cmd::Batch(commands) => {
                 for cmd in commands {
                     self.execute_command(cmd)?;
@@ -242,8 +232,6 @@ impl CmdName for Cmd {
             Cmd::LoadConfig => "LoadConfig".to_string(),
             Cmd::LogError { .. } => "LogError".to_string(),
             Cmd::LogInfo { .. } => "LogInfo".to_string(),
-            Cmd::StartTimer { .. } => "StartTimer".to_string(),
-            Cmd::StopTimer { .. } => "StopTimer".to_string(),
             Cmd::Batch(cmds) => format!("Batch({})", cmds.len()),
             Cmd::Tui(tc) => match tc {
                 TuiCommand::Resize { .. } => "Tui(Resize)".to_string(),
