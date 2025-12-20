@@ -32,8 +32,6 @@ pub struct AppRunner<'a> {
     renderer: Renderer<'a>,
     // For service termination
     nostr_terminate_tx: mpsc::UnboundedSender<()>,
-    // Incoming events from Nostr network
-    nostr_event_rx: mpsc::UnboundedReceiver<Event>,
     // FPS service sending RawMsg updates
     fps_service: FpsService,
     // Coalesced pending resize (last-only within a loop)
@@ -75,7 +73,7 @@ impl<'a> AppRunner<'a> {
 
         // Initialize NostrService and start it in background
         let conn = Connection::new(keys.clone(), config.relays.clone()).await?;
-        let (nostr_event_rx, nostr_cmd_tx, nostr_terminate_tx, nostr_service) =
+        let (nostr_cmd_tx, nostr_terminate_tx, nostr_service) =
             NostrService::new(conn, keys.clone(), raw_tx.clone())?;
         nostr_service.run();
 
@@ -108,7 +106,6 @@ impl<'a> AppRunner<'a> {
             // (currently CmdExecutor falls back to Action until wiring is complete)
             renderer: Renderer::new(),
             nostr_terminate_tx,
-            nostr_event_rx,
             fps_service,
             pending_resize: None,
         })
@@ -121,13 +118,6 @@ impl<'a> AppRunner<'a> {
             n += 1;
         }
         n
-    }
-
-    /// Drain all pending Nostr events and forward to runtime as RawMsg
-    fn drain_nostr_events(&mut self) {
-        while let Ok(ev) = self.nostr_event_rx.try_recv() {
-            self.runtime.send_raw_msg(RawMsg::ReceiveEvent(ev));
-        }
     }
 
     /// Handle a single TUI event and update should_render flag accordingly
@@ -209,10 +199,7 @@ impl<'a> AppRunner<'a> {
             let queued = self.drain_render_req_count();
             let mut render_flag = false;
 
-            // 2) Drain Nostr events first to keep timeline responsive
-            self.drain_nostr_events();
-
-            // 3) Poll one TUI event and handle it
+            // 2) Poll one TUI event and handle it
             if let Some(e) = self.poll_next_tui_event().await {
                 if let tui::Event::Render = e {
                     render_flag = true;
@@ -220,14 +207,14 @@ impl<'a> AppRunner<'a> {
                 self.handle_tui_event(e, &mut render_flag);
             }
 
-            // 4) Process Elm update cycle and execute commands
+            // 3) Process Elm update cycle and execute commands
             UpdateExecutor::process_update_cycle(&mut self.runtime, &mut self.pending_resize);
 
-            // 5) Execute coalesced render if requested
+            // 4) Execute coalesced render if requested
             let should_render = Coalescer::decide_render(queued, render_flag);
             self.maybe_render(should_render).await?;
 
-            // 6) Check quit condition from Elm state
+            // 5) Check quit condition from Elm state
             if self.should_quit() {
                 break;
             }
@@ -297,7 +284,6 @@ mod tests {
         // Manually perform one logical cycle using extracted helpers
         let _queued = runner.drain_render_req_count();
         let mut render_flag = false;
-        runner.drain_nostr_events();
         if let Some(e) = runner.poll_next_tui_event().await {
             if let tui::Event::Render = e {
                 render_flag = true;

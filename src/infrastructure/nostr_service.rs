@@ -20,12 +20,10 @@ pub struct NostrService {
     op_rx: mpsc::UnboundedReceiver<NostrOperation>,
     terminate_rx: mpsc::UnboundedReceiver<()>,
     // Outgoing channels
-    event_tx: mpsc::UnboundedSender<Event>, // For received events
-    raw_tx: mpsc::UnboundedSender<RawMsg>,  // For Elm RawMsg notifications
+    raw_tx: mpsc::UnboundedSender<RawMsg>, // For RawMsg notifications
 }
 
 pub type NewNostrService = (
-    mpsc::UnboundedReceiver<Event>,        // req_rx - received events
     mpsc::UnboundedSender<NostrOperation>, // op_tx - operations to send
     mpsc::UnboundedSender<()>,             // terminate_tx - shutdown signal
     NostrService,
@@ -38,12 +36,10 @@ impl NostrService {
         keys: Keys,
         raw_tx: mpsc::UnboundedSender<RawMsg>,
     ) -> Result<NewNostrService> {
-        let (event_tx, event_rx) = mpsc::unbounded_channel();
         let (op_tx, op_rx) = mpsc::unbounded_channel();
         let (terminate_tx, terminate_rx) = mpsc::unbounded_channel();
 
         Ok((
-            event_rx,
             op_tx,
             terminate_tx,
             Self {
@@ -51,7 +47,6 @@ impl NostrService {
                 keys,
                 op_rx,
                 terminate_rx,
-                event_tx,
                 raw_tx,
             },
         ))
@@ -78,7 +73,7 @@ impl NostrService {
             // Handle received events from timeline
             while let Ok(notification) = timeline.try_recv() {
                 if let RelayPoolNotification::Event { event, .. } = notification {
-                    if let Err(_e) = self.event_tx.send(*event) {
+                    if let Err(_e) = self.raw_tx.send(RawMsg::ReceiveEvent(*event)) {
                         // log::error!("Failed to send received event: {}", e);
                     }
                 }
@@ -264,10 +259,9 @@ mod tests {
         let result = NostrService::new(conn, keys, action_tx);
         assert!(result.is_ok());
 
-        let (mut event_rx, op_tx, terminate_tx, _service) = result.unwrap();
+        let (op_tx, terminate_tx, _service) = result.unwrap();
 
         // Verify channels are created
-        assert!(event_rx.try_recv().is_err()); // Should be empty initially
         assert!(op_tx.send(NostrOperation::SubscribeToTimeline).is_ok());
         assert!(terminate_tx.send(()).is_ok());
     }
