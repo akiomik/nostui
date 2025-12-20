@@ -3,15 +3,15 @@ use tokio::sync::mpsc;
 
 use crate::{
     core::cmd::{Cmd, TuiCmd},
-    infrastructure::nostr_command::NostrCommand,
+    infrastructure::nostr::NostrOperation,
 };
 
 use super::cmd::NostrCmd;
 
-/// Command executor that bridges Elm commands to Action and NostrCommand systems
+/// Command executor that bridges Elm commands to Action and NostrOperation systems
 #[derive(Clone, Default)]
 pub struct CmdExecutor {
-    nostr_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
+    nostr_sender: Option<mpsc::UnboundedSender<NostrOperation>>,
     tui_sender: Option<mpsc::UnboundedSender<TuiCmd>>,
     render_req_sender: Option<mpsc::Sender<()>>,
 }
@@ -26,8 +26,8 @@ impl CmdExecutor {
         }
     }
 
-    /// Create a new command executor with NostrCommand support
-    pub fn new_with_nostr(nostr_sender: mpsc::UnboundedSender<NostrCommand>) -> Self {
+    /// Create a new command executor with NostrOperation support
+    pub fn new_with_nostr(nostr_sender: mpsc::UnboundedSender<NostrOperation>) -> Self {
         Self {
             nostr_sender: Some(nostr_sender),
             tui_sender: None,
@@ -35,8 +35,8 @@ impl CmdExecutor {
         }
     }
 
-    /// Add NostrCommand support to existing executor
-    pub fn set_nostr_sender(&mut self, nostr_sender: mpsc::UnboundedSender<NostrCommand>) {
+    /// Add NostrOperation support to existing executor
+    pub fn set_nostr_sender(&mut self, nostr_sender: mpsc::UnboundedSender<NostrOperation>) {
         self.nostr_sender = Some(nostr_sender);
     }
 
@@ -50,7 +50,7 @@ impl CmdExecutor {
         self.render_req_sender = Some(sender);
     }
 
-    /// Execute a single command by converting it to appropriate Action or NostrCommand
+    /// Execute a single command by converting it to appropriate Action or NostrOperation
     pub fn execute_command(&self, cmd: &Cmd) -> Result<()> {
         match cmd {
             Cmd::None => {
@@ -62,7 +62,7 @@ impl CmdExecutor {
                 match nostr_cmd {
                     NostrCmd::SendReaction { target_event } => {
                         if let Some(nostr_sender) = &self.nostr_sender {
-                            let nostr_cmd = NostrCommand::like(target_event.clone());
+                            let nostr_cmd = NostrOperation::like(target_event.clone());
                             nostr_sender.send(nostr_cmd)?;
                         } else {
                             // No NostrService available: drop with warning (no legacy Action fallback)
@@ -72,7 +72,7 @@ impl CmdExecutor {
 
                     NostrCmd::SendRepost { target_event } => {
                         if let Some(nostr_sender) = &self.nostr_sender {
-                            let nostr_cmd = NostrCommand::repost(target_event.clone(), None);
+                            let nostr_cmd = NostrOperation::repost(target_event.clone(), None);
                             nostr_sender.send(nostr_cmd)?;
                         } else {
                             // No NostrService available: drop with warning (no legacy Action fallback)
@@ -86,9 +86,12 @@ impl CmdExecutor {
                             );
                         if let Some(nostr_sender) = &self.nostr_sender {
                             log::info!("CmdExecutor: Routing to NostrService");
-                            let nostr_cmd = NostrCommand::text_note(content.clone(), tags.clone());
+                            let nostr_cmd =
+                                NostrOperation::text_note(content.clone(), tags.clone());
                             nostr_sender.send(nostr_cmd)?;
-                            log::info!("CmdExecutor: Successfully sent NostrCommand::SendTextNote");
+                            log::info!(
+                                "CmdExecutor: Successfully sent NostrOperation::SendTextNote"
+                            );
                         } else {
                             // No NostrService available: drop with warning (no legacy Action fallback)
                             log::warn!("SendTextNote ignored: NostrService not available");
@@ -97,7 +100,7 @@ impl CmdExecutor {
 
                     NostrCmd::ConnectToRelays { relays } => {
                         if let Some(nostr_sender) = &self.nostr_sender {
-                            let nostr_cmd = NostrCommand::connect_relays(relays.clone());
+                            let nostr_cmd = NostrOperation::connect_relays(relays.clone());
                             nostr_sender.send(nostr_cmd)?;
                         } else {
                             log::warn!(
@@ -108,7 +111,7 @@ impl CmdExecutor {
 
                     NostrCmd::DisconnectFromRelays => {
                         if let Some(nostr_sender) = &self.nostr_sender {
-                            let nostr_cmd = NostrCommand::DisconnectFromRelays;
+                            let nostr_cmd = NostrOperation::DisconnectFromRelays;
                             nostr_sender.send(nostr_cmd)?;
                         } else {
                             log::warn!(
@@ -119,7 +122,7 @@ impl CmdExecutor {
 
                     NostrCmd::SubscribeToTimeline => {
                         if let Some(nostr_sender) = &self.nostr_sender {
-                            let nostr_cmd = NostrCommand::SubscribeToTimeline;
+                            let nostr_cmd = NostrOperation::SubscribeToTimeline;
                             nostr_sender.send(nostr_cmd)?;
                         } else {
                             log::warn!(
@@ -275,7 +278,7 @@ mod tests {
 
     #[test]
     fn test_execute_send_reaction() {
-        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let executor = CmdExecutor::new_with_nostr(nostr_tx);
         let event = create_test_event();
         let cmd = Cmd::Nostr(NostrCmd::SendReaction {
@@ -286,20 +289,20 @@ mod tests {
 
         let nostr_cmd = nostr_rx.try_recv().unwrap();
         match nostr_cmd {
-            NostrCommand::SendReaction {
+            NostrOperation::SendReaction {
                 target_event: received_event,
                 content,
             } => {
                 assert_eq!(received_event.id, event.id);
                 assert_eq!(content, "+");
             }
-            _ => panic!("Expected SendReaction NostrCommand"),
+            _ => panic!("Expected SendReaction NostrOperation"),
         }
     }
 
     #[test]
     fn test_execute_send_text_note() {
-        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let executor = CmdExecutor::new_with_nostr(nostr_tx);
         let cmd = Cmd::Nostr(NostrCmd::SendTextNote {
             content: "Hello, Nostr!".to_string(),
@@ -310,11 +313,11 @@ mod tests {
 
         let nostr_cmd = nostr_rx.try_recv().unwrap();
         match nostr_cmd {
-            NostrCommand::SendTextNote { tags, content } => {
+            NostrOperation::SendTextNote { tags, content } => {
                 assert_eq!(content, "Hello, Nostr!".to_string());
                 assert!(tags.is_empty());
             }
-            _ => panic!("Expected SendReaction NostrCommand"),
+            _ => panic!("Expected SendReaction NostrOperation"),
         }
     }
 
@@ -423,7 +426,7 @@ mod tests {
     #[test]
     fn test_executor_with_nostr_sender() {
         let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
-        let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let executor = CmdExecutor::new_with_nostr(nostr_tx);
 
         let stats = executor.get_stats();
@@ -433,7 +436,7 @@ mod tests {
 
     #[test]
     fn test_nostr_command_routing() {
-        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let executor = CmdExecutor::new_with_nostr(nostr_tx);
 
         let target_event = create_test_event();
@@ -441,23 +444,21 @@ mod tests {
             target_event: target_event.clone(),
         });
 
-        // Should route to NostrCommand, not Action
+        // Should route to NostrOperation
         executor.execute_command(&cmd).unwrap();
 
-        // NostrCommand should be sent
-        let nostr_cmd = nostr_rx.try_recv().unwrap();
-        match nostr_cmd {
-            NostrCommand::SendReaction {
+        // NostrOperation should be sent
+        let nostr_op = nostr_rx.try_recv().unwrap();
+        match nostr_op {
+            NostrOperation::SendReaction {
                 target_event: received_event,
                 content,
             } => {
                 assert_eq!(received_event.id, target_event.id);
                 assert_eq!(content, "+");
             }
-            _ => panic!("Expected SendReaction NostrCommand"),
+            _ => panic!("Expected SendReaction NostrOperation"),
         }
-
-        // No Action channel anymore; ensure only NostrCommand was sent
     }
 
     #[test]
