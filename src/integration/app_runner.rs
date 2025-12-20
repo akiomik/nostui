@@ -24,7 +24,7 @@ use crate::{
 pub struct AppRunner<'a> {
     /* lifetime used by Home */
     runtime: Runtime,
-    render_req_rx: mpsc::UnboundedReceiver<()>,
+    render_req_rx: mpsc::Receiver<()>,
     // NOTE: In tests or non-interactive environments, TUI can be absent.
     tui: Arc<Mutex<dyn tui::TuiLike + Send>>,
     event_source: EventSource,
@@ -84,7 +84,8 @@ impl<'a> AppRunner<'a> {
         let fps_service = FpsService::new(raw_tx);
 
         // Render request channel from CmdExecutor -> AppRunner
-        let (render_req_tx, render_req_rx) = mpsc::unbounded_channel::<()>();
+        // Use bounded(1) channel to coalesce render requests and prevent unbounded growth
+        let (render_req_tx, render_req_rx) = mpsc::channel::<()>(1);
         let _ = runtime.add_render_request_sender(render_req_tx);
 
         // TUI is injected by caller (RealTui for interactive, TestTui for tests)

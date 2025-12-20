@@ -144,7 +144,7 @@ impl Runtime {
     /// Add render request sender for orchestrated rendering in AppRunner
     pub fn add_render_request_sender(
         &mut self,
-        render_sender: mpsc::UnboundedSender<()>,
+        render_sender: mpsc::Sender<()>,
     ) -> Result<(), String> {
         if let Some(executor) = &mut self.cmd_executor {
             executor.set_render_request_sender(render_sender);

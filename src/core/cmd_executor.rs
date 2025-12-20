@@ -1,5 +1,6 @@
 use color_eyre::eyre::Result;
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::error::TrySendError;
 
 use crate::{
     core::cmd::{Cmd, TuiCommand},
@@ -11,7 +12,7 @@ use crate::{
 pub struct CmdExecutor {
     nostr_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
     tui_sender: Option<mpsc::UnboundedSender<TuiCommand>>,
-    render_req_sender: Option<mpsc::UnboundedSender<()>>,
+    render_req_sender: Option<mpsc::Sender<()>>,
 }
 
 impl CmdExecutor {
@@ -44,7 +45,7 @@ impl CmdExecutor {
     }
 
     /// Inject render request sender for AppRunner-orchestrated rendering.
-    pub fn set_render_request_sender(&mut self, sender: mpsc::UnboundedSender<()>) {
+    pub fn set_render_request_sender(&mut self, sender: mpsc::Sender<()>) {
         self.render_req_sender = Some(sender);
     }
 
@@ -135,7 +136,18 @@ impl CmdExecutor {
                     TuiCommand::Render => {
                         // Prefer AppRunner-orchestrated rendering via render request channel
                         if let Some(rtx) = &self.render_req_sender {
-                            let _ = rtx.send(());
+                            // Non-blocking best-effort send: if the bounded channel is full, we skip (coalesce)
+                            if let Err(err) = rtx.try_send(()) {
+                                match err {
+                                    TrySendError::Full(_) => {
+                                        // Skip duplicate render request; AppRunner will render soon
+                                        log::trace!("Render request dropped due to full channel (coalesced)");
+                                    }
+                                    TrySendError::Closed(_) => {
+                                        log::warn!("Render request channel is closed; dropping Render command");
+                                    }
+                                }
+                            }
                             return Ok(());
                         }
                         // Fallback: if a TUI sender is configured, forward Render (legacy behavior)
@@ -350,7 +362,7 @@ mod tests {
         let mut executor = create_test_executor();
         let cmd = Cmd::Tui(TuiCommand::Render);
         // Provide render request sender and ensure signal is emitted
-        let (render_tx, mut render_rx) = mpsc::unbounded_channel::<()>();
+        let (render_tx, mut render_rx) = mpsc::channel::<()>(1);
         executor.set_render_request_sender(render_tx);
 
         executor.execute_command(&cmd).unwrap();
@@ -375,7 +387,7 @@ mod tests {
         // Provide TUI and Render request senders
         let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
         executor.set_tui_sender(tui_tx);
-        let (render_tx, mut render_rx) = mpsc::unbounded_channel::<()>();
+        let (render_tx, mut render_rx) = mpsc::channel::<()>(1);
         executor.set_render_request_sender(render_tx);
 
         let cmds = vec![
@@ -405,7 +417,7 @@ mod tests {
     fn test_execute_multiple_commands() {
         let mut executor = create_test_executor();
         // Provide render request sender to observe execution
-        let (render_tx, mut render_rx) = mpsc::unbounded_channel::<()>();
+        let (render_tx, mut render_rx) = mpsc::channel::<()>(1);
         executor.set_render_request_sender(render_tx);
 
         let commands = vec![
