@@ -5,6 +5,7 @@
 //! - Legacy code (for gradual removal)
 
 pub mod app_runner;
+pub mod cmd_executor;
 pub mod coalescer;
 pub mod renderer;
 pub mod runtime;

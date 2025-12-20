@@ -1,7 +1,7 @@
 use tokio::sync::mpsc;
 
 use nostui::core::cmd::{Cmd, TuiCmd};
-use nostui::core::cmd_executor::CmdExecutor;
+use nostui::integration::cmd_executor::CmdExecutor;
 
 #[tokio::test]
 async fn cmd_executor_sends_tui_command_when_sender_is_present() {
