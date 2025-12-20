@@ -4,8 +4,12 @@ use nostr_sdk::prelude::*;
 
 use crate::core::state::ui::{SubmitData, UiMode};
 use crate::{
-    core::msg::Msg, core::raw_msg::RawMsg, core::state::AppState,
-    core::translator::translate_raw_to_domain, core::update::update,
+    core::msg::Msg,
+    core::raw_msg::RawMsg,
+    core::state::AppState,
+    core::translator::translate_raw_to_domain,
+    core::update::{update_with_context, UpdateContext},
+    infrastructure::tui::textarea_engine::TuiTextAreaEngine,
     presentation::components::home_input::HomeInput,
 };
 
@@ -14,6 +18,7 @@ use crate::{
 pub struct TextAreaTestHelper<'a> {
     input: HomeInput<'a>,
     state: AppState,
+    engine: TuiTextAreaEngine,
 }
 
 impl<'a> TextAreaTestHelper<'a> {
@@ -22,7 +27,12 @@ impl<'a> TextAreaTestHelper<'a> {
         let dummy_pubkey = Self::create_test_pubkey();
         let state = AppState::new(dummy_pubkey);
         let input = HomeInput::new();
-        Self { input, state }
+        let engine = TuiTextAreaEngine;
+        Self {
+            input,
+            state,
+            engine,
+        }
     }
 
     /// Create a test helper with specific input content
@@ -88,7 +98,10 @@ impl<'a> TextAreaTestHelper<'a> {
 
         // Process each message through the update cycle
         for msg in messages {
-            let (new_state, _cmds) = update(msg, self.state.clone());
+            let ctx = UpdateContext {
+                text_area: &self.engine,
+            };
+            let (new_state, _cmds) = update_with_context(msg, self.state.clone(), &ctx);
             self.state = new_state;
         }
 
@@ -101,7 +114,10 @@ impl<'a> TextAreaTestHelper<'a> {
         // Route navigation via the normal translator→update path
         let messages = translate_raw_to_domain(RawMsg::Key(key), &self.state);
         for msg in messages {
-            let (new_state, _cmds) = update(msg, self.state.clone());
+            let ctx = UpdateContext {
+                text_area: &self.engine,
+            };
+            let (new_state, _cmds) = update_with_context(msg, self.state.clone(), &ctx);
             self.state = new_state;
         }
         self.sync_state();
@@ -134,7 +150,10 @@ impl<'a> TextAreaTestHelper<'a> {
 
     /// Send a message through the update cycle
     pub fn send_message(&mut self, msg: Msg) -> &mut Self {
-        let (new_state, _cmds) = update(msg, self.state.clone());
+        let ctx = UpdateContext {
+            text_area: &self.engine,
+        };
+        let (new_state, _cmds) = update_with_context(msg, self.state.clone(), &ctx);
         self.state = new_state;
         self.sync_state();
         self

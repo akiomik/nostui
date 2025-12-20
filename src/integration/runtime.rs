@@ -9,13 +9,14 @@ use crate::{
         raw_msg::RawMsg,
         state::AppState,
         translator::translate_raw_to_domain,
-        update::update,
+        update::{update_with_context, UpdateContext},
     },
-    infrastructure::nostr_command::NostrCommand,
+    infrastructure::{nostr_command::NostrCommand, tui::textarea_engine::TuiTextAreaEngine},
 };
 
 /// Integration point between Elm architecture runtime and existing app
 pub struct Runtime {
+    ctx: UpdateContext<'static>,
     state: AppState,
     msg_queue: VecDeque<Msg>,
     raw_msg_queue: VecDeque<RawMsg>,
@@ -30,10 +31,12 @@ pub struct Runtime {
 impl Runtime {
     /// Create a new Runtime
     pub fn new(initial_state: AppState) -> Self {
+        static ENGINE: TuiTextAreaEngine = TuiTextAreaEngine;
         let (msg_tx, msg_rx) = mpsc::unbounded_channel();
         let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
 
         Self {
+            ctx: UpdateContext { text_area: &ENGINE },
             state: initial_state,
             msg_queue: VecDeque::new(),
             raw_msg_queue: VecDeque::new(),
@@ -48,11 +51,13 @@ impl Runtime {
 
     /// Create a new Runtime with command executor
     pub fn new_with_executor(initial_state: AppState) -> Self {
+        static ENGINE: TuiTextAreaEngine = TuiTextAreaEngine;
         let (msg_tx, msg_rx) = mpsc::unbounded_channel();
         let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
         let executor = CmdExecutor::new();
 
         Self {
+            ctx: UpdateContext { text_area: &ENGINE },
             state: initial_state,
             msg_queue: VecDeque::new(),
             raw_msg_queue: VecDeque::new(),
@@ -70,11 +75,13 @@ impl Runtime {
         initial_state: AppState,
         nostr_sender: mpsc::UnboundedSender<NostrCommand>,
     ) -> Self {
+        static ENGINE: TuiTextAreaEngine = TuiTextAreaEngine;
         let (msg_tx, msg_rx) = mpsc::unbounded_channel();
         let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
         let executor = CmdExecutor::new_with_nostr(nostr_sender);
 
         Self {
+            ctx: UpdateContext { text_area: &ENGINE },
             state: initial_state,
             msg_queue: VecDeque::new(),
             raw_msg_queue: VecDeque::new(),
@@ -212,7 +219,7 @@ impl Runtime {
 
     /// Process a single message
     pub fn process_message(&mut self, msg: Msg) -> Vec<Cmd> {
-        let (new_state, commands) = update(msg, self.state.clone());
+        let (new_state, commands) = update_with_context(msg, self.state.clone(), &self.ctx);
         self.state = new_state;
 
         // Add commands to queue

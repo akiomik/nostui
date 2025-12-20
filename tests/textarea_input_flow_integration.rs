@@ -3,18 +3,26 @@ use nostr_sdk::prelude::*;
 
 use nostui::{
     core::{
+        cmd::Cmd,
         msg::{ui::UiMsg, Msg},
         raw_msg::RawMsg,
         state::{ui::UiMode, AppState},
         translator::translate_raw_to_domain,
-        update::update,
+        update::{update_with_context, UpdateContext},
     },
     domain::ui::CursorPosition,
+    infrastructure::tui::textarea_engine::TuiTextAreaEngine,
     test_helpers::TextAreaTestHelper,
 };
 
 /// TextArea input flow integration tests
 /// Verifies Translator→UiMsg::ProcessTextAreaInput→update→UiState flow and special key handling
+fn do_update(msg: Msg, state: AppState) -> (AppState, Vec<Cmd>) {
+    static ENGINE: TuiTextAreaEngine = TuiTextAreaEngine;
+    let ctx = UpdateContext { text_area: &ENGINE };
+    update_with_context(msg, state, &ctx)
+}
+
 #[test]
 fn test_special_keys_are_not_delegated_to_textarea() {
     let mut state = AppState::new(Keys::generate().public_key());
@@ -90,7 +98,7 @@ fn test_pending_keys_basic_functionality() {
 
     // Add character at cursor position
     let char_key = KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE);
-    let (new_state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_key)), state);
+    let (new_state, _) = do_update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_key)), state);
 
     // Verify content was updated and pending_keys was processed
     assert_eq!(new_state.ui.textarea.content, "test!");
@@ -107,7 +115,7 @@ fn test_pending_keys_navigation_functionality() {
 
     // Test left arrow navigation
     let left_key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
-    let (new_state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(left_key)), state);
+    let (new_state, _) = do_update(Msg::Ui(UiMsg::ProcessTextAreaInput(left_key)), state);
 
     // Verify cursor moved left but content unchanged
     assert_eq!(new_state.ui.textarea.content, "hello world");
@@ -124,11 +132,11 @@ fn test_pending_keys_multiple_operations() {
 
     // First operation: move left
     let left_key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
-    let (state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(left_key)), state);
+    let (state, _) = do_update(Msg::Ui(UiMsg::ProcessTextAreaInput(left_key)), state);
 
     // Second operation: type character
     let char_key = KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE);
-    let (final_state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_key)), state);
+    let (final_state, _) = do_update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_key)), state);
 
     // Verify final state: "tes!t" with cursor after '!'
     assert_eq!(final_state.ui.textarea.content, "tes!t");
@@ -145,12 +153,12 @@ fn test_pending_keys_home_end_navigation() {
 
     // Test Home key
     let home_key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
-    let (state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(home_key)), state);
+    let (state, _) = do_update(Msg::Ui(UiMsg::ProcessTextAreaInput(home_key)), state);
     assert_eq!(state.ui.textarea.cursor_position.column, 0);
 
     // Test End key
     let end_key = KeyEvent::new(KeyCode::End, KeyModifiers::NONE);
-    let (final_state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(end_key)), state);
+    let (final_state, _) = do_update(Msg::Ui(UiMsg::ProcessTextAreaInput(end_key)), state);
     assert_eq!(final_state.ui.textarea.cursor_position.column, 11); // End of "hello world"
 }
 
@@ -163,7 +171,7 @@ fn test_pending_keys_maintains_state_consistency() {
 
     // Verify AppState is always the single source of truth
     let backspace_key = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
-    let (new_state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(backspace_key)), state);
+    let (new_state, _) = do_update(Msg::Ui(UiMsg::ProcessTextAreaInput(backspace_key)), state);
 
     // Content should be updated and cursor moved back
     assert_eq!(new_state.ui.textarea.content, "tes content");
@@ -178,10 +186,10 @@ fn test_pending_keys_empty_queue_after_processing() {
 
     // Multiple key presses should all be processed
     let char_a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
-    let (state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_a)), state);
+    let (state, _) = do_update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_a)), state);
 
     let char_b = KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE);
-    let (final_state, _) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_b)), state);
+    let (final_state, _) = do_update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_b)), state);
 
     // All keys should be processed and queue should be empty
     assert_eq!(final_state.ui.textarea.content, "ab");
@@ -196,7 +204,7 @@ fn test_textarea_delegation_produces_no_spurious_cmds() {
 
     // Process a character through the hybrid approach
     let char_key = KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE);
-    let (new_state, cmds) = update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_key)), state);
+    let (new_state, cmds) = do_update(Msg::Ui(UiMsg::ProcessTextAreaInput(char_key)), state);
 
     // Should not generate additional commands (no circular updates)
     assert!(cmds.is_empty());
@@ -212,7 +220,7 @@ fn test_process_input_does_not_change_state_in_normal_mode() {
 
     // ProcessTextAreaInput should do nothing when not in input mode
     let char_key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
-    let (new_state, cmds) = update(
+    let (new_state, cmds) = do_update(
         Msg::Ui(UiMsg::ProcessTextAreaInput(char_key)),
         state.clone(),
     );
