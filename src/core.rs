@@ -11,5 +11,6 @@ pub mod cmd_executor;
 pub mod msg;
 pub mod raw_msg;
 pub mod state;
+pub mod textarea_engine;
 pub mod translator;
 pub mod update;
