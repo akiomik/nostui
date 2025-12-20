@@ -53,7 +53,7 @@ impl Connection {
         Ok(())
     }
 
-    pub async fn close(self) {
+    pub async fn close(&mut self) {
         self.client.shutdown().await
     }
 }
