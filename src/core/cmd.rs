@@ -16,8 +16,8 @@ pub enum NostrCmd {
 
 /// UI (TUI) specific sub-commands executed by the host/runtime
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TuiCommand {
-    // Render is orchestrated exclusively by AppRunner, not via TuiCommand.
+pub enum TuiCmd {
+    // Render is orchestrated exclusively by AppRunner, not via TuiCmd.
     // Render requests are coalesced and delivered via a bounded render_req_sender signal.
     // This removes the duplicate path (via TuiService) to avoid contention and spamming.
     Resize { width: u16, height: u16 },
@@ -36,7 +36,7 @@ pub enum Cmd {
     Nostr(NostrCmd),
 
     // UI-related commands
-    Tui(TuiCommand),
+    Tui(TuiCmd),
     /// Request a render; delivered via bounded render_req_sender and coalesced by AppRunner
     RequestRender,
 

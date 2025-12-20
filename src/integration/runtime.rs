@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     core::{
-        cmd::{Cmd, TuiCommand},
+        cmd::{Cmd, TuiCmd},
         cmd_executor::CmdExecutor,
         msg::Msg,
         raw_msg::RawMsg,
@@ -125,10 +125,10 @@ impl Runtime {
         self.msg_tx.clone()
     }
 
-    /// Add TUI command sender support to existing executor (for TuiCommand execution)
+    /// Add TUI command sender support to existing executor (for TuiCmd execution)
     pub fn add_tui_sender(
         &mut self,
-        tui_sender: mpsc::UnboundedSender<TuiCommand>,
+        tui_sender: mpsc::UnboundedSender<TuiCmd>,
     ) -> Result<(), String> {
         if let Some(executor) = &mut self.cmd_executor {
             executor.set_tui_sender(tui_sender);

@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
 use tokio::sync::mpsc;
 
-use nostui::core::cmd::TuiCommand;
+use nostui::core::cmd::TuiCmd;
 use nostui::core::msg::nostr::NostrMsg;
 use nostui::core::msg::system::SystemMsg;
 use nostui::core::msg::ui::UiMsg;
@@ -202,7 +202,7 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
     runtime.send_msg(Msg::System(SystemMsg::Resize(100, 50)));
 
     // Provide TUI sender BEFORE executing to capture resize command
-    let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
+    let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCmd>();
     runtime.add_tui_sender(tui_tx).unwrap();
 
     let execution_log = runtime
@@ -217,7 +217,7 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
     let tui_cmd = tui_rx.try_recv()?;
     assert!(matches!(
         tui_cmd,
-        TuiCommand::Resize {
+        TuiCmd::Resize {
             width: 100,
             height: 50
         }
@@ -234,7 +234,7 @@ fn test_batch_command_execution() -> Result<()> {
     // Create a batch command
     let batch_cmd = Cmd::batch(vec![
         Cmd::RequestRender,
-        Cmd::Tui(TuiCommand::Resize {
+        Cmd::Tui(TuiCmd::Resize {
             width: 80,
             height: 24,
         }),
@@ -244,7 +244,7 @@ fn test_batch_command_execution() -> Result<()> {
     ]);
 
     // Route TUI and Render requests through dedicated channels BEFORE execution
-    let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
+    let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCmd>();
     executor.set_tui_sender(tui_tx);
     let (render_tx, mut render_rx) = mpsc::channel::<()>(1);
     executor.set_render_request_sender(render_tx);
@@ -256,7 +256,7 @@ fn test_batch_command_execution() -> Result<()> {
     let tui_cmd = tui_rx.try_recv()?;
     assert!(matches!(
         tui_cmd,
-        TuiCommand::Resize {
+        TuiCmd::Resize {
             width: 80,
             height: 24
         }
@@ -342,7 +342,7 @@ fn test_performance_with_many_commands() -> Result<()> {
     let mut runtime = Runtime::new_with_executor(state);
 
     // Provide TUI sender BEFORE executing to capture resize commands
-    let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
+    let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCmd>();
     runtime.add_tui_sender(tui_tx).unwrap();
 
     let start = Instant::now();
@@ -366,7 +366,7 @@ fn test_performance_with_many_commands() -> Result<()> {
     for i in 0..100 {
         let tui_cmd = tui_rx.try_recv()?;
         match tui_cmd {
-            TuiCommand::Resize { width, height } => {
+            TuiCmd::Resize { width, height } => {
                 assert_eq!(width, 100 + (i as u16));
                 assert_eq!(height, 50 + (i as u16));
             }

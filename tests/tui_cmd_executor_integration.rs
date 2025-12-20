@@ -1,6 +1,6 @@
 use tokio::sync::mpsc;
 
-use nostui::core::cmd::{Cmd, TuiCommand};
+use nostui::core::cmd::{Cmd, TuiCmd};
 use nostui::core::cmd_executor::CmdExecutor;
 
 #[tokio::test]
@@ -9,11 +9,11 @@ async fn cmd_executor_sends_tui_command_when_sender_is_present() {
     let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
     let mut exec = CmdExecutor::new();
 
-    let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
+    let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCmd>();
     exec.set_tui_sender(tui_tx);
 
     // Act: execute a TUI resize command
-    exec.execute_command(&Cmd::Tui(TuiCommand::Resize {
+    exec.execute_command(&Cmd::Tui(TuiCmd::Resize {
         width: 80,
         height: 24,
     }))
@@ -25,9 +25,9 @@ async fn cmd_executor_sends_tui_command_when_sender_is_present() {
         "no Action should be emitted when TUI sender is present"
     );
 
-    // Assert: TuiCommand was sent to the TUI channel
+    // Assert: TuiCmd was sent to the TUI channel
     match tui_rx.try_recv() {
-        Ok(TuiCommand::Resize { width, height }) => {
+        Ok(TuiCmd::Resize { width, height }) => {
             assert_eq!(width, 80);
             assert_eq!(height, 24);
         }

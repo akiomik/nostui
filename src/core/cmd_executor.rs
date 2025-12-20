@@ -2,7 +2,7 @@ use color_eyre::eyre::Result;
 use tokio::sync::mpsc;
 
 use crate::{
-    core::cmd::{Cmd, TuiCommand},
+    core::cmd::{Cmd, TuiCmd},
     infrastructure::nostr_command::NostrCommand,
 };
 
@@ -12,7 +12,7 @@ use super::cmd::NostrCmd;
 #[derive(Clone, Default)]
 pub struct CmdExecutor {
     nostr_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
-    tui_sender: Option<mpsc::UnboundedSender<TuiCommand>>,
+    tui_sender: Option<mpsc::UnboundedSender<TuiCmd>>,
     render_req_sender: Option<mpsc::Sender<()>>,
 }
 
@@ -40,8 +40,8 @@ impl CmdExecutor {
         self.nostr_sender = Some(nostr_sender);
     }
 
-    /// Inject TUI command sender for executing TuiCommand asynchronously.
-    pub fn set_tui_sender(&mut self, sender: mpsc::UnboundedSender<TuiCommand>) {
+    /// Inject TUI command sender for executing TuiCmd asynchronously.
+    pub fn set_tui_sender(&mut self, sender: mpsc::UnboundedSender<TuiCmd>) {
         self.tui_sender = Some(sender);
     }
 
@@ -144,9 +144,9 @@ impl CmdExecutor {
 
             Cmd::Tui(tui_cmd) => {
                 match tui_cmd {
-                    TuiCommand::Resize { width, height } => {
+                    TuiCmd::Resize { width, height } => {
                         if let Some(tx) = &self.tui_sender {
-                            let _ = tx.send(TuiCommand::Resize {
+                            let _ = tx.send(TuiCmd::Resize {
                                 width: *width,
                                 height: *height,
                             });
@@ -248,7 +248,7 @@ impl CmdName for Cmd {
             Cmd::LogInfo { .. } => "LogInfo".to_string(),
             Cmd::Batch(cmds) => format!("Batch({})", cmds.len()),
             Cmd::Tui(tui_cmd) => match tui_cmd {
-                TuiCommand::Resize { .. } => "Tui(Resize)".to_string(),
+                TuiCmd::Resize { .. } => "Tui(Resize)".to_string(),
             },
             Cmd::RequestRender => "RequestRender".to_string(),
         }
@@ -322,10 +322,10 @@ mod tests {
     fn test_execute_resize() {
         let mut executor = create_test_executor();
         // Provide TUI sender and assert that Resize is routed there
-        let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
+        let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCmd>();
         executor.set_tui_sender(tui_tx);
 
-        let cmd = Cmd::Tui(TuiCommand::Resize {
+        let cmd = Cmd::Tui(TuiCmd::Resize {
             width: 80,
             height: 24,
         });
@@ -334,7 +334,7 @@ mod tests {
 
         let tui_cmd = tui_rx.try_recv().unwrap();
         match tui_cmd {
-            TuiCommand::Resize { width, height } => {
+            TuiCmd::Resize { width, height } => {
                 assert_eq!(width, 80);
                 assert_eq!(height, 24);
             }
@@ -355,12 +355,12 @@ mod tests {
     fn test_execute_batch() {
         let mut executor = create_test_executor();
         // Provide TUI and Render request senders
-        let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCommand>();
+        let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCmd>();
         executor.set_tui_sender(tui_tx);
         let (render_tx, _render_rx) = mpsc::channel::<()>(1);
         executor.set_render_request_sender(render_tx);
 
-        let cmds = vec![Cmd::Tui(TuiCommand::Resize {
+        let cmds = vec![Cmd::Tui(TuiCmd::Resize {
             width: 100,
             height: 50,
         })];
@@ -368,11 +368,11 @@ mod tests {
 
         executor.execute_command(&batch_cmd).unwrap();
 
-        // Should receive resize command (render is not a TuiCommand anymore)
+        // Should receive resize command (render is not a TuiCmd anymore)
         let tui_cmd = tui_rx.try_recv().unwrap();
         assert!(matches!(
             tui_cmd,
-            TuiCommand::Resize {
+            TuiCmd::Resize {
                 width: 100,
                 height: 50
             }
