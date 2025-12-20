@@ -1,9 +1,10 @@
 use color_eyre::eyre::Result;
 use nostr_sdk::prelude::*;
-use tokio::{
-    sync::{broadcast, mpsc},
-    task::yield_now,
+use tokio::sync::{
+    broadcast::{self, error::RecvError},
+    mpsc,
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::{domain::nostr::Connection, infrastructure::nostr::NostrOperation, RawMsg};
 
@@ -18,14 +19,14 @@ pub struct NostrService {
     keys: Keys,
     // Incoming channels
     op_rx: mpsc::UnboundedReceiver<NostrOperation>,
-    terminate_rx: mpsc::UnboundedReceiver<()>,
+    cancel_token: CancellationToken,
     // Outgoing channels
     raw_tx: mpsc::UnboundedSender<RawMsg>, // For RawMsg notifications
 }
 
 pub type NewNostrService = (
     mpsc::UnboundedSender<NostrOperation>, // op_tx - operations to send
-    mpsc::UnboundedSender<()>,             // terminate_tx - shutdown signal
+    CancellationToken,                     // shutdown signal
     NostrService,
 );
 
@@ -37,16 +38,16 @@ impl NostrService {
         raw_tx: mpsc::UnboundedSender<RawMsg>,
     ) -> Result<NewNostrService> {
         let (op_tx, op_rx) = mpsc::unbounded_channel();
-        let (terminate_tx, terminate_rx) = mpsc::unbounded_channel();
+        let cancel_token = CancellationToken::new();
 
         Ok((
             op_tx,
-            terminate_tx,
+            cancel_token.clone(),
             Self {
                 conn,
                 keys,
                 op_rx,
-                terminate_rx,
+                cancel_token,
                 raw_tx,
             },
         ))
@@ -70,41 +71,51 @@ impl NostrService {
         let mut timeline = self.conn.subscribe_timeline().await?;
 
         loop {
-            // Handle received events from timeline
-            while let Ok(notification) = timeline.try_recv() {
-                if let RelayPoolNotification::Event { event, .. } = notification {
-                    if let Err(_e) = self.raw_tx.send(RawMsg::ReceiveEvent(*event)) {
-                        // log::error!("Failed to send received event: {}", e);
-                    }
-                }
-            }
-
-            // Handle outgoing operations
-            while let Ok(op) = self.op_rx.try_recv() {
-                match self.handle_operation(op, &mut timeline).await {
-                    Ok(should_continue) => {
-                        if !should_continue {
-                            // Operation requested service termination
+            tokio::select! {
+                // Handle received events from timeline
+                result = timeline.recv() => {
+                    match result {
+                        Ok(notification) => {
+                            if let RelayPoolNotification::Event { event, .. } = notification {
+                                let _ = self.raw_tx.send(RawMsg::ReceiveEvent(*event));
+                            }
+                        }
+                        Err(RecvError::Lagged(n)) => {
+                            log::warn!("Missed {n} messages from timeline");
+                        }
+                        Err(RecvError::Closed) => {
+                            log::error!("Timeline channel closed");
                             break;
                         }
                     }
-                    Err(e) => {
-                        log::error!("Failed to handle operation: {e}");
-                        let _ = self
-                            .raw_tx
-                            .send(RawMsg::Error(format!("Operation failed: {e}",)));
+                }
+
+                // Handle outgoing operations
+                result = self.op_rx.recv() => {
+                    if let Some(op) = result {
+                        match self.handle_operation(op, &mut timeline).await {
+                            Ok(should_continue) => {
+                                if !should_continue {
+                                    // Operation requested service termination
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Failed to handle operation: {e}");
+                                let _ = self
+                                    .raw_tx
+                                    .send(RawMsg::Error(format!("Operation failed: {e}",)));
+                            }
+                        }
                     }
                 }
-            }
 
-            // Check for termination signal
-            if self.terminate_rx.try_recv().is_ok() {
-                log::info!("NostrService received termination signal");
-                break;
+                // Check for termination signal
+                _ = self.cancel_token.cancelled() => {
+                    log::info!("NostrService received cancellation signal");
+                    break;
+                }
             }
-
-            // Small yield to prevent busy waiting
-            yield_now().await;
         }
 
         // Ensure we close the underlying connection when terminating the service loop
@@ -254,16 +265,16 @@ mod tests {
     async fn test_nostr_service_creation() {
         let conn = create_test_connection().await;
         let keys = create_test_keys();
-        let (action_tx, _action_rx) = mpsc::unbounded_channel();
+        let (raw_tx, _raw_rx) = mpsc::unbounded_channel();
 
-        let result = NostrService::new(conn, keys, action_tx);
+        let result = NostrService::new(conn, keys, raw_tx);
         assert!(result.is_ok());
 
-        let (op_tx, terminate_tx, _service) = result.unwrap();
+        let (op_tx, cancel_token, _service) = result.unwrap();
 
         // Verify channels are created
         assert!(op_tx.send(NostrOperation::SubscribeToTimeline).is_ok());
-        assert!(terminate_tx.send(()).is_ok());
+        cancel_token.cancel();
     }
 
     #[test]
