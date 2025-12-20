@@ -5,6 +5,7 @@ use tokio::time::{sleep, timeout};
 
 use nostui::{
     core::{
+        cmd::NostrCmd,
         msg::{nostr::NostrMsg, system::SystemMsg, timeline::TimelineMsg, ui::UiMsg, Msg},
         state::AppState,
         update::update,
@@ -38,7 +39,7 @@ fn test_library_basic_flow() {
     assert_eq!(cmds.len(), 1);
 
     match &cmds[0] {
-        Cmd::SendTextNote { content, .. } => {
+        Cmd::Nostr(NostrCmd::SendTextNote { content, .. }) => {
             assert_eq!(content, "Hello");
         }
         _ => panic!("Expected SendTextNote command"),
@@ -109,8 +110,8 @@ fn test_complex_workflow() {
 
     for cmd in &commands {
         match cmd {
-            Cmd::SendReaction { .. } => has_reaction = true,
-            Cmd::SendTextNote { content, .. } => {
+            Cmd::Nostr(NostrCmd::SendReaction { .. }) => has_reaction = true,
+            Cmd::Nostr(NostrCmd::SendTextNote { content, .. }) => {
                 has_reply = true;
                 assert_eq!(content, "Nice post!");
             }
@@ -177,7 +178,7 @@ async fn test_async_message_handling() {
     // SendTextNote command should be generated
     assert_eq!(commands.len(), 1);
     match &commands[0] {
-        Cmd::SendTextNote { content, .. } => {
+        Cmd::Nostr(NostrCmd::SendTextNote { content, .. }) => {
             assert_eq!(content, "Async message");
         }
         _ => panic!("Expected SendTextNote command"),

@@ -1,4 +1,7 @@
-use crate::core::{cmd::Cmd, msg::nostr::NostrMsg};
+use crate::core::{
+    cmd::{Cmd, NostrCmd},
+    msg::nostr::NostrMsg,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct NostrState;
@@ -9,13 +12,13 @@ impl NostrState {
     pub fn update(&mut self, msg: NostrMsg) -> Vec<Cmd> {
         match msg {
             NostrMsg::SendReaction(target_event) => {
-                vec![Cmd::SendReaction { target_event }]
+                vec![Cmd::Nostr(NostrCmd::SendReaction { target_event })]
             }
             NostrMsg::SendRepost(target_event) => {
-                vec![Cmd::SendRepost { target_event }]
+                vec![Cmd::Nostr(NostrCmd::SendRepost { target_event })]
             }
             NostrMsg::SendTextNote(content, tags) => {
-                vec![Cmd::SendTextNote { content, tags }]
+                vec![Cmd::Nostr(NostrCmd::SendTextNote { content, tags })]
             }
         }
     }
@@ -38,7 +41,9 @@ mod tests {
         let cmds = ns.update(NostrMsg::SendReaction(ev.clone()));
         assert_eq!(cmds.len(), 1);
         match &cmds[0] {
-            Cmd::SendReaction { target_event } => assert_eq!(target_event.id, ev.id),
+            Cmd::Nostr(NostrCmd::SendReaction { target_event }) => {
+                assert_eq!(target_event.id, ev.id)
+            }
             _ => panic!("expected SendReaction"),
         }
     }
@@ -50,7 +55,7 @@ mod tests {
         let cmds = ns.update(NostrMsg::SendRepost(ev.clone()));
         assert_eq!(cmds.len(), 1);
         match &cmds[0] {
-            Cmd::SendRepost { target_event } => assert_eq!(target_event.id, ev.id),
+            Cmd::Nostr(NostrCmd::SendRepost { target_event }) => assert_eq!(target_event.id, ev.id),
             _ => panic!("expected SendRepost"),
         }
     }
@@ -61,7 +66,7 @@ mod tests {
         let cmds = ns.update(NostrMsg::SendTextNote("hello".into(), vec![]));
         assert_eq!(cmds.len(), 1);
         match &cmds[0] {
-            Cmd::SendTextNote { content, tags } => {
+            Cmd::Nostr(NostrCmd::SendTextNote { content, tags }) => {
                 assert_eq!(content, "hello");
                 assert!(tags.is_empty());
             }

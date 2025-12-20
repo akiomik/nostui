@@ -1,6 +1,7 @@
 use nostr_sdk::prelude::*;
 use nostui::{
     core::{
+        cmd::NostrCmd,
         msg::{ui::UiMsg, Msg},
         state::{ui::SubmitData, AppState},
         update::update,
@@ -323,7 +324,7 @@ async fn test_complete_input_workflow() {
     assert_eq!(cmds.len(), 1);
 
     // Verify reply has tags
-    if let Cmd::SendTextNote { content, tags } = &cmds[0] {
+    if let Cmd::Nostr(NostrCmd::SendTextNote { content, tags }) = &cmds[0] {
         assert_eq!(content, "Great point!");
         assert!(!tags.is_empty()); // Reply should have tags
     } else {
