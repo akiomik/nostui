@@ -112,6 +112,13 @@ impl NostrService {
             yield_now().await;
         }
 
+        // Ensure we close the underlying connection when terminating the service loop
+        log::info!("NostrService: closing Nostr connection");
+        self.conn.close().await;
+        let _ = self.raw_tx.send(RawMsg::SystemMessage(
+            "Disconnected from all relays".to_string(),
+        ));
+
         Ok(())
     }
 
@@ -191,6 +198,8 @@ impl NostrService {
                 let _ = self.raw_tx.send(RawMsg::SystemMessage(
                     "Disconnecting from all relays...".to_string(),
                 ));
+                // Explicitly close before terminating to avoid resource leak
+                self.conn.close().await;
                 return Ok(false); // Signal to terminate the service
             }
 
