@@ -308,6 +308,7 @@ pub struct RuntimeStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::cmd::NostrCmd;
     use crate::core::msg::nostr::NostrMsg;
     use crate::core::msg::system::SystemMsg;
     use crate::core::msg::timeline::TimelineMsg;
@@ -391,9 +392,9 @@ mod tests {
         assert_eq!(commands.len(), 1);
 
         match &commands[0] {
-            Cmd::SendReaction {
+            Cmd::Nostr(NostrCmd::SendReaction {
                 target_event: cmd_event,
-            } => {
+            }) => {
                 assert_eq!(cmd_event, &target_event);
             }
             _ => panic!("Expected SendReaction command"),
@@ -423,10 +424,10 @@ mod tests {
         assert_eq!(commands.len(), 1);
 
         match &commands[0] {
-            Cmd::SendTextNote {
+            Cmd::Nostr(NostrCmd::SendTextNote {
                 content: cmd_content,
                 ..
-            } => {
+            }) => {
                 assert_eq!(cmd_content, content);
             }
             _ => panic!("Expected SendTextNote command"),

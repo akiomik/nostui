@@ -1,7 +1,7 @@
 use crossterm::event::KeyEvent;
 use nostr_sdk::prelude::*;
 
-use crate::core::cmd::Cmd;
+use crate::core::cmd::{Cmd, NostrCmd};
 use crate::core::msg::ui::UiMsg;
 use crate::domain::nostr::nip10::ReplyTagsBuilder;
 use crate::domain::ui::{CursorPosition, TextSelection};
@@ -157,10 +157,10 @@ impl UiState {
             UiMsg::SubmitNote => {
                 if let Some(submit_data) = self.prepare_submit_data() {
                     let mut cmds = self.update(UiMsg::CancelInput);
-                    cmds.push(Cmd::SendTextNote {
+                    cmds.push(Cmd::Nostr(NostrCmd::SendTextNote {
                         content: submit_data.content,
                         tags: submit_data.tags,
-                    });
+                    }));
                     cmds
                 } else {
                     vec![]

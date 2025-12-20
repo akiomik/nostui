@@ -115,6 +115,7 @@ pub fn update(msg: Msg, state: AppState) -> (AppState, Vec<Cmd>) {
 #[cfg(test)]
 mod tests {
     use crate::core::{
+        cmd::NostrCmd,
         msg::{nostr::NostrMsg, system::SystemMsg},
         state::ui::UiMode,
     };
@@ -243,9 +244,9 @@ mod tests {
         assert!(new_state.system.status_message.is_none());
         assert_eq!(cmds.len(), 1);
         match &cmds[0] {
-            Cmd::SendReaction {
+            Cmd::Nostr(NostrCmd::SendReaction {
                 target_event: cmd_event,
-            } => {
+            }) => {
                 assert_eq!(cmd_event, &target_event);
             }
             _ => panic!("Expected SendReaction command"),

@@ -6,6 +6,8 @@ use crate::{
     infrastructure::nostr_command::NostrCommand,
 };
 
+use super::cmd::NostrCmd;
+
 /// Command executor that bridges Elm commands to Action and NostrCommand systems
 #[derive(Clone, Default)]
 pub struct CmdExecutor {
@@ -55,66 +57,76 @@ impl CmdExecutor {
                 // No-op command, nothing to execute
             }
 
-            // Nostr protocol commands - route to NostrService if available, fallback to Action
-            Cmd::SendReaction { target_event } => {
-                if let Some(nostr_sender) = &self.nostr_sender {
-                    let nostr_cmd = NostrCommand::like(target_event.clone());
-                    nostr_sender.send(nostr_cmd)?;
-                } else {
-                    // No NostrService available: drop with warning (no legacy Action fallback)
-                    log::warn!("SendReaction ignored: NostrService not available");
-                }
-            }
+            // Nostr protocol commands - route to NostrService
+            Cmd::Nostr(nostr_cmd) => {
+                match nostr_cmd {
+                    NostrCmd::SendReaction { target_event } => {
+                        if let Some(nostr_sender) = &self.nostr_sender {
+                            let nostr_cmd = NostrCommand::like(target_event.clone());
+                            nostr_sender.send(nostr_cmd)?;
+                        } else {
+                            // No NostrService available: drop with warning (no legacy Action fallback)
+                            log::warn!("SendReaction ignored: NostrService not available");
+                        }
+                    }
 
-            Cmd::SendRepost { target_event } => {
-                if let Some(nostr_sender) = &self.nostr_sender {
-                    let nostr_cmd = NostrCommand::repost(target_event.clone(), None);
-                    nostr_sender.send(nostr_cmd)?;
-                } else {
-                    // No NostrService available: drop with warning (no legacy Action fallback)
-                    log::warn!("SendRepost ignored: NostrService not available");
-                }
-            }
+                    NostrCmd::SendRepost { target_event } => {
+                        if let Some(nostr_sender) = &self.nostr_sender {
+                            let nostr_cmd = NostrCommand::repost(target_event.clone(), None);
+                            nostr_sender.send(nostr_cmd)?;
+                        } else {
+                            // No NostrService available: drop with warning (no legacy Action fallback)
+                            log::warn!("SendRepost ignored: NostrService not available");
+                        }
+                    }
 
-            Cmd::SendTextNote { content, tags } => {
-                log::info!(
-                    "CmdExecutor: Processing SendTextNote - content: '{content}', tags: {tags:?}",
-                );
-                if let Some(nostr_sender) = &self.nostr_sender {
-                    log::info!("CmdExecutor: Routing to NostrService");
-                    let nostr_cmd = NostrCommand::text_note(content.clone(), tags.clone());
-                    nostr_sender.send(nostr_cmd)?;
-                    log::info!("CmdExecutor: Successfully sent NostrCommand::SendTextNote");
-                } else {
-                    // No NostrService available: drop with warning (no legacy Action fallback)
-                    log::warn!("SendTextNote ignored: NostrService not available");
-                }
-            }
+                    NostrCmd::SendTextNote { content, tags } => {
+                        log::info!(
+                            "CmdExecutor: Processing SendTextNote - content: '{content}', tags: {tags:?}",
+                            );
+                        if let Some(nostr_sender) = &self.nostr_sender {
+                            log::info!("CmdExecutor: Routing to NostrService");
+                            let nostr_cmd = NostrCommand::text_note(content.clone(), tags.clone());
+                            nostr_sender.send(nostr_cmd)?;
+                            log::info!("CmdExecutor: Successfully sent NostrCommand::SendTextNote");
+                        } else {
+                            // No NostrService available: drop with warning (no legacy Action fallback)
+                            log::warn!("SendTextNote ignored: NostrService not available");
+                        }
+                    }
 
-            Cmd::ConnectToRelays { relays } => {
-                if let Some(nostr_sender) = &self.nostr_sender {
-                    let nostr_cmd = NostrCommand::connect_relays(relays.clone());
-                    nostr_sender.send(nostr_cmd)?;
-                } else {
-                    log::warn!("ConnectToRelays command ignored: NostrService not available");
-                }
-            }
+                    NostrCmd::ConnectToRelays { relays } => {
+                        if let Some(nostr_sender) = &self.nostr_sender {
+                            let nostr_cmd = NostrCommand::connect_relays(relays.clone());
+                            nostr_sender.send(nostr_cmd)?;
+                        } else {
+                            log::warn!(
+                                "ConnectToRelays command ignored: NostrService not available"
+                            );
+                        }
+                    }
 
-            Cmd::DisconnectFromRelays => {
-                if let Some(nostr_sender) = &self.nostr_sender {
-                    let nostr_cmd = NostrCommand::DisconnectFromRelays;
-                    nostr_sender.send(nostr_cmd)?;
-                } else {
-                    log::warn!("DisconnectFromRelays command ignored: NostrService not available");
-                }
-            }
+                    NostrCmd::DisconnectFromRelays => {
+                        if let Some(nostr_sender) = &self.nostr_sender {
+                            let nostr_cmd = NostrCommand::DisconnectFromRelays;
+                            nostr_sender.send(nostr_cmd)?;
+                        } else {
+                            log::warn!(
+                                "DisconnectFromRelays command ignored: NostrService not available"
+                            );
+                        }
+                    }
 
-            Cmd::SubscribeToTimeline => {
-                if let Some(nostr_sender) = &self.nostr_sender {
-                    let nostr_cmd = NostrCommand::SubscribeToTimeline;
-                    nostr_sender.send(nostr_cmd)?;
-                } else {
-                    log::warn!("SubscribeToTimeline command ignored: NostrService not available");
+                    NostrCmd::SubscribeToTimeline => {
+                        if let Some(nostr_sender) = &self.nostr_sender {
+                            let nostr_cmd = NostrCommand::SubscribeToTimeline;
+                            nostr_sender.send(nostr_cmd)?;
+                        } else {
+                            log::warn!(
+                                "SubscribeToTimeline command ignored: NostrService not available"
+                            );
+                        }
+                    }
                 }
             }
 
@@ -222,18 +234,20 @@ impl CmdName for Cmd {
     fn name(&self) -> String {
         match self {
             Cmd::None => "None".to_string(),
-            Cmd::SendReaction { .. } => "SendReaction".to_string(),
-            Cmd::SendRepost { .. } => "SendRepost".to_string(),
-            Cmd::SendTextNote { .. } => "SendTextNote".to_string(),
-            Cmd::ConnectToRelays { .. } => "ConnectToRelays".to_string(),
-            Cmd::DisconnectFromRelays => "DisconnectFromRelays".to_string(),
-            Cmd::SubscribeToTimeline => "SubscribeToTimeline".to_string(),
+            Cmd::Nostr(nostr_cmd) => match nostr_cmd {
+                NostrCmd::SendReaction { .. } => "SendReaction".to_string(),
+                NostrCmd::SendRepost { .. } => "SendRepost".to_string(),
+                NostrCmd::SendTextNote { .. } => "SendTextNote".to_string(),
+                NostrCmd::ConnectToRelays { .. } => "ConnectToRelays".to_string(),
+                NostrCmd::DisconnectFromRelays => "DisconnectFromRelays".to_string(),
+                NostrCmd::SubscribeToTimeline => "SubscribeToTimeline".to_string(),
+            },
             Cmd::SaveConfig => "SaveConfig".to_string(),
             Cmd::LoadConfig => "LoadConfig".to_string(),
             Cmd::LogError { .. } => "LogError".to_string(),
             Cmd::LogInfo { .. } => "LogInfo".to_string(),
             Cmd::Batch(cmds) => format!("Batch({})", cmds.len()),
-            Cmd::Tui(tc) => match tc {
+            Cmd::Tui(tui_cmd) => match tui_cmd {
                 TuiCommand::Resize { .. } => "Tui(Resize)".to_string(),
             },
             Cmd::RequestRender => "RequestRender".to_string(),
@@ -264,9 +278,9 @@ mod tests {
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
         let executor = CmdExecutor::new_with_nostr(nostr_tx);
         let event = create_test_event();
-        let cmd = Cmd::SendReaction {
+        let cmd = Cmd::Nostr(NostrCmd::SendReaction {
             target_event: event.clone(),
-        };
+        });
 
         executor.execute_command(&cmd).unwrap();
 
@@ -287,10 +301,10 @@ mod tests {
     fn test_execute_send_text_note() {
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
         let executor = CmdExecutor::new_with_nostr(nostr_tx);
-        let cmd = Cmd::SendTextNote {
+        let cmd = Cmd::Nostr(NostrCmd::SendTextNote {
             content: "Hello, Nostr!".to_string(),
             tags: vec![],
-        };
+        });
 
         executor.execute_command(&cmd).unwrap();
 
@@ -388,9 +402,9 @@ mod tests {
 
     #[test]
     fn test_cmd_name_trait() {
-        let cmd = Cmd::SendReaction {
+        let cmd = Cmd::Nostr(NostrCmd::SendReaction {
             target_event: create_test_event(),
-        };
+        });
         assert_eq!(cmd.name(), "SendReaction");
 
         let batch_cmd = Cmd::Batch(vec![Cmd::None, Cmd::None]);
@@ -423,9 +437,9 @@ mod tests {
         let executor = CmdExecutor::new_with_nostr(nostr_tx);
 
         let target_event = create_test_event();
-        let cmd = Cmd::SendReaction {
+        let cmd = Cmd::Nostr(NostrCmd::SendReaction {
             target_event: target_event.clone(),
-        };
+        });
 
         // Should route to NostrCommand, not Action
         executor.execute_command(&cmd).unwrap();
@@ -450,9 +464,9 @@ mod tests {
     fn test_no_fallback_without_nostr_sender() {
         let executor = create_test_executor(); // No NostrSender
         let target_event = create_test_event();
-        let cmd = Cmd::SendReaction { target_event };
+        let cmd = Cmd::Nostr(NostrCmd::SendReaction { target_event });
 
-        // Should NOT fallback to Action; command succeeds silently
+        // Command succeeds silently
         executor.execute_command(&cmd).unwrap();
     }
 

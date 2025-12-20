@@ -3,6 +3,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::msg::Msg;
 
+/// Nostr specific sub-commands executed by the host/runtime
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NostrCmd {
+    SendReaction { target_event: Event },
+    SendRepost { target_event: Event },
+    SendTextNote { content: String, tags: Vec<Tag> },
+    ConnectToRelays { relays: Vec<String> },
+    DisconnectFromRelays,
+    SubscribeToTimeline,
+}
+
 /// UI (TUI) specific sub-commands executed by the host/runtime
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TuiCommand {
@@ -19,23 +30,10 @@ pub enum TuiCommand {
 /// execution details (how to do it). Keeping both layers separate improves testability and allows swapping
 /// infrastructure without leaking external types into the domain.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum Cmd {
     // Nostr-related commands
-    SendReaction {
-        target_event: Event,
-    },
-    SendRepost {
-        target_event: Event,
-    },
-    SendTextNote {
-        content: String,
-        tags: Vec<Tag>,
-    },
-    ConnectToRelays {
-        relays: Vec<String>,
-    },
-    DisconnectFromRelays,
-    SubscribeToTimeline,
+    Nostr(NostrCmd),
 
     // UI-related commands
     Tui(TuiCommand),
@@ -78,10 +76,14 @@ impl Cmd {
             Cmd::Tui(..) | Cmd::RequestRender => 0,
 
             // User actions have high priority
-            Cmd::SendReaction { .. } | Cmd::SendRepost { .. } | Cmd::SendTextNote { .. } => 1,
+            Cmd::Nostr(NostrCmd::SendReaction { .. })
+            | Cmd::Nostr(NostrCmd::SendRepost { .. })
+            | Cmd::Nostr(NostrCmd::SendTextNote { .. }) => 1,
 
             // Network-related has medium priority
-            Cmd::ConnectToRelays { .. } | Cmd::DisconnectFromRelays | Cmd::SubscribeToTimeline => 2,
+            Cmd::Nostr(NostrCmd::ConnectToRelays { .. })
+            | Cmd::Nostr(NostrCmd::DisconnectFromRelays)
+            | Cmd::Nostr(NostrCmd::SubscribeToTimeline) => 2,
 
             // File operations have low priority
             Cmd::SaveConfig | Cmd::LoadConfig => 3,
@@ -143,13 +145,16 @@ mod tests {
     #[test]
     fn test_cmd_priority() {
         assert_eq!(
-            Cmd::SendReaction {
+            Cmd::Nostr(NostrCmd::SendReaction {
                 target_event: create_test_event()
-            }
+            })
             .priority(),
             1
         );
-        assert_eq!(Cmd::ConnectToRelays { relays: vec![] }.priority(), 2);
+        assert_eq!(
+            Cmd::Nostr(NostrCmd::ConnectToRelays { relays: vec![] }).priority(),
+            2
+        );
         assert_eq!(Cmd::SaveConfig.priority(), 3);
         assert_eq!(
             Cmd::LogInfo {
@@ -176,10 +181,10 @@ mod tests {
 
     #[test]
     fn test_cmd_serialization() {
-        let cmd = Cmd::SendTextNote {
+        let cmd = Cmd::Nostr(NostrCmd::SendTextNote {
             content: "Hello, Nostr!".to_string(),
             tags: vec![],
-        };
+        });
 
         let serialized = serde_json::to_string(&cmd).unwrap();
         let deserialized: Cmd = serde_json::from_str(&serialized).unwrap();
