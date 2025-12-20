@@ -71,28 +71,6 @@ impl Cmd {
         }
     }
 
-    /// Whether the command requires asynchronous processing
-    pub fn is_async(&self) -> bool {
-        match self {
-            Cmd::SendReaction { .. }
-            | Cmd::SendRepost { .. }
-            | Cmd::SendTextNote { .. }
-            | Cmd::ConnectToRelays { .. }
-            | Cmd::DisconnectFromRelays
-            | Cmd::SubscribeToTimeline
-            | Cmd::SaveConfig
-            | Cmd::LoadConfig => true,
-
-            Cmd::Tui(..)
-            | Cmd::RequestRender
-            | Cmd::LogError { .. }
-            | Cmd::LogInfo { .. }
-            | Cmd::None => false,
-
-            Cmd::Batch(cmds) => cmds.iter().any(|cmd| cmd.is_async()),
-        }
-    }
-
     /// Get command priority (smaller numbers = higher priority)
     pub fn priority(&self) -> u8 {
         match self {
@@ -163,26 +141,6 @@ mod tests {
     }
 
     #[test]
-    fn test_cmd_is_async() {
-        assert!(Cmd::SendTextNote {
-            content: "test".to_string(),
-            tags: vec![]
-        }
-        .is_async());
-
-        assert!(Cmd::ConnectToRelays {
-            relays: vec!["wss://relay.damus.io".to_string()]
-        }
-        .is_async());
-
-        assert!(!Cmd::Tui(TuiCommand::Resize {
-            width: 100,
-            height: 50
-        })
-        .is_async());
-    }
-
-    #[test]
     fn test_cmd_priority() {
         assert_eq!(
             Cmd::SendReaction {
@@ -226,19 +184,5 @@ mod tests {
         let serialized = serde_json::to_string(&cmd).unwrap();
         let deserialized: Cmd = serde_json::from_str(&serialized).unwrap();
         assert_eq!(cmd, deserialized);
-    }
-
-    #[test]
-    fn test_cmd_batch_is_async() {
-        let sync_batch = Cmd::Batch(vec![Cmd::LogInfo {
-            message: "test".to_string(),
-        }]);
-        assert!(!sync_batch.is_async());
-
-        let async_batch = Cmd::Batch(vec![Cmd::SendTextNote {
-            content: "test".to_string(),
-            tags: vec![],
-        }]);
-        assert!(async_batch.is_async());
     }
 }
