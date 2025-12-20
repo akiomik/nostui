@@ -1,13 +1,13 @@
 use nostr_sdk::prelude::*;
 
-/// Infrastructure-level Nostr commands.
-/// Some names intentionally mirror domain-level Cmd (e.g. SendReaction, SendRepost).
-/// This duplication reflects different concerns: domain Cmd expresses application intent (what),
-/// while NostrCommand expresses concrete execution for the Nostr infrastructure (how).
+/// Infrastructure-level Nostr operations.
+/// Some names intentionally mirror domain-level NostrCmd (e.g. SendReaction, SendRepost).
+/// This duplication reflects different concerns: domain NostrCmd expresses application intent (what),
+/// while NostrOperation expresses concrete execution for the Nostr infrastructure (how).
 /// Keeping these layers separate avoids leaking external SDK types into the domain and
 /// improves testability/substitutability of the infrastructure.
 #[derive(Debug, Clone)]
-pub enum NostrCommand {
+pub enum NostrOperation {
     /// Send a reaction (like/dislike) to a specific event
     SendReaction {
         target_event: Event,
@@ -42,22 +42,22 @@ pub enum NostrCommand {
     },
 }
 
-impl NostrCommand {
-    /// Get a human-readable name for the command (for logging/debugging)
+impl NostrOperation {
+    /// Get a human-readable name for the operation (for logging/debugging)
     pub fn name(&self) -> &'static str {
         match self {
-            NostrCommand::SendReaction { .. } => "SendReaction",
-            NostrCommand::SendRepost { .. } => "SendRepost",
-            NostrCommand::SendTextNote { .. } => "SendTextNote",
-            NostrCommand::ConnectToRelays { .. } => "ConnectToRelays",
-            NostrCommand::DisconnectFromRelays => "DisconnectFromRelays",
-            NostrCommand::SubscribeToTimeline => "SubscribeToTimeline",
-            NostrCommand::UpdateProfile { .. } => "UpdateProfile",
-            NostrCommand::SendDirectMessage { .. } => "SendDirectMessage",
+            NostrOperation::SendReaction { .. } => "SendReaction",
+            NostrOperation::SendRepost { .. } => "SendRepost",
+            NostrOperation::SendTextNote { .. } => "SendTextNote",
+            NostrOperation::ConnectToRelays { .. } => "ConnectToRelays",
+            NostrOperation::DisconnectFromRelays => "DisconnectFromRelays",
+            NostrOperation::SubscribeToTimeline => "SubscribeToTimeline",
+            NostrOperation::UpdateProfile { .. } => "UpdateProfile",
+            NostrOperation::SendDirectMessage { .. } => "SendDirectMessage",
         }
     }
 
-    /// Create a reaction command
+    /// Create a reaction operation
     pub fn reaction(target_event: Event, content: impl Into<String>) -> Self {
         Self::SendReaction {
             target_event,
@@ -65,17 +65,17 @@ impl NostrCommand {
         }
     }
 
-    /// Create a like command (reaction with "+")
+    /// Create a like operation (reaction with "+")
     pub fn like(target_event: Event) -> Self {
         Self::reaction(target_event, "+")
     }
 
-    /// Create a dislike command (reaction with "-")  
+    /// Create a dislike operation (reaction with "-")  
     pub fn dislike(target_event: Event) -> Self {
         Self::reaction(target_event, "-")
     }
 
-    /// Create a repost command
+    /// Create a repost operation
     pub fn repost(target_event: Event, reason: Option<String>) -> Self {
         Self::SendRepost {
             target_event,
@@ -83,7 +83,7 @@ impl NostrCommand {
         }
     }
 
-    /// Create a text note command
+    /// Create a text note operation
     pub fn text_note(content: impl Into<String>, tags: Vec<Tag>) -> Self {
         Self::SendTextNote {
             content: content.into(),
@@ -96,7 +96,7 @@ impl NostrCommand {
         Self::text_note(content, vec![])
     }
 
-    /// Create a relay connection command
+    /// Create a relay connection operation
     pub fn connect_relays(relays: Vec<String>) -> Self {
         Self::ConnectToRelays { relays }
     }
@@ -114,25 +114,25 @@ mod tests {
     }
 
     #[test]
-    fn test_nostr_command_names() {
+    fn test_nostr_operation_names() {
         let event = create_test_event();
 
-        assert_eq!(NostrCommand::like(event.clone()).name(), "SendReaction");
-        assert_eq!(NostrCommand::repost(event, None).name(), "SendRepost");
+        assert_eq!(NostrOperation::like(event.clone()).name(), "SendReaction");
+        assert_eq!(NostrOperation::repost(event, None).name(), "SendRepost");
         assert_eq!(
-            NostrCommand::simple_text_note("test").name(),
+            NostrOperation::simple_text_note("test").name(),
             "SendTextNote"
         );
         assert_eq!(
-            NostrCommand::connect_relays(vec!["wss://relay.example.com".to_string()]).name(),
+            NostrOperation::connect_relays(vec!["wss://relay.example.com".to_string()]).name(),
             "ConnectToRelays"
         );
         assert_eq!(
-            NostrCommand::DisconnectFromRelays.name(),
+            NostrOperation::DisconnectFromRelays.name(),
             "DisconnectFromRelays"
         );
         assert_eq!(
-            NostrCommand::SubscribeToTimeline.name(),
+            NostrOperation::SubscribeToTimeline.name(),
             "SubscribeToTimeline"
         );
     }
@@ -141,9 +141,9 @@ mod tests {
     fn test_reaction_helpers() {
         let event = create_test_event();
 
-        let like = NostrCommand::like(event.clone());
+        let like = NostrOperation::like(event.clone());
         match like {
-            NostrCommand::SendReaction {
+            NostrOperation::SendReaction {
                 target_event,
                 content,
             } => {
@@ -153,9 +153,9 @@ mod tests {
             _ => panic!("Expected SendReaction"),
         }
 
-        let dislike = NostrCommand::dislike(event.clone());
+        let dislike = NostrOperation::dislike(event.clone());
         match dislike {
-            NostrCommand::SendReaction {
+            NostrOperation::SendReaction {
                 target_event,
                 content,
             } => {
@@ -168,9 +168,9 @@ mod tests {
 
     #[test]
     fn test_text_note_helpers() {
-        let simple = NostrCommand::simple_text_note("Hello, Nostr!");
+        let simple = NostrOperation::simple_text_note("Hello, Nostr!");
         match simple {
-            NostrCommand::SendTextNote { content, tags } => {
+            NostrOperation::SendTextNote { content, tags } => {
                 assert_eq!(content, "Hello, Nostr!");
                 assert!(tags.is_empty());
             }
@@ -178,9 +178,9 @@ mod tests {
         }
 
         let with_tags =
-            NostrCommand::text_note("Tagged note", vec![Tag::parse(["t", "test"]).unwrap()]);
+            NostrOperation::text_note("Tagged note", vec![Tag::parse(["t", "test"]).unwrap()]);
         match with_tags {
-            NostrCommand::SendTextNote { content, tags } => {
+            NostrOperation::SendTextNote { content, tags } => {
                 assert_eq!(content, "Tagged note");
                 assert_eq!(tags.len(), 1);
             }
@@ -189,12 +189,12 @@ mod tests {
     }
 
     #[test]
-    fn test_repost_command() {
+    fn test_repost_operation() {
         let event = create_test_event();
 
-        let simple_repost = NostrCommand::repost(event.clone(), None);
+        let simple_repost = NostrOperation::repost(event.clone(), None);
         match simple_repost {
-            NostrCommand::SendRepost {
+            NostrOperation::SendRepost {
                 target_event,
                 reason,
             } => {
@@ -205,9 +205,9 @@ mod tests {
         }
 
         let repost_with_reason =
-            NostrCommand::repost(event.clone(), Some("Great point!".to_string()));
+            NostrOperation::repost(event.clone(), Some("Great point!".to_string()));
         match repost_with_reason {
-            NostrCommand::SendRepost {
+            NostrOperation::SendRepost {
                 target_event,
                 reason,
             } => {
@@ -219,15 +219,15 @@ mod tests {
     }
 
     #[test]
-    fn test_connect_relays_command() {
+    fn test_connect_relays_operation() {
         let relays = vec![
             "wss://relay1.example.com".to_string(),
             "wss://relay2.example.com".to_string(),
         ];
 
-        let cmd = NostrCommand::connect_relays(relays.clone());
+        let cmd = NostrOperation::connect_relays(relays.clone());
         match cmd {
-            NostrCommand::ConnectToRelays { relays: cmd_relays } => {
+            NostrOperation::ConnectToRelays { relays: cmd_relays } => {
                 assert_eq!(cmd_relays, relays);
             }
             _ => panic!("Expected ConnectToRelays"),

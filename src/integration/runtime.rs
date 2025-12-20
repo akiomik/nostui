@@ -11,7 +11,7 @@ use crate::{
         translator::translate_raw_to_domain,
         update::{update_with_context, UpdateContext},
     },
-    infrastructure::{nostr_command::NostrCommand, tui::textarea_engine::TuiTextAreaEngine},
+    infrastructure::{nostr::NostrOperation, tui::textarea_engine::TuiTextAreaEngine},
 };
 
 /// Integration point between Elm architecture runtime and existing app
@@ -70,10 +70,10 @@ impl Runtime {
         }
     }
 
-    /// Create a new Runtime with both Action and NostrCommand support
+    /// Create a new Runtime with NostrOperation support
     pub fn new_with_nostr_executor(
         initial_state: AppState,
-        nostr_sender: mpsc::UnboundedSender<NostrCommand>,
+        nostr_sender: mpsc::UnboundedSender<NostrOperation>,
     ) -> Self {
         static ENGINE: TuiTextAreaEngine = TuiTextAreaEngine;
         let (msg_tx, msg_rx) = mpsc::unbounded_channel();
@@ -99,15 +99,15 @@ impl Runtime {
         self.cmd_executor = Some(CmdExecutor::new());
     }
 
-    /// Set command executor with NostrCommand support
-    pub fn set_nostr_executor(&mut self, nostr_sender: mpsc::UnboundedSender<NostrCommand>) {
+    /// Set command executor with NostrOperation support
+    pub fn set_nostr_executor(&mut self, nostr_sender: mpsc::UnboundedSender<NostrOperation>) {
         self.cmd_executor = Some(CmdExecutor::new_with_nostr(nostr_sender));
     }
 
-    /// Add NostrCommand support to existing executor
+    /// Add NostrOperation support to existing executor
     pub fn add_nostr_support(
         &mut self,
-        nostr_sender: mpsc::UnboundedSender<NostrCommand>,
+        nostr_sender: mpsc::UnboundedSender<NostrOperation>,
     ) -> Result<(), String> {
         if let Some(executor) = &mut self.cmd_executor {
             executor.set_nostr_sender(nostr_sender);
@@ -552,7 +552,7 @@ mod tests {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
         let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
-        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let mut runtime = Runtime::new_with_nostr_executor(state, nostr_tx);
 
         // Check stats show both executor and Nostr support
@@ -569,20 +569,20 @@ mod tests {
         assert_eq!(execution_log.len(), 1);
         assert!(execution_log[0].contains("✓ Executed: SendReaction"));
 
-        // Check that NostrCommand was sent (not Action)
-        let nostr_cmd = nostr_rx.try_recv().unwrap();
-        match nostr_cmd {
-            NostrCommand::SendReaction {
+        // Check that NostrOperation was sent (not Action)
+        let nostr_op = nostr_rx.try_recv().unwrap();
+        match nostr_op {
+            NostrOperation::SendReaction {
                 target_event: received_event,
                 content,
             } => {
                 assert_eq!(received_event.id, target_event.id);
                 assert_eq!(content, "+");
             }
-            _ => panic!("Expected SendReaction NostrCommand"),
+            _ => panic!("Expected SendReaction NostrOperation"),
         }
 
-        // No Action should be sent when NostrCommand is available
+        // No Action should be sent when NostrOperation is available
         assert!(action_rx.try_recv().is_err());
     }
 
@@ -591,7 +591,7 @@ mod tests {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
         let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
-        let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let mut runtime = Runtime::new_with_executor(state);
 
         // Initially no Nostr support
@@ -609,7 +609,7 @@ mod tests {
     fn test_add_nostr_support_without_executor() {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrCommand>();
+        let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let mut runtime = Runtime::new(state);
 
         // No executor available

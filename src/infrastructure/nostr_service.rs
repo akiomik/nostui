@@ -5,7 +5,7 @@ use tokio::{
     task::yield_now,
 };
 
-use crate::{domain::nostr::Connection, infrastructure::nostr_command::NostrCommand, RawMsg};
+use crate::{domain::nostr::Connection, infrastructure::nostr::NostrOperation, RawMsg};
 
 /// NostrService handles all Nostr protocol operations including signing and sending events
 /// Evolved from ConnectionProcess with expanded responsibilities:
@@ -17,7 +17,7 @@ pub struct NostrService {
     conn: Connection,
     keys: Keys,
     // Incoming channels
-    cmd_rx: mpsc::UnboundedReceiver<NostrCommand>,
+    op_rx: mpsc::UnboundedReceiver<NostrOperation>,
     terminate_rx: mpsc::UnboundedReceiver<()>,
     // Outgoing channels
     event_tx: mpsc::UnboundedSender<Event>, // For received events
@@ -25,9 +25,9 @@ pub struct NostrService {
 }
 
 pub type NewNostrService = (
-    mpsc::UnboundedReceiver<Event>,      // req_rx - received events
-    mpsc::UnboundedSender<NostrCommand>, // cmd_tx - commands to send
-    mpsc::UnboundedSender<()>,           // terminate_tx - shutdown signal
+    mpsc::UnboundedReceiver<Event>,        // req_rx - received events
+    mpsc::UnboundedSender<NostrOperation>, // op_tx - operations to send
+    mpsc::UnboundedSender<()>,             // terminate_tx - shutdown signal
     NostrService,
 );
 
@@ -39,17 +39,17 @@ impl NostrService {
         raw_tx: mpsc::UnboundedSender<RawMsg>,
     ) -> Result<NewNostrService> {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
-        let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+        let (op_tx, op_rx) = mpsc::unbounded_channel();
         let (terminate_tx, terminate_rx) = mpsc::unbounded_channel();
 
         Ok((
             event_rx,
-            cmd_tx,
+            op_tx,
             terminate_tx,
             Self {
                 conn,
                 keys,
-                cmd_rx,
+                op_rx,
                 terminate_rx,
                 event_tx,
                 raw_tx,
@@ -84,20 +84,20 @@ impl NostrService {
                 }
             }
 
-            // Handle outgoing commands
-            while let Ok(cmd) = self.cmd_rx.try_recv() {
-                match self.handle_command(cmd, &mut timeline).await {
+            // Handle outgoing operations
+            while let Ok(op) = self.op_rx.try_recv() {
+                match self.handle_operation(op, &mut timeline).await {
                     Ok(should_continue) => {
                         if !should_continue {
-                            // Command requested service termination
+                            // Operation requested service termination
                             break;
                         }
                     }
                     Err(e) => {
-                        log::error!("Failed to handle command: {e}");
+                        log::error!("Failed to handle operation: {e}");
                         let _ = self
                             .raw_tx
-                            .send(RawMsg::Error(format!("Command failed: {e}",)));
+                            .send(RawMsg::Error(format!("Operation failed: {e}",)));
                     }
                 }
             }
@@ -122,17 +122,17 @@ impl NostrService {
         Ok(())
     }
 
-    /// Handle a NostrCommand by signing and sending appropriate events
+    /// Handle a NostrOperation by signing and sending appropriate events
     /// Returns true if the service should continue, false if it should terminate
-    async fn handle_command(
+    async fn handle_operation(
         &mut self,
-        cmd: NostrCommand,
+        op: NostrOperation,
         timeline: &mut broadcast::Receiver<RelayPoolNotification>,
     ) -> Result<bool> {
-        log::debug!("Handling NostrCommand: {cmd:?}");
+        log::debug!("Handling NostrOperation: {op:?}");
 
-        match cmd {
-            NostrCommand::SendReaction {
+        match op {
+            NostrOperation::SendReaction {
                 target_event,
                 content,
             } => {
@@ -146,7 +146,7 @@ impl NostrService {
                 let _ = self.raw_tx.send(RawMsg::SystemMessage(status));
             }
 
-            NostrCommand::SendRepost {
+            NostrOperation::SendRepost {
                 target_event,
                 reason,
             } => {
@@ -170,7 +170,7 @@ impl NostrService {
                 let _ = self.raw_tx.send(RawMsg::SystemMessage(status));
             }
 
-            NostrCommand::SendTextNote { content, tags } => {
+            NostrOperation::SendTextNote { content, tags } => {
                 log::info!(
                     "NostrService: Processing SendTextNote - content: '{content}', tags: {tags:?}"
                 );
@@ -185,14 +185,14 @@ impl NostrService {
                 let _ = self.raw_tx.send(RawMsg::SystemMessage(status));
             }
 
-            NostrCommand::ConnectToRelays { relays } => {
+            NostrOperation::ConnectToRelays { relays } => {
                 // Dynamic relay connection not supported (same as legacy implementation)
                 log::info!("Connect to relays requested: {relays:?}");
                 let status = "Dynamic relay connection not supported. Restart application with new relay config.".to_string();
                 let _ = self.raw_tx.send(RawMsg::SystemMessage(status));
             }
 
-            NostrCommand::DisconnectFromRelays => {
+            NostrOperation::DisconnectFromRelays => {
                 // Disconnect all relays and terminate service (same behavior as legacy)
                 log::info!("Disconnect from all relays requested");
                 let _ = self.raw_tx.send(RawMsg::SystemMessage(
@@ -203,7 +203,7 @@ impl NostrService {
                 return Ok(false); // Signal to terminate the service
             }
 
-            NostrCommand::SubscribeToTimeline => {
+            NostrOperation::SubscribeToTimeline => {
                 // Re-subscribe to timeline
                 *timeline = self.conn.subscribe_timeline().await?;
                 let _ = self.raw_tx.send(RawMsg::SystemMessage(
@@ -211,7 +211,7 @@ impl NostrService {
                 ));
             }
 
-            NostrCommand::UpdateProfile { metadata } => {
+            NostrOperation::UpdateProfile { metadata } => {
                 let event = EventBuilder::metadata(&metadata).sign_with_keys(&self.keys)?;
                 self.conn.send(event).await?;
 
@@ -219,7 +219,7 @@ impl NostrService {
                 let _ = self.raw_tx.send(RawMsg::SystemMessage(status));
             }
 
-            NostrCommand::SendDirectMessage {
+            NostrOperation::SendDirectMessage {
                 recipient_pubkey,
                 content,
             } => {
@@ -264,29 +264,29 @@ mod tests {
         let result = NostrService::new(conn, keys, action_tx);
         assert!(result.is_ok());
 
-        let (mut event_rx, cmd_tx, terminate_tx, _service) = result.unwrap();
+        let (mut event_rx, op_tx, terminate_tx, _service) = result.unwrap();
 
         // Verify channels are created
         assert!(event_rx.try_recv().is_err()); // Should be empty initially
-        assert!(cmd_tx.send(NostrCommand::SubscribeToTimeline).is_ok());
+        assert!(op_tx.send(NostrOperation::SubscribeToTimeline).is_ok());
         assert!(terminate_tx.send(()).is_ok());
     }
 
     #[test]
-    fn test_nostr_command_creation_helpers() {
+    fn test_nostr_operation_creation_helpers() {
         let keys = Keys::generate();
         let event = EventBuilder::text_note("test event")
             .sign_with_keys(&keys)
             .unwrap();
 
-        let like_cmd = NostrCommand::like(event.clone());
-        assert_eq!(like_cmd.name(), "SendReaction");
+        let like_op = NostrOperation::like(event.clone());
+        assert_eq!(like_op.name(), "SendReaction");
 
-        let text_cmd = NostrCommand::simple_text_note("Hello, Nostr!");
-        assert_eq!(text_cmd.name(), "SendTextNote");
+        let text_op = NostrOperation::simple_text_note("Hello, Nostr!");
+        assert_eq!(text_op.name(), "SendTextNote");
 
-        let repost_cmd = NostrCommand::repost(event, Some("Great post!".to_string()));
-        assert_eq!(repost_cmd.name(), "SendRepost");
+        let repost_op = NostrOperation::repost(event, Some("Great post!".to_string()));
+        assert_eq!(repost_op.name(), "SendRepost");
     }
 
     // Note: Full integration tests with actual network connections
