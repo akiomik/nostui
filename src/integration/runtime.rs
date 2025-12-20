@@ -195,10 +195,13 @@ impl Runtime {
             );
         }
 
-        let commands = self.pending_commands();
+        let mut commands = self.pending_commands();
         if commands.is_empty() {
             return Ok(vec![]);
         }
+
+        // Sort commands by priority
+        commands.sort_by_key(Cmd::priority);
 
         // Now safely get the executor
         let executor = self.cmd_executor.as_ref().unwrap();
