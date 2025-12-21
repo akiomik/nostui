@@ -98,19 +98,19 @@ impl RealTui {
         let render_delay = Duration::from_secs_f64(1.0 / self.frame_rate);
         self.cancel();
         self.cancellation_token = CancellationToken::new();
-        let _cancellation_token = self.cancellation_token.clone();
-        let _event_tx = self.event_tx.clone();
+        let cancellation_token = self.cancellation_token.clone();
+        let event_tx = self.event_tx.clone();
         self.task = tokio::spawn(async move {
             let mut reader = EventStream::new();
             let mut tick_interval = interval(tick_delay);
             let mut render_interval = interval(render_delay);
-            _event_tx.send(Event::Init).unwrap();
+            event_tx.send(Event::Init).unwrap();
             loop {
                 let tick_delay = tick_interval.tick();
                 let render_delay = render_interval.tick();
                 let crossterm_event = reader.next().fuse();
                 tokio::select! {
-                  _ = _cancellation_token.cancelled() => {
+                  _ = cancellation_token.cancelled() => {
                     break;
                   }
                   maybe_event = crossterm_event => {
@@ -119,37 +119,37 @@ impl RealTui {
                         match evt {
                           CrosstermEvent::Key(key) => {
                             if key.kind == KeyEventKind::Press {
-                              _event_tx.send(Event::Key(key)).unwrap();
+                              event_tx.send(Event::Key(key)).unwrap();
                             }
                           },
                           CrosstermEvent::Mouse(mouse) => {
-                            _event_tx.send(Event::Mouse(mouse)).unwrap();
+                            event_tx.send(Event::Mouse(mouse)).unwrap();
                           },
                           CrosstermEvent::Resize(x, y) => {
-                            _event_tx.send(Event::Resize(x, y)).unwrap();
+                            event_tx.send(Event::Resize(x, y)).unwrap();
                           },
                           CrosstermEvent::FocusLost => {
-                            _event_tx.send(Event::FocusLost).unwrap();
+                            event_tx.send(Event::FocusLost).unwrap();
                           },
                           CrosstermEvent::FocusGained => {
-                            _event_tx.send(Event::FocusGained).unwrap();
+                            event_tx.send(Event::FocusGained).unwrap();
                           },
                           CrosstermEvent::Paste(s) => {
-                            _event_tx.send(Event::Paste(s)).unwrap();
+                            event_tx.send(Event::Paste(s)).unwrap();
                           },
                         }
                       }
                       Some(Err(_)) => {
-                        _event_tx.send(Event::Error).unwrap();
+                        event_tx.send(Event::Error).unwrap();
                       }
                       None => {},
                     }
                   },
                   _ = tick_delay => {
-                      _event_tx.send(Event::Tick).unwrap();
+                      event_tx.send(Event::Tick).unwrap();
                   },
                   _ = render_delay => {
-                      _event_tx.send(Event::Render).unwrap();
+                      event_tx.send(Event::Render).unwrap();
                   },
                 }
             }
