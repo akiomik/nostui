@@ -15,9 +15,7 @@ use crate::{
         tui::{self, event_source::EventSource},
         tui_service::TuiService,
     },
-    integration::{
-        coalescer::Coalescer, renderer::Renderer, runtime::Runtime, update_executor::UpdateExecutor,
-    },
+    integration::{coalescer::Coalescer, renderer::Renderer, runtime::Runtime},
 };
 
 /// Experimental runner that drives the Elm architecture directly without legacy App
@@ -190,33 +188,51 @@ impl<'a> AppRunner<'a> {
         self.nostr_cancel_token.cancel();
     }
 
+    async fn run_cycle(&mut self) -> Result<bool> {
+        // 1) Coalesce render requests (at most one render per loop)
+        // Coalesced render requests from Elm (via Cmd::RequestRender)
+        let queued = self.drain_render_req_count();
+        let mut render_flag = false;
+
+        // 2) Poll one TUI event and handle it
+        if let Some(e) = self.poll_next_tui_event().await {
+            if let tui::Event::Render = e {
+                render_flag = true;
+            }
+            self.handle_tui_event(e, &mut render_flag);
+        }
+
+        // 3) Apply pending coalesced resize
+        if let Some((w, h)) = self.pending_resize.take() {
+            self.runtime.send_raw_msg(RawMsg::Resize(w, h));
+        }
+
+        // 4) Process Elm update cycle and execute commands
+        if let Err(e) = self.runtime.run_cycle() {
+            log::error!("Runtime error: {e}");
+            self.runtime
+                .send_raw_msg(RawMsg::Error(format!("Runtime error: {e}")));
+        }
+
+        // 5) Execute coalesced render if requested
+        let should_render = Coalescer::decide_render(queued, render_flag);
+        self.maybe_render(should_render).await?;
+
+        // 6) Check quit condition from Elm state
+        if self.should_quit() {
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
     /// Run the main loop: handle TUI events, Nostr events, update Elm state and render.
     pub async fn run(&mut self) -> Result<()> {
         self.enter_tui().await?;
 
         loop {
-            // 1) Coalesce render requests (at most one render per loop)
-            // Coalesced render requests from Elm (via Cmd::RequestRender)
-            let queued = self.drain_render_req_count();
-            let mut render_flag = false;
-
-            // 2) Poll one TUI event and handle it
-            if let Some(e) = self.poll_next_tui_event().await {
-                if let tui::Event::Render = e {
-                    render_flag = true;
-                }
-                self.handle_tui_event(e, &mut render_flag);
-            }
-
-            // 3) Process Elm update cycle and execute commands
-            UpdateExecutor::process_update_cycle(&mut self.runtime, &mut self.pending_resize);
-
-            // 4) Execute coalesced render if requested
-            let should_render = Coalescer::decide_render(queued, render_flag);
-            self.maybe_render(should_render).await?;
-
-            // 5) Check quit condition from Elm state
-            if self.should_quit() {
+            let should_quit = self.run_cycle().await?;
+            if should_quit {
                 break;
             }
         }
@@ -280,20 +296,8 @@ mod tests {
         )
         .await?;
 
-        // Manually perform one logical cycle using extracted helpers
-        let _queued = runner.drain_render_req_count();
-        let mut render_flag = false;
-        if let Some(e) = runner.poll_next_tui_event().await {
-            if let tui::Event::Render = e {
-                render_flag = true;
-            }
-            runner.handle_tui_event(e, &mut render_flag);
-        }
-        // Avoid multiple mutable borrows by taking pending_resize out temporarily
-        let mut pending = runner.pending_resize.take();
-        UpdateExecutor::process_update_cycle(runner.runtime_mut(), &mut pending);
-        runner.pending_resize = pending;
-        // don't call maybe_render on purpose (legacy one-cycle helper also skipped draw)
+        // Perform one cycle
+        runner.run_cycle().await?;
 
         assert!(runner.runtime().state().system.should_quit);
 
