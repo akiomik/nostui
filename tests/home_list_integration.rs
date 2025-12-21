@@ -55,15 +55,13 @@ fn test_scroll_position_calculations() {
 }
 
 #[test]
-fn test_selection_state_integration_with_elm() {
+fn test_selection_state_integration_with_elm() -> Result<()> {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
 
     // Add test notes
     for i in 0..5 {
-        let event = EventBuilder::text_note(format!("Test note {i}"))
-            .sign_with_keys(&keys)
-            .unwrap();
+        let event = EventBuilder::text_note(format!("Test note {i}")).sign_with_keys(&keys)?;
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
@@ -92,10 +90,12 @@ fn test_selection_state_integration_with_elm() {
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::DeselectNote), state);
     state = new_state;
     assert!(!HomeList::get_selection_info(&state).has_selection);
+
+    Ok(())
 }
 
 #[test]
-fn test_scrollable_conditions() {
+fn test_scrollable_conditions() -> Result<()> {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
 
@@ -103,9 +103,7 @@ fn test_scrollable_conditions() {
     assert!(!HomeList::is_scrollable(&state));
 
     // Add notes - becomes scrollable
-    let event = EventBuilder::text_note("Test note")
-        .sign_with_keys(&keys)
-        .unwrap();
+    let event = EventBuilder::text_note("Test note").sign_with_keys(&keys)?;
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
     state = new_state;
     assert!(HomeList::is_scrollable(&state));
@@ -119,18 +117,18 @@ fn test_scrollable_conditions() {
     let (new_state, _) = update(Msg::Ui(UiMsg::CancelInput), state);
     state = new_state;
     assert!(HomeList::is_scrollable(&state));
+
+    Ok(())
 }
 
 #[test]
-fn test_scroll_with_input_shown() {
+fn test_scroll_with_input_shown() -> Result<()> {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
 
     // Add test notes
     for i in 0..5 {
-        let event = EventBuilder::text_note(format!("Note {i}"))
-            .sign_with_keys(&keys)
-            .unwrap();
+        let event = EventBuilder::text_note(format!("Note {i}")).sign_with_keys(&keys)?;
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
@@ -152,18 +150,18 @@ fn test_scroll_with_input_shown() {
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::ScrollUp), state);
     state = new_state;
     assert_eq!(state.timeline.selected_index, Some(0)); // Still unchanged
+
+    Ok(())
 }
 
 #[test]
-fn test_out_of_bounds_selection_handling() {
+fn test_out_of_bounds_selection_handling() -> Result<()> {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
 
     // Add 3 notes
     for i in 0..3 {
-        let event = EventBuilder::text_note(format!("Note {i}"))
-            .sign_with_keys(&keys)
-            .unwrap();
+        let event = EventBuilder::text_note(format!("Note {i}")).sign_with_keys(&keys)?;
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
@@ -178,10 +176,12 @@ fn test_out_of_bounds_selection_handling() {
     let info = HomeList::get_selection_info(&state);
     // The selection info should still be valid for UI purposes
     assert_eq!(info.timeline_length, 3);
+
+    Ok(())
 }
 
 #[test]
-fn test_selection_info_comprehensive() {
+fn test_selection_info_comprehensive() -> Result<()> {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
 
@@ -193,9 +193,7 @@ fn test_selection_info_comprehensive() {
     assert!(!info.is_at_bottom);
 
     // Add single note
-    let event = EventBuilder::text_note("Single note")
-        .sign_with_keys(&keys)
-        .unwrap();
+    let event = EventBuilder::text_note("Single note").sign_with_keys(&keys)?;
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
     state = new_state;
 
@@ -210,9 +208,7 @@ fn test_selection_info_comprehensive() {
 
     // Add more notes
     for i in 1..5 {
-        let event = EventBuilder::text_note(format!("Note {i}"))
-            .sign_with_keys(&keys)
-            .unwrap();
+        let event = EventBuilder::text_note(format!("Note {i}")).sign_with_keys(&keys)?;
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
@@ -224,18 +220,18 @@ fn test_selection_info_comprehensive() {
     assert_eq!(info.timeline_length, 5);
     assert!(!info.is_at_top);
     assert!(!info.is_at_bottom);
+
+    Ok(())
 }
 
 #[test]
-fn test_clamps_selection_to_valid_range_in_draw() {
+fn test_clamps_selection_to_valid_range_in_draw() -> Result<()> {
     // Given: state with items and an out-of-bounds selection
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
 
     for i in 0..3 {
-        let ev = EventBuilder::text_note(format!("Note {i}"))
-            .sign_with_keys(&keys)
-            .unwrap();
+        let ev = EventBuilder::text_note(format!("Note {i}")).sign_with_keys(&keys)?;
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(ev)), state);
         state = new_state;
     }
@@ -248,18 +244,18 @@ fn test_clamps_selection_to_valid_range_in_draw() {
     // When: we render using a test backend, draw should not panic due to OOB
     let area = Rect::new(0, 0, 80, 20);
     let backend = TestBackend::new(area.width, area.height);
-    let mut terminal = Terminal::new(backend).unwrap();
+    let mut terminal = Terminal::new(backend)?;
 
-    terminal
-        .draw(|f| {
-            let frame_area = f.area();
-            let _ = list.draw(&state, f, frame_area);
-        })
-        .unwrap();
+    terminal.draw(|f| {
+        let frame_area = f.area();
+        let _ = list.draw(&state, f, frame_area);
+    })?;
+
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_complete_ui_workflow() {
+async fn test_complete_ui_workflow() -> Result<()> {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
     let _home_list = HomeList::new();
@@ -270,9 +266,7 @@ async fn test_complete_ui_workflow() {
 
     // 2. Add notes progressively
     for i in 0..10 {
-        let event = EventBuilder::text_note(format!("Timeline post #{i}"))
-            .sign_with_keys(&keys)
-            .unwrap();
+        let event = EventBuilder::text_note(format!("Timeline post #{i}")).sign_with_keys(&keys)?;
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
@@ -315,6 +309,8 @@ async fn test_complete_ui_workflow() {
     let final_info = HomeList::get_selection_info(&state);
     assert!(final_info.is_at_top);
     assert_eq!(final_info.selected_index, Some(0));
+
+    Ok(())
 }
 
 // test_scroll_boundary_conditions removed - boundary handling migrated to TimelineState unit tests in src/core/state/timeline.rs

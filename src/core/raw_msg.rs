@@ -58,10 +58,12 @@ mod tests {
     }
 
     #[test]
-    fn test_raw_msg_serialization() {
+    fn test_raw_msg_serialization() -> Result<()> {
         let msg = RawMsg::Error("test error".to_string());
-        let serialized = serde_json::to_string(&msg).unwrap();
-        let deserialized: RawMsg = serde_json::from_str(&serialized).unwrap();
+        let serialized = serde_json::to_string(&msg)?;
+        let deserialized: RawMsg = serde_json::from_str(&serialized)?;
         assert_eq!(msg, deserialized);
+
+        Ok(())
     }
 }

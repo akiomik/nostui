@@ -49,10 +49,12 @@ mod tests {
     }
 
     #[test]
-    fn test_timeline_msg_serialization() {
+    fn test_timeline_msg_serialization() -> Result<()> {
         let msg = TimelineMsg::SelectNote(42);
-        let serialized = serde_json::to_string(&msg).unwrap();
-        let deserialized: TimelineMsg = serde_json::from_str(&serialized).unwrap();
+        let serialized = serde_json::to_string(&msg)?;
+        let deserialized: TimelineMsg = serde_json::from_str(&serialized)?;
         assert_eq!(msg, deserialized);
+
+        Ok(())
     }
 }

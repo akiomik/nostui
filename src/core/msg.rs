@@ -72,10 +72,12 @@ mod tests {
     }
 
     #[test]
-    fn test_msg_serialization() {
+    fn test_msg_serialization() -> Result<()> {
         let msg = Msg::System(SystemMsg::UpdateStatusMessage("test".to_string()));
-        let serialized = serde_json::to_string(&msg).unwrap();
-        let deserialized: Msg = serde_json::from_str(&serialized).unwrap();
+        let serialized = serde_json::to_string(&msg)?;
+        let deserialized: Msg = serde_json::from_str(&serialized)?;
         assert_eq!(msg, deserialized);
+
+        Ok(())
     }
 }

@@ -186,23 +186,22 @@ mod tests {
     use crate::{core::state::ui::UiMode, domain::nostr::SortableEvent};
 
     use super::*;
+    use color_eyre::eyre::Result;
     use nostr_sdk::prelude::*;
 
-    fn create_test_state_with_timeline(note_count: usize) -> AppState {
+    fn create_test_state_with_timeline(note_count: usize) -> Result<AppState> {
         let keys = Keys::generate();
         let mut state = AppState::new(keys.public_key());
 
         // Add test notes
         for i in 0..note_count {
-            let event = EventBuilder::text_note(format!("Test note {i}"))
-                .sign_with_keys(&keys)
-                .unwrap();
+            let event = EventBuilder::text_note(format!("Test note {i}")).sign_with_keys(&keys)?;
 
             let sortable = SortableEvent::new(event);
             state.timeline.notes.find_or_insert(Reverse(sortable));
         }
 
-        state
+        Ok(state)
     }
 
     #[test]
@@ -276,8 +275,8 @@ mod tests {
     }
 
     #[test]
-    fn test_is_scrollable() {
-        let mut state = create_test_state_with_timeline(5);
+    fn test_is_scrollable() -> Result<()> {
+        let mut state = create_test_state_with_timeline(5)?;
 
         // Normal state - scrollable
         assert!(HomeList::is_scrollable(&state));
@@ -290,11 +289,13 @@ mod tests {
         state.ui.current_mode = UiMode::Normal;
         state.timeline.notes.clear();
         assert!(!HomeList::is_scrollable(&state));
+
+        Ok(())
     }
 
     #[test]
-    fn test_get_selection_info() {
-        let mut state = create_test_state_with_timeline(5);
+    fn test_get_selection_info() -> Result<()> {
+        let mut state = create_test_state_with_timeline(5)?;
 
         // No selection
         let info = HomeList::get_selection_info(&state);
@@ -325,16 +326,20 @@ mod tests {
         let info = HomeList::get_selection_info(&state);
         assert!(!info.is_at_top);
         assert!(!info.is_at_bottom);
+
+        Ok(())
     }
 
     #[test]
-    fn test_empty_timeline_selection_info() {
-        let state = create_test_state_with_timeline(0);
+    fn test_empty_timeline_selection_info() -> Result<()> {
+        let state = create_test_state_with_timeline(0)?;
         let info = HomeList::get_selection_info(&state);
 
         assert_eq!(info.timeline_length, 0);
         assert!(!info.has_selection);
         assert!(!info.is_at_top);
         assert!(!info.is_at_bottom);
+
+        Ok(())
     }
 }

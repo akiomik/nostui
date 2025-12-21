@@ -177,16 +177,18 @@ impl UiState {
 mod tests {
     use super::*;
 
-    fn create_event() -> Event {
+    fn create_event() -> Result<Event> {
         let keys = Keys::generate();
-        EventBuilder::text_note("t").sign_with_keys(&keys).unwrap()
+        EventBuilder::text_note("t")
+            .sign_with_keys(&keys)
+            .map_err(|e| e.into())
     }
 
     #[test]
-    fn test_show_new_note_resets_and_shows_input() {
+    fn test_show_new_note_resets_and_shows_input() -> Result<()> {
         let mut ui = UiState {
             textarea: TextAreaState::new("abc".into(), Default::default(), None),
-            reply_to: Some(create_event()),
+            reply_to: Some(create_event()?),
             ..Default::default()
         };
         let cmds = ui.update(UiMsg::ShowNewNote);
@@ -196,26 +198,31 @@ mod tests {
         assert!(ui.textarea.content.is_empty());
         assert_eq!(ui.textarea.cursor_position, Default::default());
         assert!(ui.textarea.selection.is_none());
+
+        Ok(())
     }
 
     #[test]
-    fn test_show_reply_sets_target_and_shows_input() {
+    #[allow(clippy::unwrap_used)]
+    fn test_show_reply_sets_target_and_shows_input() -> Result<()> {
         let mut ui = UiState::default();
-        let ev = create_event();
+        let ev = create_event()?;
         let ev_id = ev.id;
         let _ = ui.update(UiMsg::ShowReply(ev));
         assert!(ui.is_composing());
         assert!(ui.reply_to.as_ref().is_some());
         assert_eq!(ui.reply_to.as_ref().unwrap().id, ev_id);
         assert!(ui.textarea.content.is_empty());
+
+        Ok(())
     }
 
     #[test]
-    fn test_cancel_input_hides_and_resets() {
+    fn test_cancel_input_hides_and_resets() -> Result<()> {
         let mut ui = UiState {
             current_mode: UiMode::Composing,
             textarea: TextAreaState::new("x".into(), Default::default(), None),
-            reply_to: Some(create_event()),
+            reply_to: Some(create_event()?),
             ..Default::default()
         };
         let _ = ui.update(UiMsg::CancelInput);
@@ -223,6 +230,8 @@ mod tests {
         assert!(ui.reply_to.is_none());
         assert!(ui.textarea.content.is_empty());
         assert!(ui.textarea.selection.is_none());
+
+        Ok(())
     }
 
     #[test]
@@ -233,6 +242,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_update_cursor_and_selection() {
         let mut ui = UiState::default();
         let _ = ui.update(UiMsg::UpdateCursorPosition(CursorPosition {
@@ -255,7 +265,8 @@ mod tests {
     }
 
     #[test]
-    fn test_prepare_submit_data() {
+    #[allow(clippy::unwrap_used)]
+    fn test_prepare_submit_data() -> Result<()> {
         let mut ui = UiState {
             textarea: TextAreaState::new("Hello, Nostr!".to_string(), Default::default(), None),
             current_mode: UiMode::Composing,
@@ -270,7 +281,7 @@ mod tests {
         assert!(data.tags.is_empty()); // No reply tags
 
         // Reply submission
-        ui.reply_to = Some(create_event());
+        ui.reply_to = Some(create_event()?);
         let submit_data = ui.prepare_submit_data();
         assert!(submit_data.is_some());
         let data = submit_data.unwrap();
@@ -280,6 +291,8 @@ mod tests {
         ui.current_mode = UiMode::Normal;
         let submit_data = ui.prepare_submit_data();
         assert!(submit_data.is_none());
+
+        Ok(())
     }
 
     #[test]

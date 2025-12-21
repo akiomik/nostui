@@ -104,7 +104,10 @@ impl RealTui {
             let mut reader = EventStream::new();
             let mut tick_interval = interval(tick_delay);
             let mut render_interval = interval(render_delay);
-            event_tx.send(Event::Init).unwrap();
+            if let Err(e) = event_tx.send(Event::Init) {
+                log::error!("Failed to send Event::Init: {e}");
+            }
+
             loop {
                 let tick_delay = tick_interval.tick();
                 let render_delay = render_interval.tick();
@@ -114,42 +117,52 @@ impl RealTui {
                     break;
                   }
                   maybe_event = crossterm_event => {
-                    match maybe_event {
+                    let result = match maybe_event {
                       Some(Ok(evt)) => {
                         match evt {
                           CrosstermEvent::Key(key) => {
                             if key.kind == KeyEventKind::Press {
-                              event_tx.send(Event::Key(key)).unwrap();
+                              event_tx.send(Event::Key(key))
+                            } else {
+                                Ok(())
                             }
                           },
                           CrosstermEvent::Mouse(mouse) => {
-                            event_tx.send(Event::Mouse(mouse)).unwrap();
+                            event_tx.send(Event::Mouse(mouse))
                           },
                           CrosstermEvent::Resize(x, y) => {
-                            event_tx.send(Event::Resize(x, y)).unwrap();
+                            event_tx.send(Event::Resize(x, y))
                           },
                           CrosstermEvent::FocusLost => {
-                            event_tx.send(Event::FocusLost).unwrap();
+                            event_tx.send(Event::FocusLost)
                           },
                           CrosstermEvent::FocusGained => {
-                            event_tx.send(Event::FocusGained).unwrap();
+                            event_tx.send(Event::FocusGained)
                           },
                           CrosstermEvent::Paste(s) => {
-                            event_tx.send(Event::Paste(s)).unwrap();
+                            event_tx.send(Event::Paste(s))
                           },
                         }
                       }
                       Some(Err(_)) => {
-                        event_tx.send(Event::Error).unwrap();
+                        event_tx.send(Event::Error)
                       }
-                      None => {},
+                      None => Ok(()),
+                    };
+
+                    if let Err(e) = result {
+                        log::error!("Failed to send Event: {e}");
                     }
                   },
                   _ = tick_delay => {
-                      event_tx.send(Event::Tick).unwrap();
+                      if let Err(e) = event_tx.send(Event::Tick) {
+                        log::error!("Failed to send Event::Tick: {e}");
+                      }
                   },
                   _ = render_delay => {
-                      event_tx.send(Event::Render).unwrap();
+                      if let Err(e) = event_tx.send(Event::Render) {
+                        log::error!("Failed to send Event::Render: {e}");
+                      }
                   },
                 }
             }

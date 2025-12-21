@@ -34,6 +34,8 @@ impl SystemMsg {
 mod tests {
     use super::*;
 
+    use color_eyre::Result;
+
     #[test]
     fn test_system_msg_frequent_detection() {
         assert!(SystemMsg::UpdateAppFps(60.0).is_frequent());
@@ -54,10 +56,12 @@ mod tests {
     }
 
     #[test]
-    fn test_system_msg_serialization() {
+    fn test_system_msg_serialization() -> Result<()> {
         let msg = SystemMsg::UpdateStatusMessage("test status".to_string());
-        let serialized = serde_json::to_string(&msg).unwrap();
-        let deserialized: SystemMsg = serde_json::from_str(&serialized).unwrap();
+        let serialized = serde_json::to_string(&msg)?;
+        let deserialized: SystemMsg = serde_json::from_str(&serialized)?;
         assert_eq!(msg, deserialized);
+
+        Ok(())
     }
 }

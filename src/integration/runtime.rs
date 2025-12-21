@@ -1,3 +1,5 @@
+use color_eyre::eyre::eyre;
+use color_eyre::Result;
 use std::collections::VecDeque;
 use tokio::sync::mpsc;
 
@@ -109,15 +111,14 @@ impl Runtime {
     pub fn add_nostr_support(
         &mut self,
         nostr_sender: mpsc::UnboundedSender<NostrOperation>,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         if let Some(executor) = &mut self.cmd_executor {
             executor.set_nostr_sender(nostr_sender);
             Ok(())
         } else {
-            Err(
+            Err(eyre!(
                 "No executor available. Use set_executor() or set_nostr_executor() first."
-                    .to_string(),
-            )
+            ))
         }
     }
 
@@ -127,34 +128,26 @@ impl Runtime {
     }
 
     /// Add TUI command sender support to existing executor (for TuiCmd execution)
-    pub fn add_tui_sender(
-        &mut self,
-        tui_sender: mpsc::UnboundedSender<TuiCmd>,
-    ) -> Result<(), String> {
+    pub fn add_tui_sender(&mut self, tui_sender: mpsc::UnboundedSender<TuiCmd>) -> Result<()> {
         if let Some(executor) = &mut self.cmd_executor {
             executor.set_tui_sender(tui_sender);
             Ok(())
         } else {
-            Err(
+            Err(eyre!(
                 "No executor available. Use set_executor() or set_nostr_executor() first."
-                    .to_string(),
-            )
+            ))
         }
     }
 
     /// Add render request sender for orchestrated rendering in AppRunner
-    pub fn add_render_request_sender(
-        &mut self,
-        render_sender: mpsc::Sender<()>,
-    ) -> Result<(), String> {
+    pub fn add_render_request_sender(&mut self, render_sender: mpsc::Sender<()>) -> Result<()> {
         if let Some(executor) = &mut self.cmd_executor {
             executor.set_render_request_sender(render_sender);
             Ok(())
         } else {
-            Err(
+            Err(eyre!(
                 "No executor available. Use set_executor() or set_nostr_executor() first."
-                    .to_string(),
-            )
+            ))
         }
     }
 
@@ -188,11 +181,12 @@ impl Runtime {
     }
 
     /// Execute all pending commands using the command executor
-    pub fn execute_pending_commands(&mut self) -> Result<Vec<String>, String> {
+    #[allow(clippy::unwrap_used)]
+    pub fn execute_pending_commands(&mut self) -> Result<Vec<String>> {
         if self.cmd_executor.is_none() {
-            return Err(
-                "No command executor available. Use set_executor() to configure.".to_string(),
-            );
+            return Err(eyre!(
+                "No command executor available. Use set_executor() to configure."
+            ));
         }
 
         let mut commands = self.pending_commands();
@@ -207,17 +201,19 @@ impl Runtime {
         let executor = self.cmd_executor.as_ref().unwrap();
         executor
             .execute_commands(&commands)
-            .map_err(|e| format!("Command execution failed: {e}"))
+            .map_err(|e| eyre!("Command execution failed: {e}"))
     }
 
     /// Execute a single command immediately
-    pub fn execute_command(&self, cmd: &Cmd) -> Result<(), String> {
+    pub fn execute_command(&self, cmd: &Cmd) -> Result<()> {
         if let Some(executor) = &self.cmd_executor {
             executor
                 .execute_command(cmd)
-                .map_err(|e| format!("Command execution failed: {e}"))
+                .map_err(|e| eyre!("Command execution failed: {e}"))
         } else {
-            Err("No command executor available. Use set_executor() to configure.".to_string())
+            Err(eyre!(
+                "No command executor available. Use set_executor() to configure."
+            ))
         }
     }
 
@@ -270,7 +266,7 @@ impl Runtime {
     }
 
     /// Process all messages and execute commands in one step
-    pub fn run_update_cycle(&mut self) -> Result<Vec<String>, String> {
+    pub fn run_update_cycle(&mut self) -> Result<Vec<String>> {
         let _commands = self.process_all_messages();
         self.execute_pending_commands()
     }
@@ -319,6 +315,7 @@ mod tests {
     use crate::core::msg::ui::UiMsg;
     use crate::core::msg::Msg;
     use crate::domain::nostr::Profile;
+    use color_eyre::Result;
     use nostr_sdk::prelude::*;
 
     fn create_test_runtime() -> Runtime {
@@ -327,11 +324,11 @@ mod tests {
         Runtime::new(state)
     }
 
-    fn create_test_event() -> Event {
+    fn create_test_event() -> Result<Event> {
         let keys = Keys::generate();
         EventBuilder::text_note("test content")
             .sign_with_keys(&keys)
-            .unwrap()
+            .map_err(|e| e.into())
     }
 
     #[test]
@@ -371,11 +368,11 @@ mod tests {
     }
 
     #[test]
-    fn test_process_scroll_messages() {
+    fn test_process_scroll_messages() -> Result<()> {
         let mut runtime = create_test_runtime();
 
         // Add event to timeline
-        let event = create_test_event();
+        let event = create_test_event()?;
         runtime.process_message(Msg::Timeline(TimelineMsg::AddNote(event)));
 
         // Test scroll operations
@@ -384,12 +381,14 @@ mod tests {
 
         runtime.process_message(Msg::Timeline(TimelineMsg::ScrollUp));
         assert_eq!(runtime.state().timeline.selected_index, Some(0)); // No change as it's at the top
+
+        Ok(())
     }
 
     #[test]
-    fn test_send_reaction_command() {
+    fn test_send_reaction_command() -> Result<()> {
         let mut runtime = create_test_runtime();
-        let target_event = create_test_event();
+        let target_event = create_test_event()?;
 
         let commands =
             runtime.process_message(Msg::Nostr(NostrMsg::SendReaction(target_event.clone())));
@@ -407,6 +406,8 @@ mod tests {
         // Status message is now set by translator when generating messages,
         // not by update() on Msg::Nostr
         assert!(runtime.state().system.status_message.is_none());
+
+        Ok(())
     }
 
     #[test]
@@ -443,9 +444,9 @@ mod tests {
     }
 
     #[test]
-    fn test_reply_workflow() {
+    fn test_reply_workflow() -> Result<()> {
         let mut runtime = create_test_runtime();
-        let target_event = create_test_event();
+        let target_event = create_test_event()?;
 
         // Start reply
         runtime.process_message(Msg::Ui(UiMsg::ShowReply(target_event.clone())));
@@ -456,14 +457,16 @@ mod tests {
         runtime.process_message(Msg::Ui(UiMsg::CancelInput));
         assert!(runtime.state().ui.is_normal());
         assert!(runtime.state().ui.reply_to.is_none());
+
+        Ok(())
     }
 
     #[test]
-    fn test_receive_events() {
+    fn test_receive_events() -> Result<()> {
         let mut runtime = create_test_runtime();
 
         // Receive text note
-        let text_event = create_test_event();
+        let text_event = create_test_event()?;
         runtime.process_message(Msg::Timeline(TimelineMsg::AddNote(text_event)));
         assert_eq!(runtime.state().timeline.len(), 1);
 
@@ -472,9 +475,7 @@ mod tests {
         let metadata = Metadata::new()
             .name("Test User")
             .display_name("Test Display Name");
-        let metadata_event = EventBuilder::metadata(&metadata)
-            .sign_with_keys(&keys)
-            .unwrap();
+        let metadata_event = EventBuilder::metadata(&metadata).sign_with_keys(&keys)?;
 
         let profile = Profile::new(keys.public_key(), metadata_event.created_at, metadata);
         runtime.process_message(Msg::UpdateProfile(keys.public_key(), profile));
@@ -483,18 +484,19 @@ mod tests {
             .user
             .profiles
             .contains_key(&keys.public_key()));
+
+        Ok(())
     }
 
     #[test]
-    fn test_external_message_channel() {
+    #[allow(clippy::unwrap_used)]
+    fn test_external_message_channel() -> Result<()> {
         let mut runtime = create_test_runtime();
         let sender = runtime.get_sender().unwrap();
 
         // Send messages from external source
-        sender.send(Msg::Ui(UiMsg::ShowNewNote)).unwrap();
-        sender
-            .send(Msg::Ui(UiMsg::UpdateInputContent("test".to_string())))
-            .unwrap();
+        sender.send(Msg::Ui(UiMsg::ShowNewNote))?;
+        sender.send(Msg::Ui(UiMsg::UpdateInputContent("test".to_string())))?;
 
         // Not processed yet
         assert!(runtime.state().ui.is_normal());
@@ -506,12 +508,14 @@ mod tests {
         assert!(runtime.state().ui.is_composing());
         assert_eq!(runtime.state().ui.textarea.content, "test");
         assert!(commands.is_empty());
+
+        Ok(())
     }
 
     #[test]
-    fn test_pending_commands() {
+    fn test_pending_commands() -> Result<()> {
         let mut runtime = create_test_runtime();
-        let target_event = create_test_event();
+        let target_event = create_test_event()?;
 
         // Send messages that generate commands
         runtime.process_message(Msg::Nostr(NostrMsg::SendReaction(target_event.clone())));
@@ -524,10 +528,12 @@ mod tests {
         // Getting them again returns empty
         let pending2 = runtime.pending_commands();
         assert!(pending2.is_empty());
+
+        Ok(())
     }
 
     #[test]
-    fn test_runtime_with_executor() {
+    fn test_runtime_with_executor() -> Result<()> {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
         let mut runtime = Runtime::new_with_executor(state);
@@ -538,17 +544,19 @@ mod tests {
         assert!(!stats.has_nostr_support);
 
         // Send a message that generates a command
-        let target_event = create_test_event();
+        let target_event = create_test_event()?;
         runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(target_event)));
 
         // Process messages and execute commands
-        let execution_log = runtime.run_update_cycle().unwrap();
+        let execution_log = runtime.run_update_cycle()?;
         assert_eq!(execution_log.len(), 1);
         assert!(execution_log[0].contains("✓ Executed: SendReaction"));
+
+        Ok(())
     }
 
     #[test]
-    fn test_runtime_with_nostr_executor() {
+    fn test_runtime_with_nostr_executor() -> Result<()> {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
@@ -560,16 +568,16 @@ mod tests {
         assert!(stats.has_nostr_support);
 
         // Send a message that generates a command
-        let target_event = create_test_event();
+        let target_event = create_test_event()?;
         runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(target_event.clone())));
 
         // Process messages and execute commands
-        let execution_log = runtime.run_update_cycle().unwrap();
+        let execution_log = runtime.run_update_cycle()?;
         assert_eq!(execution_log.len(), 1);
         assert!(execution_log[0].contains("✓ Executed: SendReaction"));
 
         // Check that NostrOperation was sent (not Action)
-        let nostr_op = nostr_rx.try_recv().unwrap();
+        let nostr_op = nostr_rx.try_recv()?;
         match nostr_op {
             NostrOperation::SendReaction {
                 target_event: received_event,
@@ -580,10 +588,12 @@ mod tests {
             }
             _ => panic!("Expected SendReaction NostrOperation"),
         }
+
+        Ok(())
     }
 
     #[test]
-    fn test_add_nostr_support() {
+    fn test_add_nostr_support() -> Result<()> {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
         let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
@@ -593,11 +603,12 @@ mod tests {
         assert!(!runtime.get_stats().has_nostr_support);
 
         // Add Nostr support
-        let result = runtime.add_nostr_support(nostr_tx);
-        assert!(result.is_ok());
+        runtime.add_nostr_support(nostr_tx)?;
 
         // Now has Nostr support
         assert!(runtime.get_stats().has_nostr_support);
+
+        Ok(())
     }
 
     #[test]
@@ -612,8 +623,9 @@ mod tests {
 
         // Should fail to add Nostr support
         let result = runtime.add_nostr_support(nostr_tx);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("No executor available"));
+        assert!(
+            matches!(result, Err(ref report) if report.to_string().contains("No executor available"))
+        );
     }
 
     #[test]
@@ -623,14 +635,13 @@ mod tests {
 
         // Should fail without executor
         let result = runtime.execute_command(&cmd);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("No command executor available"));
+        assert!(
+            matches!(result, Err(ref report) if report.to_string().contains("No command executor available"))
+        );
     }
 
     #[test]
-    fn test_set_executor() {
+    fn test_set_executor() -> Result<()> {
         let mut runtime = create_test_runtime();
 
         // Initially no executor
@@ -642,19 +653,19 @@ mod tests {
 
         // Should now be able to execute commands
         let cmd = Cmd::LoadConfig;
-        let result = runtime.execute_command(&cmd);
-        assert!(result.is_ok());
+        runtime.execute_command(&cmd)
     }
 
     #[test]
-    fn test_execute_pending_commands_empty() {
+    fn test_execute_pending_commands_empty() -> Result<()> {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
         let mut runtime = Runtime::new_with_executor(state);
 
         // No pending commands
         let result = runtime.execute_pending_commands();
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
+        assert!(result?.is_empty());
+
+        Ok(())
     }
 }

@@ -78,32 +78,29 @@ impl UserState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::nostr::Profile;
 
-    fn create_test_profile(name: &str, timestamp_offset: i64) -> Profile {
+    fn create_test_profile(name: &str, timestamp_offset: i64) -> Result<Profile> {
         let base_time = nostr_sdk::Timestamp::now().as_secs() as i64;
         let new_time = (base_time + timestamp_offset) as u64;
 
-        Profile {
+        Ok(Profile {
             pubkey: Keys::generate().public_key(),
             metadata: nostr_sdk::Metadata::new()
                 .name(name)
                 .display_name(format!("{name} Display"))
                 .about(format!("Bio for {name}"))
-                .picture(
-                    format!("https://example.com/{}.jpg", name.to_lowercase())
-                        .parse()
-                        .unwrap(),
-                ),
+                .picture(format!("https://example.com/{}.jpg", name.to_lowercase()).parse()?),
             created_at: nostr_sdk::Timestamp::from(new_time),
-        }
+        })
     }
 
     // Profile update tests
     #[test]
-    fn test_update_profile_new_unit() {
+    fn test_update_profile_new_unit() -> Result<()> {
         let mut user = UserState::default();
         let pubkey = Keys::generate().public_key();
-        let profile = create_test_profile("Alice", 0);
+        let profile = create_test_profile("Alice", 0)?;
 
         assert_eq!(user.profile_count(), 0);
 
@@ -112,73 +109,77 @@ mod tests {
         assert!(cmds.is_empty()); // UserState doesn't generate commands
         assert_eq!(user.profile_count(), 1);
         assert!(user.has_profile(&pubkey));
-        assert_eq!(user.get_profile(&pubkey).unwrap().name(), profile.name());
+        assert!(matches!(user.get_profile(&pubkey), Some(p) if p.name() == profile.name()));
+
+        Ok(())
     }
 
     #[test]
-    fn test_update_profile_newer_unit() {
+    fn test_update_profile_newer_unit() -> Result<()> {
         let mut user = UserState::default();
         let pubkey = Keys::generate().public_key();
 
         // Add older profile
-        let old_profile = create_test_profile("Alice Old", -100);
+        let old_profile = create_test_profile("Alice Old", -100)?;
         user.update(UserMsg::UpdateProfile(pubkey, old_profile));
 
         // Add newer profile
-        let new_profile = create_test_profile("Alice New", 100);
+        let new_profile = create_test_profile("Alice New", 100)?;
         let cmds = user.update(UserMsg::UpdateProfile(pubkey, new_profile.clone()));
 
         assert!(cmds.is_empty());
         assert_eq!(user.profile_count(), 1); // Still only one profile
-        assert_eq!(
-            user.get_profile(&pubkey).unwrap().name(),
-            new_profile.name()
-        );
+        assert!(matches!(user.get_profile(&pubkey), Some(p) if p.name() == new_profile.name()));
+
+        Ok(())
     }
 
     #[test]
-    fn test_update_profile_older_ignored_unit() {
+    fn test_update_profile_older_ignored_unit() -> Result<()> {
         let mut user = UserState::default();
         let pubkey = Keys::generate().public_key();
 
         // Add newer profile first
-        let new_profile = create_test_profile("Alice New", 100);
+        let new_profile = create_test_profile("Alice New", 100)?;
         user.update(UserMsg::UpdateProfile(pubkey, new_profile.clone()));
 
         // Try to add older profile - should be ignored
-        let old_profile = create_test_profile("Alice Old", -100);
+        let old_profile = create_test_profile("Alice Old", -100)?;
         let cmds = user.update(UserMsg::UpdateProfile(pubkey, old_profile));
 
+        // Should keep newer
         assert!(cmds.is_empty());
         assert_eq!(user.profile_count(), 1);
-        assert_eq!(
-            user.get_profile(&pubkey).unwrap().name(),
-            new_profile.name()
-        ); // Should keep newer
+        assert!(matches!(user.get_profile(&pubkey), Some(p) if p.name() == new_profile.name()));
+
+        Ok(())
     }
 
     #[test]
-    fn test_update_profile_same_timestamp_unit() {
+    fn test_update_profile_same_timestamp_unit() -> Result<()> {
         let mut user = UserState::default();
         let pubkey = Keys::generate().public_key();
 
-        let profile1 = create_test_profile("Alice", 0);
+        let profile1 = create_test_profile("Alice", 0)?;
         user.update(UserMsg::UpdateProfile(pubkey, profile1.clone()));
-        assert_eq!(user.get_profile(&pubkey).unwrap().name(), profile1.name());
+        assert!(matches!(user.get_profile(&pubkey), Some(p) if p.name() == profile1.name()));
 
-        let profile2 = create_test_profile("Alice Updated", 1); // Use newer timestamp
+        // Should update with newer timestamp
+        let profile2 = create_test_profile("Alice Updated", 1)?; // Use newer timestamp
         user.update(UserMsg::UpdateProfile(pubkey, profile2.clone()));
-        assert_eq!(user.get_profile(&pubkey).unwrap().name(), profile2.name()); // Should update with newer timestamp
+        assert!(matches!(user.get_profile(&pubkey), Some(p) if p.name() == profile2.name()));
+
+        Ok(())
     }
 
     // Helper method tests
     #[test]
-    fn test_helper_methods_unit() {
+    fn test_helper_methods_unit() -> Result<()> {
         let mut user = UserState::default();
         let pubkey1 = Keys::generate().public_key();
         let pubkey2 = Keys::generate().public_key();
-        let profile1 = create_test_profile("Alice", 0);
-        let profile2 = create_test_profile("Bob", 0);
+        let profile1 = create_test_profile("Alice", 0)?;
+        let profile2 = create_test_profile("Bob", 0)?;
 
         // Initially empty
         assert_eq!(user.profile_count(), 0);
@@ -197,32 +198,35 @@ mod tests {
         assert_eq!(all_keys.len(), 2);
         assert!(all_keys.contains(&&pubkey1));
         assert!(all_keys.contains(&&pubkey2));
+
+        Ok(())
     }
 
     #[test]
-    fn test_remove_profile_unit() {
+    fn test_remove_profile_unit() -> Result<()> {
         let mut user = UserState::default();
         let pubkey = Keys::generate().public_key();
-        let profile = create_test_profile("Alice", 0);
+        let profile = create_test_profile("Alice", 0)?;
 
         user.update(UserMsg::UpdateProfile(pubkey, profile.clone()));
         assert!(user.has_profile(&pubkey));
 
         let removed = user.remove_profile(&pubkey);
-        assert!(removed.is_some());
-        assert_eq!(removed.unwrap().name(), profile.name());
+        assert!(matches!(removed, Some(p) if p.name() == profile.name()));
         assert!(!user.has_profile(&pubkey));
         assert_eq!(user.profile_count(), 0);
+
+        Ok(())
     }
 
     #[test]
-    fn test_clear_profiles_unit() {
+    fn test_clear_profiles_unit() -> Result<()> {
         let mut user = UserState::default();
 
         // Add multiple profiles
         for i in 0..5 {
             let pubkey = Keys::generate().public_key();
-            let profile = create_test_profile(&format!("User{i}"), i);
+            let profile = create_test_profile(&format!("User{i}"), i)?;
             user.update(UserMsg::UpdateProfile(pubkey, profile));
         }
 
@@ -230,11 +234,13 @@ mod tests {
 
         user.clear_profiles();
         assert_eq!(user.profile_count(), 0);
+
+        Ok(())
     }
 
     // Integration test
     #[test]
-    fn test_user_complete_flow_unit() {
+    fn test_user_complete_flow_unit() -> Result<()> {
         let mut user = UserState::default();
 
         // 1. Add multiple users
@@ -244,15 +250,15 @@ mod tests {
 
         user.update(UserMsg::UpdateProfile(
             alice_key,
-            create_test_profile("Alice", 100),
+            create_test_profile("Alice", 100)?,
         ));
         user.update(UserMsg::UpdateProfile(
             bob_key,
-            create_test_profile("Bob", 200),
+            create_test_profile("Bob", 200)?,
         ));
         user.update(UserMsg::UpdateProfile(
             charlie_key,
-            create_test_profile("Charlie", 300),
+            create_test_profile("Charlie", 300)?,
         ));
 
         assert_eq!(user.profile_count(), 3);
@@ -260,22 +266,21 @@ mod tests {
         // 2. Update existing user with newer profile
         user.update(UserMsg::UpdateProfile(
             alice_key,
-            create_test_profile("Alice Updated", 400),
+            create_test_profile("Alice Updated", 400)?,
         ));
         assert_eq!(user.profile_count(), 3); // Same count
-        assert_eq!(
-            user.get_profile(&alice_key).unwrap().name(),
-            "Alice Updated Display".to_string() // display_name takes precedence
+        assert!(
+            matches!(user.get_profile(&alice_key), Some(p) if p.name() == "Alice Updated Display")
         );
 
         // 3. Try to update with older profile (should be ignored)
         user.update(UserMsg::UpdateProfile(
             bob_key,
-            create_test_profile("Bob Old", 50),
+            create_test_profile("Bob Old", 50)?,
         ));
-        assert_eq!(
-            user.get_profile(&bob_key).unwrap().name(),
-            "Bob Display".to_string() // display_name takes precedence, unchanged
+        assert!(
+            // display_name takes precedence, unchanged
+            matches!(user.get_profile(&bob_key), Some(p) if p.name() == "Bob Display")
         );
 
         // 4. Remove one user
@@ -286,5 +291,7 @@ mod tests {
         // 5. Check remaining users
         assert!(user.has_profile(&alice_key));
         assert!(user.has_profile(&bob_key));
+
+        Ok(())
     }
 }

@@ -155,6 +155,7 @@ impl TextNote {
 }
 
 impl Widget for TextNote {
+    #[allow(clippy::unwrap_used)]
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut text = Text::default();
 
@@ -259,6 +260,7 @@ mod tests {
     use crate::domain::nostr::Profile;
 
     #[fixture]
+    #[allow(clippy::unwrap_used)]
     fn event() -> Event {
         Event::from_json(
             r#"{
@@ -297,17 +299,15 @@ mod tests {
         event: Event,
         area: Rect,
         padding: Padding,
-    ) {
-        let profile = metadata.map(|metadata| {
-            Profile::new(
+    ) -> Result<()> {
+        let profile = metadata
+            .map(|metadata| {
                 nostr_sdk::PublicKey::from_str(
                     "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
                 )
-                .unwrap(),
-                Timestamp::now(),
-                metadata,
-            )
-        });
+                .map(|key| Profile::new(key, Timestamp::now(), metadata))
+            })
+            .transpose()?;
 
         let note = TextNote::new(
             event,
@@ -319,6 +319,8 @@ mod tests {
             padding,
         );
         assert_eq!(note.display_name(), expected);
+
+        Ok(())
     }
 
     #[rstest]
@@ -334,17 +336,15 @@ mod tests {
         event: Event,
         area: Rect,
         padding: Padding,
-    ) {
-        let profile = metadata.map(|metadata| {
-            Profile::new(
+    ) -> Result<()> {
+        let profile = metadata
+            .map(|metadata| {
                 nostr_sdk::PublicKey::from_str(
                     "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
                 )
-                .unwrap(),
-                Timestamp::now(),
-                metadata,
-            )
-        });
+                .map(|key| Profile::new(key, Timestamp::now(), metadata))
+            })
+            .transpose()?;
 
         let note = TextNote::new(
             event,
@@ -356,6 +356,8 @@ mod tests {
             padding,
         );
         assert_eq!(note.name(), expected);
+
+        Ok(())
     }
 
     #[rstest]
@@ -376,12 +378,10 @@ mod tests {
     // These tests ensure that hex usernames (public keys without profiles) are properly highlighted when selected
 
     #[test]
-    fn test_hex_username_highlighting_regression() {
+    fn test_hex_username_highlighting_regression() -> Result<()> {
         // Create event without profile (will show hex username)
         let keys = Keys::generate();
-        let event = EventBuilder::text_note("Test note with hex username")
-            .sign_with_keys(&keys)
-            .unwrap();
+        let event = EventBuilder::text_note("Test note with hex username").sign_with_keys(&keys)?;
 
         let area = Rect::new(0, 0, 80, 10);
 
@@ -448,15 +448,15 @@ mod tests {
             first_line_differences > 0,
             "Expected style differences in hex username line, but found none"
         );
+
+        Ok(())
     }
 
     #[test]
-    fn test_named_user_highlighting_still_works() {
+    fn test_named_user_highlighting_still_works() -> Result<()> {
         // Create event with profile (will show name)
         let keys = Keys::generate();
-        let event = EventBuilder::text_note("Test note with named user")
-            .sign_with_keys(&keys)
-            .unwrap();
+        let event = EventBuilder::text_note("Test note with named user").sign_with_keys(&keys)?;
 
         let metadata = Metadata::new().display_name("Test User").name("testuser");
 
@@ -509,5 +509,7 @@ mod tests {
             style_differences > 0,
             "Expected style differences for named user highlighting, but found none. This indicates a regression."
         );
+
+        Ok(())
     }
 }

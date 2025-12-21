@@ -312,6 +312,8 @@ mod tests {
     use std::cmp::Reverse;
     use std::collections::HashMap;
 
+    use color_eyre::Result;
+
     use crate::core::state::ui::UiMode;
     use crate::domain::collections::EventSet;
     use crate::domain::nostr::SortableEvent;
@@ -374,11 +376,11 @@ mod tests {
         AppState::new_with_config(Keys::generate().public_key(), config)
     }
 
-    fn create_test_event() -> Event {
+    fn create_test_event() -> Result<Event> {
         let keys = Keys::generate();
         EventBuilder::text_note("test content")
             .sign_with_keys(&keys)
-            .unwrap()
+            .map_err(|e| e.into())
     }
 
     #[test]
@@ -478,9 +480,9 @@ mod tests {
     }
 
     #[test]
-    fn test_translate_post_interaction_keys() {
+    fn test_translate_post_interaction_keys() -> Result<()> {
         let mut state = create_test_state();
-        let event = create_test_event();
+        let event = create_test_event()?;
 
         // Add event to timeline and select it
         let sortable = SortableEvent::new(event.clone());
@@ -490,40 +492,34 @@ mod tests {
         // Test like key
         let key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result.len(), 2);
-        match (&result[0], &result[1]) {
-            (
+        assert!(matches!(
+            result.as_slice(),
+            [
                 Msg::System(SystemMsg::UpdateStatusMessage(msg)),
                 Msg::Nostr(NostrMsg::SendReaction(ev)),
-            ) => {
-                assert!(msg.contains("[Liked]"));
-                assert_eq!(ev.id, event.id);
-            }
-            _ => panic!("Expected status then SendReaction"),
-        }
+            ] if msg.contains("[Liked]") && ev.id == event.id
+        ));
 
         // Test reply key
         let key = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result.len(), 2);
-        match (&result[0], &result[1]) {
-            (
+        assert!(matches!(
+            result.as_slice(),
+            [
                 Msg::Ui(UiMsg::ShowReply(reply_event)),
-                Msg::System(SystemMsg::UpdateStatusMessage(msg)),
-            ) => {
-                assert_eq!(reply_event.id, event.id);
-                assert!(msg.contains("Replying to"));
-            }
-            _ => panic!("Expected ShowReply and UpdateStatusMessage"),
-        }
+                Msg::System(SystemMsg::UpdateStatusMessage(msg))
+            ] if reply_event.id == event.id && msg.contains("Replying to")
+        ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_translate_nostr_events() {
+    fn test_translate_nostr_events() -> Result<()> {
         let state = create_test_state();
 
         // Test text note
-        let event = create_test_event();
+        let event = create_test_event()?;
         let result = translate_raw_to_domain(RawMsg::ReceiveEvent(event.clone()), &state);
         assert_eq!(
             result,
@@ -536,18 +532,18 @@ mod tests {
         // Test metadata event
         let keys = Keys::generate();
         let metadata = Metadata::new().name("Test User");
-        let metadata_event = EventBuilder::metadata(&metadata)
-            .sign_with_keys(&keys)
-            .unwrap();
+        let metadata_event = EventBuilder::metadata(&metadata).sign_with_keys(&keys)?;
 
         let result = translate_raw_to_domain(RawMsg::ReceiveEvent(metadata_event), &state);
-        assert_eq!(result.len(), 2);
-        match (&result[0], &result[1]) {
-            (Msg::System(SystemMsg::SetLoading(false)), Msg::UpdateProfile(pubkey, _)) => {
-                assert_eq!(*pubkey, keys.public_key());
-            }
-            _ => panic!("Expected SetLoading(false) then UpdateProfile message"),
-        }
+        assert!(matches!(
+            result.as_slice(),
+            [
+                Msg::System(SystemMsg::SetLoading(false)),
+                Msg::UpdateProfile(pubkey, _)
+            ] if *pubkey == keys.public_key()
+        ));
+
+        Ok(())
     }
 
     #[test]
@@ -586,19 +582,16 @@ mod tests {
         state.ui.current_mode = UiMode::Normal;
         state.timeline.selected_index = None;
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result.len(), 1);
-        match &result[0] {
-            Msg::System(SystemMsg::UpdateStatusMessage(msg)) => {
-                assert!(msg.contains("Cannot reply"))
-            }
-            _ => panic!("Expected status message"),
-        }
+        assert!(matches!(
+            result.as_slice(),
+            [Msg::System(SystemMsg::UpdateStatusMessage(msg))] if msg.contains("Cannot reply")
+        ));
     }
 
     #[test]
-    fn test_translate_like_key_duplicate_prevention() {
+    fn test_translate_like_key_duplicate_prevention() -> Result<()> {
         let mut state = create_test_state();
-        let event = create_test_event();
+        let event = create_test_event()?;
 
         // Add event to timeline and select it
         let sortable = SortableEvent::new(event.clone());
@@ -608,22 +601,17 @@ mod tests {
         // First like should work
         let key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result.len(), 2);
-        match (&result[0], &result[1]) {
-            (
+        assert!(matches!(
+            result.as_slice(),
+            [
                 Msg::System(SystemMsg::UpdateStatusMessage(msg)),
-                Msg::Nostr(NostrMsg::SendReaction(_)),
-            ) => {
-                assert!(msg.contains("[Liked]"));
-            }
-            _ => panic!("Expected status then SendReaction"),
-        }
+                Msg::Nostr(NostrMsg::SendReaction(_))
+            ] if msg.contains("[Liked]")
+        ));
 
         // Simulate user has already reacted
         let reaction_keys = Keys::generate();
-        let reaction = EventBuilder::reaction(&event, "+")
-            .sign_with_keys(&reaction_keys)
-            .unwrap();
+        let reaction = EventBuilder::reaction(&event, "+").sign_with_keys(&reaction_keys)?;
         let mut reaction_with_user_key = reaction;
         reaction_with_user_key.pubkey = state.user.current_user_pubkey;
 
@@ -635,21 +623,22 @@ mod tests {
 
         // Second like should be prevented
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result.len(), 1);
-        match &result[0] {
-            Msg::System(SystemMsg::UpdateStatusMessage(msg)) => {
-                assert!(msg.contains("already liked"))
-            }
-            _ => panic!("Expected status message about duplicate like"),
-        }
+        assert!(matches!(
+            result.as_slice(),
+            [
+                Msg::System(SystemMsg::UpdateStatusMessage(msg)),
+            ] if msg.contains("already liked")
+        ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_translate_repost_key_own_note_prevention() {
+    fn test_translate_repost_key_own_note_prevention() -> Result<()> {
         let mut state = create_test_state();
 
         // Make the event authored by the current user
-        let mut user_event = create_test_event();
+        let mut user_event = create_test_event()?;
         user_event.pubkey = state.user.current_user_pubkey;
 
         // Add user's own event to timeline and select it
@@ -660,17 +649,18 @@ mod tests {
         // Attempt to repost own note should be prevented
         let key = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE);
         let result = translate_raw_to_domain(RawMsg::Key(key), &state);
-        assert_eq!(result.len(), 1);
-        match &result[0] {
-            Msg::System(SystemMsg::UpdateStatusMessage(msg)) => {
-                assert!(msg.contains("Cannot repost your own note"))
-            }
-            _ => panic!("Expected status message about own note repost"),
-        }
+        assert!(matches!(
+            result.as_slice(),
+            [
+                Msg::System(SystemMsg::UpdateStatusMessage(msg)),
+            ] if msg.contains("Cannot repost your own note")
+        ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_can_interact_with_timeline_helper() {
+    fn test_can_interact_with_timeline_helper() -> Result<()> {
         let mut state = create_test_state();
 
         // Cannot interact when input is showing
@@ -688,16 +678,18 @@ mod tests {
         assert!(!can_interact_with_timeline(&state)); // timeline is empty
 
         // Can interact when conditions are met
-        let event = create_test_event();
+        let event = create_test_event()?;
         let sortable = SortableEvent::new(event);
         state.timeline.notes.find_or_insert(Reverse(sortable));
         assert!(can_interact_with_timeline(&state));
+
+        Ok(())
     }
 
     #[test]
-    fn test_get_display_name_helper() {
+    fn test_get_display_name_helper() -> Result<()> {
         let mut state = create_test_state();
-        let event = create_test_event();
+        let event = create_test_event()?;
 
         // Without profile - should return truncated pubkey
         let name = get_display_name(&event, &state);
@@ -711,5 +703,7 @@ mod tests {
 
         let name = get_display_name(&event, &state);
         assert_eq!(name, "Test User");
+
+        Ok(())
     }
 }

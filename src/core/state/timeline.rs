@@ -165,23 +165,20 @@ fn extract_last_event_id(event: &Event) -> Option<EventId> {
 mod tests {
     use super::*;
 
-    fn create_test_event() -> Event {
-        let keys = Keys::generate();
-        EventBuilder::text_note("test content")
-            .sign_with_keys(&keys)
-            .unwrap()
+    fn create_test_event() -> Result<Event> {
+        create_test_event_with_content("test content")
     }
 
-    fn create_test_event_with_content(content: &str) -> Event {
+    fn create_test_event_with_content(content: &str) -> Result<Event> {
         let keys = Keys::generate();
         EventBuilder::text_note(content)
             .sign_with_keys(&keys)
-            .unwrap()
+            .map_err(|e| e.into())
     }
 
     // Unit tests for scroll operations
     #[test]
-    fn test_scroll_up_unit() {
+    fn test_scroll_up_unit() -> Result<()> {
         let mut timeline = TimelineState::default();
 
         // Empty timeline - no change
@@ -192,13 +189,13 @@ mod tests {
         // Add some notes
         timeline
             .notes
-            .find_or_insert(Reverse(SortableEvent::new(create_test_event())));
+            .find_or_insert(Reverse(SortableEvent::new(create_test_event()?)));
         timeline
             .notes
-            .find_or_insert(Reverse(SortableEvent::new(create_test_event())));
+            .find_or_insert(Reverse(SortableEvent::new(create_test_event()?)));
         timeline
             .notes
-            .find_or_insert(Reverse(SortableEvent::new(create_test_event())));
+            .find_or_insert(Reverse(SortableEvent::new(create_test_event()?)));
         timeline.selected_index = Some(2);
 
         let cmds = timeline.update(TimelineMsg::ScrollUp);
@@ -210,22 +207,24 @@ mod tests {
         let cmds = timeline.update(TimelineMsg::ScrollUp);
         assert_eq!(timeline.selected_index, Some(0));
         assert!(cmds.is_empty());
+
+        Ok(())
     }
 
     #[test]
-    fn test_scroll_down_unit() {
+    fn test_scroll_down_unit() -> Result<()> {
         let mut timeline = TimelineState::default();
 
         // Add some notes
         timeline
             .notes
-            .find_or_insert(Reverse(SortableEvent::new(create_test_event())));
+            .find_or_insert(Reverse(SortableEvent::new(create_test_event()?)));
         timeline
             .notes
-            .find_or_insert(Reverse(SortableEvent::new(create_test_event())));
+            .find_or_insert(Reverse(SortableEvent::new(create_test_event()?)));
         timeline
             .notes
-            .find_or_insert(Reverse(SortableEvent::new(create_test_event())));
+            .find_or_insert(Reverse(SortableEvent::new(create_test_event()?)));
         timeline.selected_index = Some(0);
 
         let cmds = timeline.update(TimelineMsg::ScrollDown);
@@ -237,22 +236,24 @@ mod tests {
         let cmds = timeline.update(TimelineMsg::ScrollDown);
         assert_eq!(timeline.selected_index, Some(2));
         assert!(cmds.is_empty());
+
+        Ok(())
     }
 
     #[test]
-    fn test_scroll_to_positions_unit() {
+    fn test_scroll_to_positions_unit() -> Result<()> {
         let mut timeline = TimelineState::default();
 
         // Add some notes
         timeline
             .notes
-            .find_or_insert(Reverse(SortableEvent::new(create_test_event())));
+            .find_or_insert(Reverse(SortableEvent::new(create_test_event()?)));
         timeline
             .notes
-            .find_or_insert(Reverse(SortableEvent::new(create_test_event())));
+            .find_or_insert(Reverse(SortableEvent::new(create_test_event()?)));
         timeline
             .notes
-            .find_or_insert(Reverse(SortableEvent::new(create_test_event())));
+            .find_or_insert(Reverse(SortableEvent::new(create_test_event()?)));
 
         // Scroll to top
         timeline.selected_index = Some(1);
@@ -264,6 +265,8 @@ mod tests {
         let cmds = timeline.update(TimelineMsg::ScrollToBottom);
         assert_eq!(timeline.selected_index, Some(2));
         assert!(cmds.is_empty());
+
+        Ok(())
     }
 
     // Unit tests for note selection
@@ -284,11 +287,11 @@ mod tests {
 
     // Unit tests for Nostr event additions
     #[test]
-    fn test_add_note_unit() {
+    fn test_add_note_unit() -> Result<()> {
         let mut timeline = TimelineState::default();
         assert_eq!(timeline.len(), 0);
 
-        let event = create_test_event();
+        let event = create_test_event()?;
         let cmds = timeline.update(TimelineMsg::AddNote(event));
 
         assert_eq!(timeline.len(), 1);
@@ -296,60 +299,63 @@ mod tests {
 
         // Selection adjustment when note is added
         timeline.selected_index = Some(0);
-        let event2 = create_test_event();
+        let event2 = create_test_event()?;
         let cmds = timeline.update(TimelineMsg::AddNote(event2));
 
         assert_eq!(timeline.len(), 2);
         assert_eq!(timeline.selected_index, Some(1)); // Adjusted
         assert!(cmds.is_empty());
+
+        Ok(())
     }
 
     #[test]
-    fn test_add_reactions_unit() {
+    fn test_add_reactions_unit() -> Result<()> {
         let mut timeline = TimelineState::default();
 
         // Create event and reaction
-        let target_event = create_test_event();
+        let target_event = create_test_event()?;
         let target_id = target_event.id;
 
-        let reaction = EventBuilder::reaction(&target_event, "👍")
-            .sign_with_keys(&Keys::generate())
-            .unwrap();
+        let reaction =
+            EventBuilder::reaction(&target_event, "👍").sign_with_keys(&Keys::generate())?;
 
         let cmds = timeline.update(TimelineMsg::AddReaction(reaction.clone()));
 
         assert!(timeline.reactions.contains_key(&target_id));
         assert!(timeline.reactions[&target_id].contains(&reaction.id));
         assert!(cmds.is_empty());
+
+        Ok(())
     }
 
     #[test]
-    fn test_add_reposts_unit() {
+    fn test_add_reposts_unit() -> Result<()> {
         let mut timeline = TimelineState::default();
 
-        let target_event = create_test_event();
+        let target_event = create_test_event()?;
         let target_id = target_event.id;
 
-        let repost = EventBuilder::repost(&target_event, None)
-            .sign_with_keys(&Keys::generate())
-            .unwrap();
+        let repost = EventBuilder::repost(&target_event, None).sign_with_keys(&Keys::generate())?;
 
         let cmds = timeline.update(TimelineMsg::AddRepost(repost.clone()));
 
         assert!(timeline.reposts.contains_key(&target_id));
         assert!(timeline.reposts[&target_id].contains(&repost.id));
         assert!(cmds.is_empty());
+
+        Ok(())
     }
 
     // Integration tests
     #[test]
-    fn test_timeline_complete_flow_unit() {
+    fn test_timeline_complete_flow_unit() -> Result<()> {
         let mut timeline = TimelineState::default();
 
         // 1. Add multiple notes
-        let event1 = create_test_event_with_content("First note");
-        let event2 = create_test_event_with_content("Second note");
-        let event3 = create_test_event_with_content("Third note");
+        let event1 = create_test_event_with_content("First note")?;
+        let event2 = create_test_event_with_content("Second note")?;
+        let event3 = create_test_event_with_content("Third note")?;
 
         timeline.update(TimelineMsg::AddNote(event1.clone()));
         timeline.update(TimelineMsg::AddNote(event2));
@@ -368,9 +374,7 @@ mod tests {
         assert_eq!(timeline.selected_index, Some(2));
 
         // 3. Add engagement
-        let reaction = EventBuilder::reaction(&event1, "👍")
-            .sign_with_keys(&Keys::generate())
-            .unwrap();
+        let reaction = EventBuilder::reaction(&event1, "👍").sign_with_keys(&Keys::generate())?;
         timeline.update(TimelineMsg::AddReaction(reaction));
 
         assert!(!timeline.reactions.is_empty());
@@ -378,18 +382,20 @@ mod tests {
         // 4. Deselect
         timeline.update(TimelineMsg::DeselectNote);
         assert_eq!(timeline.selected_index, None);
+
+        Ok(())
     }
 
     // Helper methods tests
     #[test]
-    fn test_helper_methods_unit() {
+    fn test_helper_methods_unit() -> Result<()> {
         let mut timeline = TimelineState::default();
 
         assert!(timeline.is_empty());
         assert_eq!(timeline.len(), 0);
         assert!(timeline.selected_note().is_none());
 
-        let event = create_test_event();
+        let event = create_test_event()?;
         timeline.update(TimelineMsg::AddNote(event.clone()));
         timeline.update(TimelineMsg::SelectNote(0));
 
@@ -397,8 +403,9 @@ mod tests {
         assert_eq!(timeline.len(), 1);
 
         let selected = timeline.selected_note();
-        assert!(selected.is_some());
-        assert_eq!(selected.unwrap().id, event.id);
+        assert!(matches!(selected, Some(s) if s.id == event.id));
+
+        Ok(())
     }
 
     #[test]
@@ -418,6 +425,6 @@ mod tests {
 
         // Returns None if the index is set, but the timeline is empty
         state.selected_index = Some(0);
-        assert!(state.selected_note().is_none());
+        assert_eq!(state.selected_note(), None);
     }
 }

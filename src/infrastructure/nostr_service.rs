@@ -262,27 +262,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_nostr_service_creation() {
+    async fn test_nostr_service_creation() -> Result<()> {
         let conn = create_test_connection().await;
         let keys = create_test_keys();
         let (raw_tx, _raw_rx) = mpsc::unbounded_channel();
 
-        let result = NostrService::new(conn, keys, raw_tx);
-        assert!(result.is_ok());
-
-        let (op_tx, cancel_token, _service) = result.unwrap();
+        let (op_tx, cancel_token, _service) = NostrService::new(conn, keys, raw_tx)?;
 
         // Verify channels are created
         assert!(op_tx.send(NostrOperation::SubscribeToTimeline).is_ok());
         cancel_token.cancel();
+
+        Ok(())
     }
 
     #[test]
-    fn test_nostr_operation_creation_helpers() {
+    fn test_nostr_operation_creation_helpers() -> Result<()> {
         let keys = Keys::generate();
-        let event = EventBuilder::text_note("test event")
-            .sign_with_keys(&keys)
-            .unwrap();
+        let event = EventBuilder::text_note("test event").sign_with_keys(&keys)?;
 
         let like_op = NostrOperation::like(event.clone());
         assert_eq!(like_op.name(), "SendReaction");
@@ -292,6 +289,8 @@ mod tests {
 
         let repost_op = NostrOperation::repost(event, Some("Great post!".to_string()));
         assert_eq!(repost_op.name(), "SendRepost");
+
+        Ok(())
     }
 
     // Note: Full integration tests with actual network connections

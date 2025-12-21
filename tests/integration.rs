@@ -75,15 +75,13 @@ fn test_version_info() {
 
 /// Complex workflow integration test
 #[test]
-fn test_complex_workflow() {
+fn test_complex_workflow() -> Result<()> {
     let keys = Keys::generate();
     let initial_state = AppState::new(keys.public_key());
     let mut runtime = Runtime::new(initial_state);
 
     // 1. Add event to timeline
-    let event = EventBuilder::text_note("Test post")
-        .sign_with_keys(&keys)
-        .unwrap();
+    let event = EventBuilder::text_note("Test post").sign_with_keys(&keys)?;
     runtime.send_msg(Msg::Timeline(TimelineMsg::AddNote(event.clone())));
 
     // 2. Send reaction
@@ -121,10 +119,13 @@ fn test_complex_workflow() {
 
     assert!(has_reaction);
     assert!(has_reply);
+
+    Ok(())
 }
 
 /// Error handling integration test
 #[test]
+#[allow(clippy::unwrap_used)]
 fn test_error_handling_integration() {
     let keys = Keys::generate();
     let initial_state = AppState::new(keys.public_key());
@@ -147,7 +148,8 @@ fn test_error_handling_integration() {
 
 /// Asynchronous message processing integration test
 #[tokio::test]
-async fn test_async_message_handling() {
+#[allow(clippy::unwrap_used)]
+async fn test_async_message_handling() -> Result<()> {
     let keys = Keys::generate();
     let initial_state = AppState::new(keys.public_key());
     let mut runtime = Runtime::new(initial_state);
@@ -166,9 +168,8 @@ async fn test_async_message_handling() {
     });
 
     // Wait for task completion
-    let timeout = timeout(Duration::from_millis(100), handle).await;
-    assert!(timeout.is_ok());
-    timeout.unwrap().unwrap();
+    let timeout = timeout(Duration::from_millis(100), handle).await?;
+    timeout?;
 
     // Wait a bit then process messages
     sleep(Duration::from_millis(20)).await;
@@ -186,11 +187,13 @@ async fn test_async_message_handling() {
 
     // Check if UI is reset
     assert!(runtime.state().ui.is_normal());
+
+    Ok(())
 }
 
 /// Performance test
 #[test]
-fn test_performance_many_events() {
+fn test_performance_many_events() -> Result<()> {
     let keys = Keys::generate();
     let initial_state = AppState::new(keys.public_key());
     let mut runtime = Runtime::new(initial_state);
@@ -199,9 +202,7 @@ fn test_performance_many_events() {
 
     // Process 1000 events
     for i in 0..1000 {
-        let event = EventBuilder::text_note(format!("Event #{i}"))
-            .sign_with_keys(&keys)
-            .unwrap();
+        let event = EventBuilder::text_note(format!("Event #{i}")).sign_with_keys(&keys)?;
         runtime.send_msg(Msg::Timeline(TimelineMsg::AddNote(event)));
     }
 
@@ -212,4 +213,6 @@ fn test_performance_many_events() {
 
     assert_eq!(runtime.state().timeline.len(), 1000);
     assert!(elapsed < Duration::from_millis(500)); // Should complete within 500ms
+
+    Ok(())
 }

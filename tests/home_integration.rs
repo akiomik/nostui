@@ -64,11 +64,11 @@ fn create_test_state_with_config() -> AppState {
     AppState::new_with_config(Keys::generate().public_key(), config)
 }
 
-fn create_test_event() -> Event {
+fn create_test_event() -> Result<Event> {
     let keys = Keys::generate();
     EventBuilder::text_note("test content")
         .sign_with_keys(&keys)
-        .unwrap()
+        .map_err(|e| e.into())
 }
 
 #[test]
@@ -84,7 +84,7 @@ fn test_home_complete_workflow() -> Result<()> {
     assert!(!home.can_submit_input(&state));
 
     // Add some timeline content
-    let event = create_test_event();
+    let event = create_test_event()?;
     let sortable = SortableEvent::new(event);
     state.timeline.notes.find_or_insert(Reverse(sortable));
     state.timeline.selected_index = Some(0);
@@ -138,7 +138,7 @@ fn test_home_input_workflow() -> Result<()> {
 fn test_home_reply_workflow() -> Result<()> {
     let home = Home::new();
     let mut state = create_test_state();
-    let target_event = create_test_event();
+    let target_event = create_test_event()?;
 
     // Setup reply mode
     state.ui.current_mode = UiMode::Composing;
@@ -163,7 +163,7 @@ fn test_home_key_processing() -> Result<()> {
     let mut state = create_test_state();
 
     // Add event to timeline
-    let event = create_test_event();
+    let event = create_test_event()?;
     let sortable = SortableEvent::new(event);
     state.timeline.notes.find_or_insert(Reverse(sortable));
     state.timeline.selected_index = Some(0);
@@ -200,7 +200,7 @@ fn test_home_advanced_interaction_validation() -> Result<()> {
     assert!(home.get_selected_note(&state).is_none());
 
     // Test interaction validation with timeline
-    let event = create_test_event();
+    let event = create_test_event()?;
     let sortable = SortableEvent::new(event);
     state.timeline.notes.find_or_insert(Reverse(sortable));
     state.timeline.selected_index = Some(0);
@@ -218,7 +218,7 @@ fn test_home_advanced_interaction_validation() -> Result<()> {
 #[test]
 fn test_home_translator_integration() -> Result<()> {
     let mut state = create_test_state_with_config();
-    let event = create_test_event();
+    let event = create_test_event()?;
 
     // Setup timeline with event
     let sortable = SortableEvent::new(event.clone());
@@ -274,7 +274,7 @@ fn test_home_validation_edge_cases() -> Result<()> {
     let keys = Keys::generate();
     state.user.current_user_pubkey = keys.public_key();
 
-    let mut own_event = create_test_event();
+    let mut own_event = create_test_event()?;
     own_event.pubkey = keys.public_key(); // Make it user's own event
 
     let sortable = SortableEvent::new(own_event);
@@ -306,7 +306,7 @@ fn test_home_help_text_contextual() -> Result<()> {
     assert!(help.contains("first note"));
 
     // With timeline but no selection
-    let event = create_test_event();
+    let event = create_test_event()?;
     let sortable = SortableEvent::new(event);
     state.timeline.notes.find_or_insert(Reverse(sortable));
 
@@ -327,7 +327,7 @@ fn test_home_help_text_contextual() -> Result<()> {
     assert!(help.contains("Cancel"));
 
     // Reply mode
-    state.ui.reply_to = Some(create_test_event());
+    state.ui.reply_to = Some(create_test_event()?);
     let help = home.get_help_text(&state);
     assert!(help.contains("Send reply"));
 

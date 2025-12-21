@@ -24,7 +24,7 @@ fn test_elm_home_data_stateless() {
 }
 
 #[test]
-fn test_timeline_note_management_flow() {
+fn test_timeline_note_management_flow() -> Result<()> {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
     let home_data = HomeData::new();
@@ -34,9 +34,7 @@ fn test_timeline_note_management_flow() {
     assert!(HomeData::get_selected_note(&state).is_none());
 
     // Add first note via domain message
-    let event1 = EventBuilder::text_note("First post")
-        .sign_with_keys(&keys)
-        .unwrap();
+    let event1 = EventBuilder::text_note("First post").sign_with_keys(&keys)?;
     let (new_state, cmds) = update(Msg::Timeline(TimelineMsg::AddNote(event1)), state);
     state = new_state;
     assert!(cmds.is_empty());
@@ -44,13 +42,10 @@ fn test_timeline_note_management_flow() {
     // Verify note was added
     assert_eq!(state.timeline.notes.len(), 1);
     let note = HomeData::get_note_at_index(&state, 0);
-    assert!(note.is_some());
-    assert_eq!(note.unwrap().content, "First post");
+    assert!(matches!(note, Some(Event { content, .. }) if content == "First post"));
 
     // Add second note
-    let event2 = EventBuilder::text_note("Second post")
-        .sign_with_keys(&keys)
-        .unwrap();
+    let event2 = EventBuilder::text_note("Second post").sign_with_keys(&keys)?;
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event2)), state);
     state = new_state;
 
@@ -62,6 +57,8 @@ fn test_timeline_note_management_flow() {
     let padding = Padding::new(1, 1, 1, 1);
     let timeline_items = home_data.generate_timeline_items(&state, area, padding);
     assert_eq!(timeline_items.len(), 2);
+
+    Ok(())
 }
 
 #[test]
@@ -100,15 +97,13 @@ fn test_profile_management_flow() {
 }
 
 #[test]
-fn test_social_engagement_flow() {
+fn test_social_engagement_flow() -> Result<()> {
     let author_keys = Keys::generate();
     let reactor_keys = Keys::generate();
     let mut state = AppState::new(author_keys.public_key());
 
     // Add original post
-    let original_post = EventBuilder::text_note("Original post")
-        .sign_with_keys(&author_keys)
-        .unwrap();
+    let original_post = EventBuilder::text_note("Original post").sign_with_keys(&author_keys)?;
     let post_id = original_post.id;
     let (new_state, _) = update(
         Msg::Timeline(TimelineMsg::AddNote(original_post.clone())),
@@ -123,9 +118,7 @@ fn test_social_engagement_flow() {
     assert_eq!(engagement.zaps_count, 0);
 
     // Add reaction via domain message
-    let reaction = EventBuilder::reaction(&original_post, "👍")
-        .sign_with_keys(&reactor_keys)
-        .unwrap();
+    let reaction = EventBuilder::reaction(&original_post, "👍").sign_with_keys(&reactor_keys)?;
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddReaction(reaction)), state);
     state = new_state;
 
@@ -134,9 +127,7 @@ fn test_social_engagement_flow() {
     assert_eq!(engagement.reactions_count, 1);
 
     // Add repost
-    let repost = EventBuilder::repost(&original_post, None)
-        .sign_with_keys(&reactor_keys)
-        .unwrap();
+    let repost = EventBuilder::repost(&original_post, None).sign_with_keys(&reactor_keys)?;
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddRepost(repost)), state);
     state = new_state;
 
@@ -144,18 +135,18 @@ fn test_social_engagement_flow() {
     let engagement = HomeData::get_event_engagement(&state, &post_id);
     assert_eq!(engagement.reactions_count, 1);
     assert_eq!(engagement.reposts_count, 1);
+
+    Ok(())
 }
 
 #[test]
-fn test_timeline_selection_flow() {
+fn test_timeline_selection_flow() -> Result<()> {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
 
     // Add test notes
     for i in 0..5 {
-        let event = EventBuilder::text_note(format!("Post #{i}"))
-            .sign_with_keys(&keys)
-            .unwrap();
+        let event = EventBuilder::text_note(format!("Post #{i}")).sign_with_keys(&keys)?;
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
@@ -167,8 +158,7 @@ fn test_timeline_selection_flow() {
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::SelectNote(0)), state);
     state = new_state;
     let selected = HomeData::get_selected_note(&state);
-    assert!(selected.is_some());
-    assert!(selected.unwrap().content.contains("Post #"));
+    assert!(matches!(selected, Some(Event { content, .. }) if content.contains("Post #")));
 
     // Select invalid note
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::SelectNote(10)), state);
@@ -179,10 +169,12 @@ fn test_timeline_selection_flow() {
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::DeselectNote), state);
     state = new_state;
     assert!(HomeData::get_selected_note(&state).is_none());
+
+    Ok(())
 }
 
 #[test]
-fn test_timeline_interaction_conditions() {
+fn test_timeline_interaction_conditions() -> Result<()> {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
 
@@ -190,9 +182,7 @@ fn test_timeline_interaction_conditions() {
     assert!(!HomeData::can_interact_with_timeline(&state));
 
     // Add notes
-    let event = EventBuilder::text_note("Test post")
-        .sign_with_keys(&keys)
-        .unwrap();
+    let event = EventBuilder::text_note("Test post").sign_with_keys(&keys)?;
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
     state = new_state;
 
@@ -208,21 +198,19 @@ fn test_timeline_interaction_conditions() {
     let (new_state, _) = update(Msg::Ui(UiMsg::CancelInput), state);
     state = new_state;
     assert!(HomeData::can_interact_with_timeline(&state));
+
+    Ok(())
 }
 
 #[test]
-fn test_timeline_stats_calculation() {
+fn test_timeline_stats_calculation() -> Result<()> {
     let keys1 = Keys::generate();
     let keys2 = Keys::generate();
     let mut state = AppState::new(keys1.public_key());
 
     // Add notes from different authors
-    let event1 = EventBuilder::text_note("Post 1")
-        .sign_with_keys(&keys1)
-        .unwrap();
-    let event2 = EventBuilder::text_note("Post 2")
-        .sign_with_keys(&keys2)
-        .unwrap();
+    let event1 = EventBuilder::text_note("Post 1").sign_with_keys(&keys1)?;
+    let event2 = EventBuilder::text_note("Post 2").sign_with_keys(&keys2)?;
 
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event1.clone())), state);
     state = new_state;
@@ -241,9 +229,7 @@ fn test_timeline_stats_calculation() {
     state = new_state;
 
     // Add reactions
-    let reaction = EventBuilder::reaction(&event1, "👍")
-        .sign_with_keys(&keys2)
-        .unwrap();
+    let reaction = EventBuilder::reaction(&event1, "👍").sign_with_keys(&keys2)?;
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddReaction(reaction)), state);
     state = new_state;
 
@@ -254,18 +240,18 @@ fn test_timeline_stats_calculation() {
     assert_eq!(stats.total_reactions, 1);
     assert_eq!(stats.total_reposts, 0);
     assert_eq!(stats.total_zaps, 0);
+
+    Ok(())
 }
 
 #[test]
-fn test_text_note_creation() {
+fn test_text_note_creation() -> Result<()> {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
     let home_data = HomeData::new();
 
     // Add note and profile
-    let event = EventBuilder::text_note("Test content")
-        .sign_with_keys(&keys)
-        .unwrap();
+    let event = EventBuilder::text_note("Test content").sign_with_keys(&keys)?;
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event.clone())), state);
     state = new_state;
 
@@ -281,10 +267,12 @@ fn test_text_note_creation() {
 
     // Verify TextNote was created with correct area
     assert_eq!(text_note.area, area);
+
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_complete_home_data_workflow() {
+async fn test_complete_home_data_workflow() -> Result<()> {
     let author_keys = Keys::generate();
     let user_keys = Keys::generate();
     let mut state = AppState::new(user_keys.public_key());
@@ -296,12 +284,9 @@ async fn test_complete_home_data_workflow() {
     assert!(!HomeData::can_interact_with_timeline(&state));
 
     // 2. Receive posts
-    let post1 = EventBuilder::text_note("Hello Nostr!")
-        .sign_with_keys(&author_keys)
-        .unwrap();
-    let post2 = EventBuilder::text_note("Building with Elm architecture")
-        .sign_with_keys(&author_keys)
-        .unwrap();
+    let post1 = EventBuilder::text_note("Hello Nostr!").sign_with_keys(&author_keys)?;
+    let post2 =
+        EventBuilder::text_note("Building with Elm architecture").sign_with_keys(&author_keys)?;
 
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(post1.clone())), state);
     state = new_state;
@@ -318,15 +303,11 @@ async fn test_complete_home_data_workflow() {
     state = new_state;
 
     // 4. Add social engagement
-    let reaction = EventBuilder::reaction(&post1, "🚀")
-        .sign_with_keys(&user_keys)
-        .unwrap();
+    let reaction = EventBuilder::reaction(&post1, "🚀").sign_with_keys(&user_keys)?;
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddReaction(reaction)), state);
     state = new_state;
 
-    let repost = EventBuilder::repost(&post2, None)
-        .sign_with_keys(&user_keys)
-        .unwrap();
+    let repost = EventBuilder::repost(&post2, None).sign_with_keys(&user_keys)?;
     let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddRepost(repost)), state);
     state = new_state;
 
@@ -361,11 +342,13 @@ async fn test_complete_home_data_workflow() {
     let post2_engagement = HomeData::get_event_engagement(&state, &post2.id);
     assert_eq!(post2_engagement.reactions_count, 0);
     assert_eq!(post2_engagement.reposts_count, 1);
+
+    Ok(())
 }
 
 /// Performance test: large timeline handling
 #[test]
-fn test_large_timeline_performance() {
+fn test_large_timeline_performance() -> Result<()> {
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
     let home_data = HomeData::new();
@@ -374,9 +357,8 @@ fn test_large_timeline_performance() {
 
     // Add 1000 notes
     for i in 0..1000 {
-        let event = EventBuilder::text_note(format!("Large timeline post #{i}"))
-            .sign_with_keys(&keys)
-            .unwrap();
+        let event =
+            EventBuilder::text_note(format!("Large timeline post #{i}")).sign_with_keys(&keys)?;
         let (new_state, _) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
         state = new_state;
     }
@@ -408,4 +390,6 @@ fn test_large_timeline_performance() {
     println!("Calculated stats in {elapsed:?}",);
     assert_eq!(stats.total_notes, 1000);
     assert!(elapsed < Duration::from_millis(10)); // Should be very fast
+
+    Ok(())
 }

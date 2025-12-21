@@ -61,6 +61,7 @@ pub enum Cmd {
 
 impl Cmd {
     /// Combine multiple commands into one
+    #[allow(clippy::unwrap_used)]
     pub fn batch(commands: Vec<Cmd>) -> Cmd {
         match commands.len() {
             0 => Cmd::None,
@@ -114,11 +115,11 @@ pub enum CmdResult {
 mod tests {
     use super::*;
 
-    fn create_test_event() -> Event {
+    fn create_test_event() -> Result<Event> {
         let keys = Keys::generate();
         EventBuilder::text_note("test content")
             .sign_with_keys(&keys)
-            .unwrap()
+            .map_err(|e| e.into())
     }
 
     #[test]
@@ -143,10 +144,10 @@ mod tests {
     }
 
     #[test]
-    fn test_cmd_priority() {
+    fn test_cmd_priority() -> Result<()> {
         assert_eq!(
             Cmd::Nostr(NostrCmd::SendReaction {
-                target_event: create_test_event()
+                target_event: create_test_event()?
             })
             .priority(),
             1
@@ -164,6 +165,8 @@ mod tests {
             4
         );
         assert_eq!(Cmd::None.priority(), 255);
+
+        Ok(())
     }
 
     #[test]
@@ -180,14 +183,16 @@ mod tests {
     }
 
     #[test]
-    fn test_cmd_serialization() {
+    fn test_cmd_serialization() -> Result<()> {
         let cmd = Cmd::Nostr(NostrCmd::SendTextNote {
             content: "Hello, Nostr!".to_string(),
             tags: vec![],
         });
 
-        let serialized = serde_json::to_string(&cmd).unwrap();
-        let deserialized: Cmd = serde_json::from_str(&serialized).unwrap();
+        let serialized = serde_json::to_string(&cmd)?;
+        let deserialized: Cmd = serde_json::from_str(&serialized)?;
         assert_eq!(cmd, deserialized);
+
+        Ok(())
     }
 }

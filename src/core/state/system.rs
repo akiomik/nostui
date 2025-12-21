@@ -143,14 +143,10 @@ mod tests {
 
         let cmds = system.update(SystemMsg::Resize(80, 24));
 
-        assert_eq!(cmds.len(), 1);
-        match &cmds[0] {
-            Cmd::Tui(TuiCmd::Resize { width, height }) => {
-                assert_eq!(*width, 80);
-                assert_eq!(*height, 24);
-            }
-            _ => panic!("Expected Resize command"),
-        }
+        assert!(matches!(
+            cmds.as_slice(),
+            [Cmd::Tui(TuiCmd::Resize { width, height })] if *width == 80 && *height == 24
+        ));
     }
 
     // tests/system_state_unit_tests.rs から移行
