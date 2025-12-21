@@ -155,12 +155,10 @@ impl Runtime {
         self.raw_msg_tx.clone()
     }
 
-    /// Get pending commands
-    pub fn pending_commands(&mut self) -> Vec<Cmd> {
-        let mut commands = Vec::new();
-        while let Some(cmd) = self.cmd_queue.pop_front() {
-            commands.push(cmd);
-        }
+    /// Drain pending commands
+    fn drain_pending_commands(&mut self) -> Vec<Cmd> {
+        let commands = Vec::from(self.cmd_queue.clone());
+        self.cmd_queue.clear();
         commands
     }
 
@@ -173,7 +171,7 @@ impl Runtime {
             ));
         }
 
-        let mut commands = self.pending_commands();
+        let mut commands = self.drain_pending_commands();
         if commands.is_empty() {
             return Ok(vec![]);
         }
@@ -498,11 +496,11 @@ mod tests {
         runtime.process_message(Msg::Nostr(NostrMsg::SendRepost(target_event)));
 
         // Get pending commands
-        let pending = runtime.pending_commands();
+        let pending = runtime.drain_pending_commands();
         assert_eq!(pending.len(), 2);
 
         // Getting them again returns empty
-        let pending2 = runtime.pending_commands();
+        let pending2 = runtime.drain_pending_commands();
         assert!(pending2.is_empty());
 
         Ok(())
