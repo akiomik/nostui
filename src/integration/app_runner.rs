@@ -70,7 +70,7 @@ impl<'a> AppRunner<'a> {
 
         // Create runtime (without Nostr support yet) to obtain raw_tx for NostrService
         let mut runtime = Runtime::new_with_executor(initial_state);
-        let raw_tx = runtime.get_raw_sender().expect("raw sender must exist");
+        let raw_tx = runtime.get_raw_sender();
 
         // Initialize NostrService and start it in background
         let conn = Connection::new(keys.clone(), config.relays.clone()).await?;

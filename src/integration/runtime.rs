@@ -24,9 +24,7 @@ pub struct Runtime {
     msg_queue: VecDeque<Msg>,
     raw_msg_queue: VecDeque<RawMsg>,
     cmd_queue: VecDeque<Cmd>,
-    msg_tx: Option<mpsc::UnboundedSender<Msg>>,
-    msg_rx: mpsc::UnboundedReceiver<Msg>,
-    raw_msg_tx: Option<mpsc::UnboundedSender<RawMsg>>,
+    raw_msg_tx: mpsc::UnboundedSender<RawMsg>,
     raw_msg_rx: mpsc::UnboundedReceiver<RawMsg>,
     cmd_executor: Option<CmdExecutor>,
 }
@@ -35,7 +33,6 @@ impl Runtime {
     /// Create a new Runtime
     pub fn new(initial_state: AppState) -> Self {
         static ENGINE: TuiTextAreaEngine = TuiTextAreaEngine;
-        let (msg_tx, msg_rx) = mpsc::unbounded_channel();
         let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
 
         Self {
@@ -44,9 +41,7 @@ impl Runtime {
             msg_queue: VecDeque::new(),
             raw_msg_queue: VecDeque::new(),
             cmd_queue: VecDeque::new(),
-            msg_tx: Some(msg_tx),
-            msg_rx,
-            raw_msg_tx: Some(raw_msg_tx),
+            raw_msg_tx,
             raw_msg_rx,
             cmd_executor: None,
         }
@@ -55,7 +50,6 @@ impl Runtime {
     /// Create a new Runtime with command executor
     pub fn new_with_executor(initial_state: AppState) -> Self {
         static ENGINE: TuiTextAreaEngine = TuiTextAreaEngine;
-        let (msg_tx, msg_rx) = mpsc::unbounded_channel();
         let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
         let executor = CmdExecutor::new();
 
@@ -65,9 +59,7 @@ impl Runtime {
             msg_queue: VecDeque::new(),
             raw_msg_queue: VecDeque::new(),
             cmd_queue: VecDeque::new(),
-            msg_tx: Some(msg_tx),
-            msg_rx,
-            raw_msg_tx: Some(raw_msg_tx),
+            raw_msg_tx,
             raw_msg_rx,
             cmd_executor: Some(executor),
         }
@@ -79,7 +71,6 @@ impl Runtime {
         nostr_sender: mpsc::UnboundedSender<NostrOperation>,
     ) -> Self {
         static ENGINE: TuiTextAreaEngine = TuiTextAreaEngine;
-        let (msg_tx, msg_rx) = mpsc::unbounded_channel();
         let (raw_msg_tx, raw_msg_rx) = mpsc::unbounded_channel();
         let executor = CmdExecutor::new_with_nostr(nostr_sender);
 
@@ -89,9 +80,7 @@ impl Runtime {
             msg_queue: VecDeque::new(),
             raw_msg_queue: VecDeque::new(),
             cmd_queue: VecDeque::new(),
-            msg_tx: Some(msg_tx),
-            msg_rx,
-            raw_msg_tx: Some(raw_msg_tx),
+            raw_msg_tx,
             raw_msg_rx,
             cmd_executor: Some(executor),
         }
@@ -120,11 +109,6 @@ impl Runtime {
                 "No executor available. Use set_executor() or set_nostr_executor() first."
             ))
         }
-    }
-
-    /// Get sender for message transmission
-    pub fn get_sender(&self) -> Option<mpsc::UnboundedSender<Msg>> {
-        self.msg_tx.clone()
     }
 
     /// Add TUI command sender support to existing executor (for TuiCmd execution)
@@ -167,7 +151,7 @@ impl Runtime {
     }
 
     /// Get raw message sender
-    pub fn get_raw_sender(&self) -> Option<mpsc::UnboundedSender<RawMsg>> {
+    pub fn get_raw_sender(&self) -> mpsc::UnboundedSender<RawMsg> {
         self.raw_msg_tx.clone()
     }
 
@@ -252,12 +236,6 @@ impl Runtime {
 
         // Process domain messages in internal queue
         while let Some(msg) = self.msg_queue.pop_front() {
-            let commands = self.process_message(msg);
-            all_commands.extend(commands);
-        }
-
-        // Process domain messages from external sources
-        while let Ok(msg) = self.msg_rx.try_recv() {
             let commands = self.process_message(msg);
             all_commands.extend(commands);
         }
@@ -489,14 +467,12 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::unwrap_used)]
     fn test_external_message_channel() -> Result<()> {
         let mut runtime = create_test_runtime();
-        let sender = runtime.get_sender().unwrap();
 
-        // Send messages from external source
-        sender.send(Msg::Ui(UiMsg::ShowNewNote))?;
-        sender.send(Msg::Ui(UiMsg::UpdateInputContent("test".to_string())))?;
+        // Send messages from external source (now via internal API)
+        runtime.send_msg(Msg::Ui(UiMsg::ShowNewNote));
+        runtime.send_msg(Msg::Ui(UiMsg::UpdateInputContent("test".to_string())));
 
         // Not processed yet
         assert!(runtime.state().ui.is_normal());
