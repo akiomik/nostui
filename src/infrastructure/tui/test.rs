@@ -30,16 +30,6 @@ impl TestTui {
         })
     }
 
-    pub fn with_events(
-        width: u16,
-        height: u16,
-        events: impl IntoIterator<Item = Event>,
-    ) -> Result<Self> {
-        let mut this = Self::new(width, height)?;
-        this.events.extend(events);
-        Ok(this)
-    }
-
     /// Expose draw count for tests.
     pub fn draw_count(&self) -> usize {
         self.draws
