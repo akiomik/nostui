@@ -190,20 +190,20 @@ mod tests {
     use nostr_sdk::nostr::{Kind, Timestamp};
     use nostr_sdk::prelude::Signature;
 
-    fn create_test_event(id_suffix: u8, content: &str) -> Event {
+    fn create_test_event(id_suffix: u8, content: &str) -> Result<Event> {
         let mut id_bytes = [0u8; 32];
         id_bytes[31] = id_suffix; // 最後のバイトを変えて異なるIDを作成
 
         let keys = Keys::generate();
-        Event::new(
+        Ok(Event::new(
             EventId::from_byte_array(id_bytes),
             keys.public_key(),
             Timestamp::now(),
             Kind::TextNote,
             vec![],
             content.to_string(),
-            Signature::from_slice(&[0u8; 64]).unwrap(),
-        )
+            Signature::from_slice(&[0u8; 64])?,
+        ))
     }
 
     #[test]
@@ -214,21 +214,23 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_new_event_returns_true() {
+    fn test_insert_new_event_returns_true() -> Result<()> {
         let mut events = EventSet::new();
-        let event = create_test_event(1, "test content");
+        let event = create_test_event(1, "test content")?;
 
         let was_added = events.insert(event.clone());
 
         assert!(was_added);
         assert_eq!(events.len(), 1);
         assert!(events.contains(&event.id));
+
+        Ok(())
     }
 
     #[test]
-    fn test_insert_duplicate_event_returns_false() {
+    fn test_insert_duplicate_event_returns_false() -> Result<()> {
         let mut events = EventSet::new();
-        let event = create_test_event(1, "test content");
+        let event = create_test_event(1, "test content")?;
 
         // 最初の挿入
         let first_add = events.insert(event.clone());
@@ -239,13 +241,15 @@ mod tests {
         let second_add = events.insert(event);
         assert!(!second_add);
         assert_eq!(events.len(), 1); // サイズは変わらない
+
+        Ok(())
     }
 
     #[test]
-    fn test_insert_different_events_both_added() {
+    fn test_insert_different_events_both_added() -> Result<()> {
         let mut events = EventSet::new();
-        let event1 = create_test_event(1, "first event");
-        let event2 = create_test_event(2, "second event");
+        let event1 = create_test_event(1, "first event")?;
+        let event2 = create_test_event(2, "second event")?;
 
         assert!(events.insert(event1.clone()));
         assert!(events.insert(event2.clone()));
@@ -253,20 +257,24 @@ mod tests {
         assert_eq!(events.len(), 2);
         assert!(events.contains(&event1.id));
         assert!(events.contains(&event2.id));
+
+        Ok(())
     }
 
     #[test]
-    fn test_push_is_alias_for_insert() {
+    fn test_push_is_alias_for_insert() -> Result<()> {
         let mut events = EventSet::new();
-        let event = create_test_event(1, "test content");
+        let event = create_test_event(1, "test content")?;
 
         assert!(events.push(event.clone()));
         assert!(!events.push(event)); // 重複
         assert_eq!(events.len(), 1);
+
+        Ok(())
     }
 
     #[test]
-    fn test_duplicate_event_with_different_content() {
+    fn test_duplicate_event_with_different_content() -> Result<()> {
         let mut events = EventSet::new();
 
         // 同じEventIdで異なるコンテンツのイベントを作成
@@ -280,7 +288,7 @@ mod tests {
             Kind::TextNote,
             vec![],
             "first content".to_string(),
-            Signature::from_slice(&[0u8; 64]).unwrap(),
+            Signature::from_slice(&[0u8; 64])?,
         );
 
         let event2 = Event::new(
@@ -290,21 +298,24 @@ mod tests {
             Kind::TextNote,
             vec![],
             "second content".to_string(), // 異なるコンテンツ
-            Signature::from_slice(&[0u8; 64]).unwrap(),
+            Signature::from_slice(&[0u8; 64])?,
         );
 
         assert!(events.insert(event1));
         assert!(!events.insert(event2)); // IDが同じなので拒否される
         assert_eq!(events.len(), 1);
+
+        Ok(())
     }
 
     #[test]
-    fn test_iteration() {
+    #[allow(clippy::unwrap_used)]
+    fn test_iteration() -> Result<()> {
         let mut events_set = EventSet::new();
         let test_events = [
-            create_test_event(1, "first"),
-            create_test_event(2, "second"),
-            create_test_event(3, "third"),
+            create_test_event(1, "first")?,
+            create_test_event(2, "second")?,
+            create_test_event(3, "third")?,
         ];
 
         for event in test_events.iter() {
@@ -322,12 +333,14 @@ mod tests {
         // into_iter()でのイテレーション
         let ids: Vec<_> = events_set.into_iter().map(|e| e.id).collect();
         assert_eq!(ids.len(), 3);
+
+        Ok(())
     }
 
     #[test]
-    fn test_clear() {
+    fn test_clear() -> Result<()> {
         let mut events = EventSet::new();
-        let event = create_test_event(1, "test");
+        let event = create_test_event(1, "test")?;
 
         events.insert(event.clone());
         assert_eq!(events.len(), 1);
@@ -336,13 +349,15 @@ mod tests {
         assert_eq!(events.len(), 0);
         assert!(events.is_empty());
         assert!(!events.contains(&event.id));
+
+        Ok(())
     }
 
     #[test]
-    fn test_standard_traits() {
+    fn test_standard_traits() -> Result<()> {
         let mut events = EventSet::new();
-        let event1 = create_test_event(1, "first");
-        let event2 = create_test_event(2, "second");
+        let event1 = create_test_event(1, "first")?;
+        let event2 = create_test_event(2, "second")?;
 
         // FromIterator
         let events_from_iter: EventSet = vec![event1.clone(), event2.clone()].into_iter().collect();
@@ -362,20 +377,22 @@ mod tests {
         // Display
         let display = format!("{events}");
         assert!(display.contains("2 events"));
+
+        Ok(())
     }
 
     #[test]
-    fn test_internal_consistency() {
+    fn test_internal_consistency() -> Result<()> {
         let mut events = EventSet::new();
 
         // 複数のイベントを追加 (1-10)
         for i in 1..=10 {
-            events.insert(create_test_event(i, &format!("event {i}")));
+            events.insert(create_test_event(i, &format!("event {i}"))?);
         }
 
         // いくつか重複を試行 (5-15で5-10は重複)
         for i in 5..=15 {
-            events.insert(create_test_event(i, &format!("duplicate attempt {i}")));
+            events.insert(create_test_event(i, &format!("duplicate attempt {i}"))?);
         }
 
         // 内部の一貫性をチェック
@@ -387,16 +404,18 @@ mod tests {
         for event in events.iter() {
             assert!(events.event_ids.contains(&event.id));
         }
+
+        Ok(())
     }
 
     #[test]
-    fn test_performance_and_capacity() {
+    fn test_performance_and_capacity() -> Result<()> {
         let mut events = EventSet::with_capacity(256);
         assert_eq!(events.capacity(), 256);
 
         // 大量のイベントを追加（パフォーマンステスト）
         for i in 0..1000 {
-            let event = create_test_event((i % 256) as u8, &format!("event {i}"));
+            let event = create_test_event((i % 256) as u8, &format!("event {i}"))?;
             events.insert(event);
         }
 
@@ -404,11 +423,13 @@ mod tests {
         assert_eq!(events.len(), 256);
 
         // contains()の動作確認
-        let test_event = create_test_event(100, "test");
+        let test_event = create_test_event(100, "test")?;
         assert!(events.contains(&test_event.id));
 
         // retain機能のテスト
         events.retain(|e| e.content.starts_with("event 1"));
         assert!(events.len() < 256); // いくつかのイベントが削除される
+
+        Ok(())
     }
 }

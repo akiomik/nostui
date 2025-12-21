@@ -71,11 +71,11 @@ fn create_test_state_with_config() -> AppState {
     AppState::new_with_config(Keys::generate().public_key(), config)
 }
 
-fn create_test_event() -> Event {
+fn create_test_event() -> Result<Event> {
     let keys = Keys::generate();
     EventBuilder::text_note("test content")
         .sign_with_keys(&keys)
-        .unwrap()
+        .map_err(|e| e.into())
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
     let mut runtime = Runtime::new_with_executor(state);
 
     // Simulate user input: like a post
-    let target_event = create_test_event();
+    let target_event = create_test_event()?;
     let key_event = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
 
     // Add event to timeline first so the key can work
@@ -167,7 +167,7 @@ fn test_reply_workflow_with_tags() -> Result<()> {
     let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
     let mut runtime = Runtime::new_with_executor(state);
 
-    let target_event = create_test_event();
+    let target_event = create_test_event()?;
 
     // Start reply
     runtime.send_msg(Msg::Ui(UiMsg::ShowReply(target_event)));
@@ -193,8 +193,8 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
     let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
     let mut runtime = Runtime::new_with_executor(state);
 
-    let event1 = create_test_event();
-    let event2 = create_test_event();
+    let event1 = create_test_event()?;
+    let event2 = create_test_event()?;
 
     // Send multiple commands
     runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(event1)));
@@ -203,7 +203,7 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
 
     // Provide TUI sender BEFORE executing to capture resize command
     let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCmd>();
-    runtime.add_tui_sender(tui_tx).unwrap();
+    runtime.add_tui_sender(tui_tx)?;
 
     let execution_log = runtime
         .run_update_cycle()
@@ -279,7 +279,7 @@ fn test_error_handling_in_execution() -> Result<()> {
     drop(action_rx);
 
     // Try to send a command - should handle the error gracefully
-    runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(create_test_event())));
+    runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(create_test_event()?)));
     let result = runtime.run_update_cycle();
 
     // The execution should succeed and simply ignore the command when Nostr is unavailable
@@ -305,7 +305,7 @@ fn test_translator_integration_with_executor() -> Result<()> {
     let mut runtime = Runtime::new_with_executor(state.clone());
 
     // Add an event and select it
-    let event = create_test_event();
+    let event = create_test_event()?;
     state
         .timeline
         .notes
@@ -343,7 +343,7 @@ fn test_performance_with_many_commands() -> Result<()> {
 
     // Provide TUI sender BEFORE executing to capture resize commands
     let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCmd>();
-    runtime.add_tui_sender(tui_tx).unwrap();
+    runtime.add_tui_sender(tui_tx)?;
 
     let start = Instant::now();
 

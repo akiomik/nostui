@@ -27,50 +27,52 @@ impl NostrState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use color_eyre::Result;
     use nostr_sdk::prelude::*;
 
-    fn create_event() -> Event {
+    fn create_event() -> Result<Event> {
         let keys = Keys::generate();
-        EventBuilder::text_note("t").sign_with_keys(&keys).unwrap()
+        EventBuilder::text_note("t")
+            .sign_with_keys(&keys)
+            .map_err(|e| e.into())
     }
 
     #[test]
-    fn test_nostr_state_send_reaction() {
+    fn test_nostr_state_send_reaction() -> Result<()> {
         let mut ns = NostrState;
-        let ev = create_event();
+        let ev = create_event()?;
         let cmds = ns.update(NostrMsg::SendReaction(ev.clone()));
-        assert_eq!(cmds.len(), 1);
-        match &cmds[0] {
-            Cmd::Nostr(NostrCmd::SendReaction { target_event }) => {
-                assert_eq!(target_event.id, ev.id)
-            }
-            _ => panic!("expected SendReaction"),
-        }
+
+        assert!(matches!(
+            cmds.as_slice(),
+            [Cmd::Nostr(NostrCmd::SendReaction { target_event })] if target_event.id == ev.id
+        ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_nostr_state_send_repost() {
+    fn test_nostr_state_send_repost() -> Result<()> {
         let mut ns = NostrState;
-        let ev = create_event();
+        let ev = create_event()?;
         let cmds = ns.update(NostrMsg::SendRepost(ev.clone()));
-        assert_eq!(cmds.len(), 1);
-        match &cmds[0] {
-            Cmd::Nostr(NostrCmd::SendRepost { target_event }) => assert_eq!(target_event.id, ev.id),
-            _ => panic!("expected SendRepost"),
-        }
+
+        assert!(matches!(
+            cmds.as_slice(),
+            [Cmd::Nostr(NostrCmd::SendRepost { target_event })] if target_event.id == ev.id
+        ));
+
+        Ok(())
     }
 
     #[test]
     fn test_nostr_state_send_text_note() {
         let mut ns = NostrState;
         let cmds = ns.update(NostrMsg::SendTextNote("hello".into(), vec![]));
-        assert_eq!(cmds.len(), 1);
-        match &cmds[0] {
-            Cmd::Nostr(NostrCmd::SendTextNote { content, tags }) => {
-                assert_eq!(content, "hello");
-                assert!(tags.is_empty());
-            }
-            _ => panic!("expected SendTextNote"),
-        }
+
+        assert!(matches!(
+            cmds.as_slice(),
+            [Cmd::Nostr(NostrCmd::SendTextNote { content, tags })] if content == "hello" && tags.is_empty()
+        ));
     }
 }

@@ -181,11 +181,11 @@ mod tests {
         AppState::new(Keys::generate().public_key())
     }
 
-    fn create_test_event() -> Event {
+    fn create_test_event() -> Result<Event> {
         let keys = Keys::generate();
         EventBuilder::text_note("test content")
             .sign_with_keys(&keys)
-            .unwrap()
+            .map_err(|e| e.into())
     }
 
     #[test]
@@ -277,7 +277,7 @@ mod tests {
     }
 
     #[test]
-    fn test_home_status_info() {
+    fn test_home_status_info() -> Result<()> {
         let home = Home::new();
         let mut state = create_test_state();
 
@@ -290,10 +290,12 @@ mod tests {
 
         // Change state and verify status updates
         state.ui.current_mode = UiMode::Composing;
-        state.ui.reply_to = Some(create_test_event());
+        state.ui.reply_to = Some(create_test_event()?);
         let status = home.get_status_info(&state);
         assert!(status.input_mode);
         assert!(status.reply_mode);
+
+        Ok(())
     }
 
     #[test]

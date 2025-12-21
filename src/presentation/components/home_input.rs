@@ -321,13 +321,14 @@ mod tests {
     use crate::core::state::ui::UiMode;
 
     use super::*;
+    use color_eyre::eyre::Result;
     use nostr_sdk::prelude::{Event as NostrEvent, *};
 
-    fn create_test_event() -> NostrEvent {
+    fn create_test_event() -> Result<NostrEvent> {
         let keys = Keys::generate();
         EventBuilder::text_note("Test content")
             .sign_with_keys(&keys)
-            .unwrap()
+            .map_err(|e| e.into())
     }
 
     #[test]
@@ -489,7 +490,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_input_mode_description() {
+    fn test_get_input_mode_description() -> Result<()> {
         let mut state = AppState::new(Keys::generate().public_key());
 
         // Navigation mode
@@ -506,8 +507,10 @@ mod tests {
         );
 
         // Reply mode
-        state.ui.reply_to = Some(create_test_event());
+        state.ui.reply_to = Some(create_test_event()?);
         assert_eq!(HomeInput::get_input_mode_description(&state), "Reply mode");
+
+        Ok(())
     }
 
     #[test]

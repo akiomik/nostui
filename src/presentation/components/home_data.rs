@@ -251,15 +251,13 @@ mod tests {
         domain::nostr::{Profile, SortableEvent},
     };
 
-    fn create_test_state_with_notes(note_count: usize) -> AppState {
+    fn create_test_state_with_notes(note_count: usize) -> Result<AppState> {
         let keys = Keys::generate();
         let mut state = AppState::new(keys.public_key());
 
         // Add test notes
         for i in 0..note_count {
-            let event = EventBuilder::text_note(format!("Test note {i}"))
-                .sign_with_keys(&keys)
-                .unwrap();
+            let event = EventBuilder::text_note(format!("Test note {i}")).sign_with_keys(&keys)?;
 
             let sortable = SortableEvent::new(event);
             state.timeline.notes.find_or_insert(Reverse(sortable));
@@ -272,14 +270,14 @@ mod tests {
         let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
         state.user.profiles.insert(keys.public_key(), profile);
 
-        state
+        Ok(state)
     }
 
-    fn create_test_event() -> Event {
+    fn create_test_event() -> Result<Event> {
         let keys = Keys::generate();
         EventBuilder::text_note("Test content")
             .sign_with_keys(&keys)
-            .unwrap()
+            .map_err(|e| e.into())
     }
 
     #[test]
@@ -292,8 +290,8 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_timeline_items() {
-        let state = create_test_state_with_notes(3);
+    fn test_generate_timeline_items() -> Result<()> {
+        let state = create_test_state_with_notes(3)?;
         let home_data = HomeData::new();
 
         let area = Rect::new(0, 0, 100, 50);
@@ -306,11 +304,13 @@ mod tests {
         for (_text_note, height) in &items {
             assert!(height > &0);
         }
+
+        Ok(())
     }
 
     #[test]
-    fn test_get_note_at_index() {
-        let state = create_test_state_with_notes(5);
+    fn test_get_note_at_index() -> Result<()> {
+        let state = create_test_state_with_notes(5)?;
 
         // Valid index
         let note = HomeData::get_note_at_index(&state, 0);
@@ -319,11 +319,13 @@ mod tests {
         // Invalid index
         let note = HomeData::get_note_at_index(&state, 10);
         assert!(note.is_none());
+
+        Ok(())
     }
 
     #[test]
-    fn test_get_selected_note() {
-        let mut state = create_test_state_with_notes(3);
+    fn test_get_selected_note() -> Result<()> {
+        let mut state = create_test_state_with_notes(3)?;
 
         // No selection
         let selected = HomeData::get_selected_note(&state);
@@ -338,16 +340,19 @@ mod tests {
         state.timeline.selected_index = Some(10);
         let selected = HomeData::get_selected_note(&state);
         assert!(selected.is_none());
+
+        Ok(())
     }
 
     #[test]
-    fn test_calculate_timeline_stats() {
-        let mut state = create_test_state_with_notes(5);
+    #[allow(clippy::unwrap_used)]
+    fn test_calculate_timeline_stats() -> Result<()> {
+        let mut state = create_test_state_with_notes(5)?;
 
         // Add some reactions and reposts
         let event_id = state.timeline.notes.iter().next().unwrap().0.event.id;
-        let reaction = create_test_event();
-        let repost = create_test_event();
+        let reaction = create_test_event()?;
+        let repost = create_test_event()?;
 
         let mut reaction_set = EventSet::new();
         reaction_set.insert(reaction);
@@ -364,11 +369,14 @@ mod tests {
         assert_eq!(stats.total_reactions, 1);
         assert_eq!(stats.total_reposts, 1);
         assert_eq!(stats.total_zaps, 0);
+
+        Ok(())
     }
 
     #[test]
-    fn test_get_event_engagement() {
-        let mut state = create_test_state_with_notes(1);
+    #[allow(clippy::unwrap_used)]
+    fn test_get_event_engagement() -> Result<()> {
+        let mut state = create_test_state_with_notes(1)?;
         let event_id = state.timeline.notes.iter().next().unwrap().0.event.id;
 
         // Initially no engagement
@@ -378,8 +386,8 @@ mod tests {
         assert_eq!(engagement.zaps_count, 0);
 
         // Add some engagement
-        let reaction1 = create_test_event();
-        let reaction2 = create_test_event();
+        let reaction1 = create_test_event()?;
+        let reaction2 = create_test_event()?;
         let mut reaction_set = EventSet::new();
         reaction_set.insert(reaction1);
         reaction_set.insert(reaction2);
@@ -387,11 +395,13 @@ mod tests {
 
         let engagement = HomeData::get_event_engagement(&state, &event_id);
         assert_eq!(engagement.reactions_count, 2);
+
+        Ok(())
     }
 
     #[test]
-    fn test_can_interact_with_timeline() {
-        let mut state = create_test_state_with_notes(1);
+    fn test_can_interact_with_timeline() -> Result<()> {
+        let mut state = create_test_state_with_notes(1)?;
 
         // Can interact when input is not shown and notes exist
         assert!(HomeData::can_interact_with_timeline(&state));
@@ -404,11 +414,13 @@ mod tests {
         state.ui.current_mode = UiMode::Normal;
         state.timeline.notes.clear();
         assert!(!HomeData::can_interact_with_timeline(&state));
+
+        Ok(())
     }
 
     #[test]
-    fn test_get_display_name() {
-        let state = create_test_state_with_notes(1);
+    fn test_get_display_name() -> Result<()> {
+        let state = create_test_state_with_notes(1)?;
         let pubkey = state.user.current_user_pubkey;
 
         // Should return profile display name
@@ -419,11 +431,13 @@ mod tests {
         let unknown_keys = Keys::generate();
         let unknown_name = HomeData::get_display_name(&state, &unknown_keys.public_key());
         assert!(!unknown_name.is_empty());
+
+        Ok(())
     }
 
     #[test]
-    fn test_has_profile_data() {
-        let state_with_profile = create_test_state_with_notes(1);
+    fn test_has_profile_data() -> Result<()> {
+        let state_with_profile = create_test_state_with_notes(1)?;
         let keys = Keys::generate();
         let state_without_profile = AppState::new(keys.public_key());
 
@@ -445,10 +459,12 @@ mod tests {
             &state_without_profile,
             &keys.public_key()
         ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_get_timeline_authors() {
+    fn test_get_timeline_authors() -> Result<()> {
         let keys1 = Keys::generate();
         let keys2 = Keys::generate();
         let mut state = AppState::new(keys1.public_key());
@@ -458,15 +474,9 @@ mod tests {
         assert_eq!(authors.len(), 0);
 
         // Add notes from different authors
-        let event1 = EventBuilder::text_note("Post 1")
-            .sign_with_keys(&keys1)
-            .unwrap();
-        let event2 = EventBuilder::text_note("Post 2")
-            .sign_with_keys(&keys2)
-            .unwrap();
-        let event3 = EventBuilder::text_note("Post 3")
-            .sign_with_keys(&keys1)
-            .unwrap(); // Same author as event1
+        let event1 = EventBuilder::text_note("Post 1").sign_with_keys(&keys1)?;
+        let event2 = EventBuilder::text_note("Post 2").sign_with_keys(&keys2)?;
+        let event3 = EventBuilder::text_note("Post 3").sign_with_keys(&keys1)?; // Same author as event1
 
         let sortable1 = SortableEvent::new(event1);
         let sortable2 = SortableEvent::new(event2);
@@ -481,11 +491,14 @@ mod tests {
         assert_eq!(authors.len(), 2);
         assert!(authors.contains(&keys1.public_key()));
         assert!(authors.contains(&keys2.public_key()));
+
+        Ok(())
     }
 
     #[test]
-    fn test_create_text_note() {
-        let state = create_test_state_with_notes(1);
+    #[allow(clippy::unwrap_used)]
+    fn test_create_text_note() -> Result<()> {
+        let state = create_test_state_with_notes(1)?;
         let home_data = HomeData::new();
         let event = state.timeline.notes.iter().next().unwrap().0.event.clone();
 
@@ -497,5 +510,7 @@ mod tests {
         // TextNote should be created successfully
         // Detailed assertions would require TextNote internals access
         assert_eq!(text_note.area, area);
+
+        Ok(())
     }
 }

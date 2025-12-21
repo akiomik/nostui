@@ -219,8 +219,8 @@ impl CmdName for Cmd {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
+    use color_eyre::eyre::Result;
     use nostr_sdk::prelude::*;
     use tokio::sync::mpsc;
 
@@ -228,39 +228,38 @@ mod tests {
         CmdExecutor::new()
     }
 
-    fn create_test_event() -> Event {
+    fn create_test_event() -> Result<Event> {
         let keys = Keys::generate();
         EventBuilder::text_note("test content")
             .sign_with_keys(&keys)
-            .unwrap()
+            .map_err(|e| e.into())
     }
 
     #[test]
-    fn test_execute_send_reaction() {
+    fn test_execute_send_reaction() -> Result<()> {
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let executor = CmdExecutor::new_with_nostr(nostr_tx);
-        let event = create_test_event();
+        let event = create_test_event()?;
         let cmd = Cmd::Nostr(NostrCmd::SendReaction {
             target_event: event.clone(),
         });
 
-        executor.execute_command(&cmd).unwrap();
+        executor.execute_command(&cmd)?;
 
-        let nostr_cmd = nostr_rx.try_recv().unwrap();
-        match nostr_cmd {
+        let nostr_cmd = nostr_rx.try_recv()?;
+        assert!(matches!(
+            nostr_cmd,
             NostrOperation::SendReaction {
                 target_event: received_event,
                 content,
-            } => {
-                assert_eq!(received_event.id, event.id);
-                assert_eq!(content, "+");
-            }
-            _ => panic!("Expected SendReaction NostrOperation"),
-        }
+            } if received_event.id == event.id && content == "+"
+        ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_execute_send_text_note() {
+    fn test_execute_send_text_note() -> Result<()> {
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let executor = CmdExecutor::new_with_nostr(nostr_tx);
         let cmd = Cmd::Nostr(NostrCmd::SendTextNote {
@@ -268,20 +267,19 @@ mod tests {
             tags: vec![],
         });
 
-        executor.execute_command(&cmd).unwrap();
+        executor.execute_command(&cmd)?;
 
-        let nostr_cmd = nostr_rx.try_recv().unwrap();
-        match nostr_cmd {
-            NostrOperation::SendTextNote { tags, content } => {
-                assert_eq!(content, "Hello, Nostr!".to_string());
-                assert!(tags.is_empty());
-            }
-            _ => panic!("Expected SendReaction NostrOperation"),
-        }
+        let nostr_cmd = nostr_rx.try_recv()?;
+        assert!(matches!(
+            nostr_cmd,
+            NostrOperation::SendTextNote { tags, content } if content == "Hello, Nostr!" && tags.is_empty()
+        ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_execute_resize() {
+    fn test_execute_resize() -> Result<()> {
         let mut executor = create_test_executor();
         // Provide TUI sender and assert that Resize is routed there
         let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCmd>();
@@ -292,29 +290,30 @@ mod tests {
             height: 24,
         });
 
-        executor.execute_command(&cmd).unwrap();
+        executor.execute_command(&cmd)?;
 
-        let tui_cmd = tui_rx.try_recv().unwrap();
+        let tui_cmd = tui_rx.try_recv()?;
         match tui_cmd {
             TuiCmd::Resize { width, height } => {
                 assert_eq!(width, 80);
                 assert_eq!(height, 24);
             }
         }
+
+        Ok(())
     }
 
     #[test]
-    fn test_execute_none() {
+    fn test_execute_none() -> Result<()> {
         let executor = create_test_executor();
         let cmd = Cmd::None;
 
-        executor.execute_command(&cmd).unwrap();
-
         // Should not error and produce no side effects
+        executor.execute_command(&cmd)
     }
 
     #[test]
-    fn test_execute_batch() {
+    fn test_execute_batch() -> Result<()> {
         let mut executor = create_test_executor();
         // Provide TUI and Render request senders
         let (tui_tx, mut tui_rx) = mpsc::unbounded_channel::<TuiCmd>();
@@ -328,10 +327,10 @@ mod tests {
         })];
         let batch_cmd = Cmd::Batch(cmds);
 
-        executor.execute_command(&batch_cmd).unwrap();
+        executor.execute_command(&batch_cmd)?;
 
         // Should receive resize command (render is not a TuiCmd anymore)
-        let tui_cmd = tui_rx.try_recv().unwrap();
+        let tui_cmd = tui_rx.try_recv()?;
         assert!(matches!(
             tui_cmd,
             TuiCmd::Resize {
@@ -339,10 +338,12 @@ mod tests {
                 height: 50
             }
         ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_execute_multiple_commands() {
+    fn test_execute_multiple_commands() -> Result<()> {
         let mut executor = create_test_executor();
         // Provide render request sender to observe execution
         let (render_tx, _render_rx) = mpsc::channel::<()>(1);
@@ -355,22 +356,26 @@ mod tests {
             },
         ];
 
-        let log = executor.execute_commands(&commands).unwrap();
+        let log = executor.execute_commands(&commands)?;
 
         assert_eq!(log.len(), 2);
         assert!(log[0].contains("✓ Executed: LoadConfig"));
         assert!(log[1].contains("✓ Executed: LogInfo"));
+
+        Ok(())
     }
 
     #[test]
-    fn test_cmd_name_trait() {
+    fn test_cmd_name_trait() -> Result<()> {
         let cmd = Cmd::Nostr(NostrCmd::SendReaction {
-            target_event: create_test_event(),
+            target_event: create_test_event()?,
         });
         assert_eq!(cmd.name(), "SendReaction");
 
         let batch_cmd = Cmd::Batch(vec![Cmd::None, Cmd::None]);
         assert_eq!(batch_cmd.name(), "Batch(2)");
+
+        Ok(())
     }
 
     #[test]
@@ -393,52 +398,47 @@ mod tests {
     }
 
     #[test]
-    fn test_nostr_command_routing() {
+    fn test_nostr_command_routing() -> Result<()> {
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let executor = CmdExecutor::new_with_nostr(nostr_tx);
 
-        let target_event = create_test_event();
+        let target_event = create_test_event()?;
         let cmd = Cmd::Nostr(NostrCmd::SendReaction {
             target_event: target_event.clone(),
         });
 
         // Should route to NostrOperation
-        executor.execute_command(&cmd).unwrap();
+        executor.execute_command(&cmd)?;
 
         // NostrOperation should be sent
-        let nostr_op = nostr_rx.try_recv().unwrap();
-        match nostr_op {
-            NostrOperation::SendReaction {
-                target_event: received_event,
-                content,
-            } => {
-                assert_eq!(received_event.id, target_event.id);
-                assert_eq!(content, "+");
-            }
-            _ => panic!("Expected SendReaction NostrOperation"),
-        }
+        let nostr_op = nostr_rx.try_recv()?;
+        assert!(matches!(
+            nostr_op,
+            NostrOperation::SendReaction {target_event: received_event,
+                content,} if received_event.id == target_event.id && content == "+"
+        ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_no_fallback_without_nostr_sender() {
+    fn test_no_fallback_without_nostr_sender() -> Result<()> {
         let executor = create_test_executor(); // No NostrSender
-        let target_event = create_test_event();
+        let target_event = create_test_event()?;
         let cmd = Cmd::Nostr(NostrCmd::SendReaction { target_event });
 
         // Command succeeds silently
-        executor.execute_command(&cmd).unwrap();
+        executor.execute_command(&cmd)
     }
 
     #[test]
-    fn test_request_render_sends_signal() {
+    fn test_request_render_sends_signal() -> Result<()> {
         let mut executor = create_test_executor();
         let (render_tx, mut render_rx) = mpsc::channel::<()>(1);
         executor.set_render_request_sender(render_tx);
 
         // Act: request render once
-        executor
-            .execute_command(&Cmd::RequestRender)
-            .expect("request render should succeed");
+        executor.execute_command(&Cmd::RequestRender)?;
 
         // Assert: a signal is available
         assert!(render_rx.try_recv().is_ok(), "expected one render signal");
@@ -447,21 +447,19 @@ mod tests {
             render_rx.try_recv().is_err(),
             "no extra render signal expected"
         );
+
+        Ok(())
     }
 
     #[test]
-    fn test_request_render_coalesces() {
+    fn test_request_render_coalesces() -> Result<()> {
         let mut executor = create_test_executor();
         let (render_tx, mut render_rx) = mpsc::channel::<()>(1);
         executor.set_render_request_sender(render_tx);
 
         // Act: try to enqueue two render requests back-to-back while buffer capacity is 1
-        executor
-            .execute_command(&Cmd::RequestRender)
-            .expect("request render should succeed");
-        executor
-            .execute_command(&Cmd::RequestRender)
-            .expect("second request should not panic");
+        executor.execute_command(&Cmd::RequestRender)?;
+        executor.execute_command(&Cmd::RequestRender)?;
 
         // Assert: at most one signal is present due to bounded(1) coalescing
         assert!(
@@ -472,6 +470,8 @@ mod tests {
             render_rx.try_recv().is_err(),
             "coalesced: no second signal should be queued"
         );
+
+        Ok(())
     }
 
     #[test]

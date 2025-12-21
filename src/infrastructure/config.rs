@@ -56,8 +56,10 @@ impl Default for ExperimentalConfig {
 }
 
 impl Config {
+    #[allow(clippy::unwrap_used)]
     pub fn new() -> Result<Self, config::ConfigError> {
-        let default_config: Config = json5::from_str(CONFIG).unwrap();
+        let default_config: Config = json5::from_str(CONFIG)
+            .map_err(|e| ConfigError::Message(format!("Failed to load default config: {e}")))?;
         let data_dir = utils::get_data_dir();
         let config_dir = utils::get_config_dir();
         let mut builder = config::Config::builder()

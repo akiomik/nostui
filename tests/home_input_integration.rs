@@ -38,15 +38,13 @@ fn test_input_activation_flow() {
 }
 
 #[test]
-fn test_reply_mode_activation() {
+fn test_reply_mode_activation() -> Result<()> {
     // TODO: Extend TextAreaTestHelper to support reply mode testing
     // For now, using the original approach as this requires additional helper methods
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
 
-    let test_event = EventBuilder::text_note("Original post")
-        .sign_with_keys(&keys)
-        .unwrap();
+    let test_event = EventBuilder::text_note("Original post").sign_with_keys(&keys)?;
 
     // Show reply
     let (new_state, cmds) = update(Msg::Ui(UiMsg::ShowReply(test_event)), state);
@@ -55,6 +53,8 @@ fn test_reply_mode_activation() {
     assert!(HomeInput::is_input_active(&state));
     assert_eq!(HomeInput::get_input_mode_description(&state), "Reply mode");
     assert!(state.ui.reply_to.is_some());
+
+    Ok(())
 }
 
 #[test]
@@ -99,15 +99,14 @@ fn test_submission_validation() {
 }
 
 #[test]
-fn test_submission_with_reply_tags() {
+#[allow(clippy::unwrap_used)]
+fn test_submission_with_reply_tags() -> Result<()> {
     // TODO: Extend TextAreaTestHelper to support reply testing
     // For now, using the original approach as this requires additional helper methods
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
 
-    let original_event = EventBuilder::text_note("Original post")
-        .sign_with_keys(&keys)
-        .unwrap();
+    let original_event = EventBuilder::text_note("Original post").sign_with_keys(&keys)?;
 
     // Start reply
     let (new_state, _) = update(Msg::Ui(UiMsg::ShowReply(original_event)), state);
@@ -125,6 +124,8 @@ fn test_submission_with_reply_tags() {
     let submit_data = state.ui.prepare_submit_data().unwrap();
     assert_eq!(submit_data.content, "This is a reply");
     assert!(!submit_data.tags.is_empty()); // Should have reply tags
+
+    Ok(())
 }
 
 #[test]
@@ -226,7 +227,7 @@ fn test_input_stats_comprehensive() {
 }
 
 #[test]
-fn test_mode_transitions() {
+fn test_mode_transitions() -> Result<()> {
     let mut helper = TextAreaTestHelper::new();
 
     // Navigation → Compose
@@ -242,9 +243,7 @@ fn test_mode_transitions() {
     // TODO: Extend TextAreaTestHelper to support reply mode testing
     let keys = Keys::generate();
     let mut state = AppState::new(keys.public_key());
-    let test_event = EventBuilder::text_note("Test")
-        .sign_with_keys(&keys)
-        .unwrap();
+    let test_event = EventBuilder::text_note("Test").sign_with_keys(&keys)?;
 
     let (new_state, _) = update(Msg::Ui(UiMsg::ShowReply(test_event)), state);
     state = new_state;
@@ -257,6 +256,8 @@ fn test_mode_transitions() {
         HomeInput::get_input_mode_description(&state),
         "Navigation mode"
     );
+
+    Ok(())
 }
 
 #[test]
@@ -279,7 +280,7 @@ fn test_submit_data_equality() {
 }
 
 #[tokio::test]
-async fn test_complete_input_workflow() {
+async fn test_complete_input_workflow() -> Result<()> {
     let mut helper = TextAreaTestHelper::new();
 
     // 1. Start in navigation mode
@@ -302,9 +303,7 @@ async fn test_complete_input_workflow() {
 
     // 5. Start reply to another post (TODO: Extend helper for reply testing)
     let author_keys = Keys::generate();
-    let original_post = EventBuilder::text_note("Original content")
-        .sign_with_keys(&author_keys)
-        .unwrap();
+    let original_post = EventBuilder::text_note("Original content").sign_with_keys(&author_keys)?;
     let mut state = helper.state().clone();
 
     let (new_state, _) = update(Msg::Ui(UiMsg::ShowReply(original_post)), state);
@@ -336,6 +335,8 @@ async fn test_complete_input_workflow() {
         HomeInput::get_input_mode_description(&state),
         "Navigation mode"
     );
+
+    Ok(())
 }
 
 #[test]

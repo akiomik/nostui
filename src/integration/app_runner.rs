@@ -246,41 +246,39 @@ mod tests {
     use crate::infrastructure::tui::event_source::EventSource as TestEventSource;
     use crate::infrastructure::tui::test::TestTui;
 
-    fn make_test_config() -> Config {
+    fn make_test_config() -> Result<Config> {
         let keys = Keys::generate();
-        Config {
-            privatekey: keys.secret_key().to_bech32().unwrap(),
+        Ok(Config {
+            privatekey: keys.secret_key().to_bech32()?,
             relays: vec!["wss://example.com".into()],
             ..Default::default()
-        }
+        })
     }
 
-    async fn make_runner_with_test_tui() -> AppRunner<'static> {
+    async fn make_runner_with_test_tui() -> Result<AppRunner<'static>> {
         let tui = Arc::new(Mutex::new(
             TestTui::new(80, 24).expect("failed to create TestTui"),
         ));
         AppRunner::new_with_config(
-            make_test_config(),
+            make_test_config()?,
             Arc::<Mutex<TestTui>>::clone(&tui),
             TestEventSource::real(tui),
         )
         .await
-        .expect("failed to create AppRunner")
     }
 
     #[tokio::test]
-    async fn app_runner_one_cycle_quit_sets_should_quit() {
+    async fn app_runner_one_cycle_quit_sets_should_quit() -> Result<()> {
         let test_tui = Arc::new(Mutex::new(
             TestTui::new(80, 24).expect("failed to create TestTui"),
         ));
         // Create runner with a test event source that yields a single Quit
         let mut runner = AppRunner::new_with_config(
-            make_test_config(),
+            make_test_config()?,
             Arc::<Mutex<TestTui>>::clone(&test_tui),
             TestEventSource::test([tui::Event::Quit]),
         )
-        .await
-        .expect("failed to create AppRunner");
+        .await?;
 
         // Manually perform one logical cycle using extracted helpers
         let _queued = runner.drain_render_req_count();
@@ -298,14 +296,17 @@ mod tests {
         // don't call maybe_render on purpose (legacy one-cycle helper also skipped draw)
 
         assert!(runner.runtime().state().system.should_quit);
+
+        Ok(())
     }
 
     #[test]
-    fn drain_render_requests_returns_true_when_channel_has_requests() {
+    #[allow(clippy::unwrap_used)]
+    fn drain_render_requests_returns_true_when_channel_has_requests() -> Result<()> {
         // Build a runner with test TUI
-        let rt = Runtime::new().unwrap();
+        let rt = Runtime::new()?;
         rt.block_on(async {
-            let mut runner = make_runner_with_test_tui().await;
+            let mut runner = make_runner_with_test_tui().await.unwrap();
             // Send a render request via runtime's render_req_tx (already wired)
             // We cannot access the sender here, so simulate by directly toggling channel via runtime API:
             // Workaround: send a Ui message that triggers a render request via CmdExecutor -> render_req_tx.
@@ -318,12 +319,14 @@ mod tests {
             runner.handle_tui_event(tui::Event::Render, &mut sr);
             assert!(sr);
         });
+
+        Ok(())
     }
 
     #[tokio::test]
-    async fn handle_tui_event_resize_and_key_are_forwarded() {
+    async fn handle_tui_event_resize_and_key_are_forwarded() -> Result<()> {
         use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-        let mut runner = make_runner_with_test_tui().await;
+        let mut runner = make_runner_with_test_tui().await?;
         let mut sr = false;
         runner.handle_tui_event(tui::Event::Resize(120, 50), &mut sr);
         runner.handle_tui_event(
@@ -335,10 +338,12 @@ mod tests {
         // Render event sets the flag but does not render yet
         runner.handle_tui_event(tui::Event::Render, &mut sr);
         assert!(sr);
+
+        Ok(())
     }
 
     #[tokio::test]
-    async fn app_runner_render_happens_on_render_event_then_quit() {
+    async fn app_runner_render_happens_on_render_event_then_quit() -> Result<()> {
         // Prepare TestTui to observe draw count
         let test_tui = Arc::new(Mutex::new(
             TestTui::new(80, 24).expect("failed to create TestTui"),
@@ -347,12 +352,11 @@ mod tests {
 
         // Drive the loop with events: Render -> Quit using a test event source
         let mut runner = AppRunner::new_with_config(
-            make_test_config(),
+            make_test_config()?,
             Arc::<Mutex<TestTui>>::clone(&test_tui),
             TestEventSource::test([tui::Event::Render, tui::Event::Quit]),
         )
-        .await
-        .expect("failed to create AppRunner");
+        .await?;
 
         // Run the main loop; it should finish quickly due to Quit
         let res = timeout(Duration::from_millis(200), runner.run()).await;
@@ -361,5 +365,7 @@ mod tests {
         // Verify at least one draw happened due to Render coalescing
         let draws = draw_counter_handle.lock().await.draw_count();
         assert!(draws >= 1, "expected at least one render, got {draws}");
+
+        Ok(())
     }
 }

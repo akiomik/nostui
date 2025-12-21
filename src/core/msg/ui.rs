@@ -33,10 +33,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ui_msg_serde() {
+    fn ui_msg_serde() -> Result<()> {
         let msg = UiMsg::UpdateInputContent("hello".into());
-        let s = serde_json::to_string(&msg).unwrap();
-        let back: UiMsg = serde_json::from_str(&s).unwrap();
+        let s = serde_json::to_string(&msg)?;
+        let back: UiMsg = serde_json::from_str(&s)?;
         assert_eq!(msg, back);
+
+        Ok(())
     }
 }

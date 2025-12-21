@@ -127,11 +127,11 @@ mod tests {
         AppState::new(Keys::generate().public_key())
     }
 
-    fn create_test_event() -> Event {
+    fn create_test_event() -> Result<Event> {
         let keys = Keys::generate();
         EventBuilder::text_note("test content")
             .sign_with_keys(&keys)
-            .unwrap()
+            .map_err(|e| e.into())
     }
 
     #[test]
@@ -180,23 +180,25 @@ mod tests {
     }
 
     #[test]
-    fn test_update_show_reply() {
+    fn test_update_show_reply() -> Result<()> {
         let state = create_test_state();
-        let target_event = create_test_event();
+        let target_event = create_test_event()?;
         let (new_state, cmds) = update(Msg::Ui(UiMsg::ShowReply(target_event.clone())), state);
 
         assert!(new_state.ui.is_composing());
         assert_eq!(new_state.ui.reply_to, Some(target_event));
         assert!(new_state.ui.textarea.content.is_empty());
         assert!(cmds.is_empty());
+
+        Ok(())
     }
 
     #[test]
-    fn test_update_cancel_input() {
+    fn test_update_cancel_input() -> Result<()> {
         let mut state = create_test_state();
         state.ui.current_mode = UiMode::Composing;
         state.ui.textarea.content = "test".to_string();
-        state.ui.reply_to = Some(create_test_event());
+        state.ui.reply_to = Some(create_test_event()?);
 
         let (new_state, cmds) = update(Msg::Ui(UiMsg::CancelInput), state);
 
@@ -204,15 +206,17 @@ mod tests {
         assert!(new_state.ui.reply_to.is_none());
         assert!(new_state.ui.textarea.content.is_empty());
         assert!(cmds.is_empty());
+
+        Ok(())
     }
 
     #[test]
-    fn test_ui_cancel_input_delegates_to_timeline_and_keeps_status_message() {
+    fn test_ui_cancel_input_delegates_to_timeline_and_keeps_status_message() -> Result<()> {
         let mut state = create_test_state();
         // Prepare UI state to be reset by CancelInput
         state.ui.current_mode = UiMode::Composing;
         state.ui.textarea.content = "typing...".into();
-        state.ui.reply_to = Some(create_test_event());
+        state.ui.reply_to = Some(create_test_event()?);
         // Prepare timeline selection and a system status message
         state.timeline.selected_index = Some(3);
         state.system.status_message = Some("keep me".into());
@@ -230,37 +234,40 @@ mod tests {
 
         // Unlike Msg::DeselectNote path, status_message is not cleared here (policy difference)
         assert_eq!(new_state.system.status_message.as_deref(), Some("keep me"));
+
+        Ok(())
     }
 
     #[test]
-    fn test_update_send_reaction() {
+    fn test_update_send_reaction() -> Result<()> {
         let state = create_test_state();
-        let target_event = create_test_event();
+        let target_event = create_test_event()?;
         let (new_state, cmds) = update(
             Msg::Nostr(NostrMsg::SendReaction(target_event.clone())),
             state,
         );
 
         assert!(new_state.system.status_message.is_none());
-        assert_eq!(cmds.len(), 1);
-        match &cmds[0] {
-            Cmd::Nostr(NostrCmd::SendReaction {
+        assert!(matches!(
+            cmds.as_slice(),
+            [Cmd::Nostr(NostrCmd::SendReaction {
                 target_event: cmd_event,
-            }) => {
-                assert_eq!(cmd_event, &target_event);
-            }
-            _ => panic!("Expected SendReaction command"),
-        }
+            })] if cmd_event == &target_event
+        ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_update_add_text_note() {
+    fn test_update_add_text_note() -> Result<()> {
         let state = create_test_state();
-        let event = create_test_event();
+        let event = create_test_event()?;
         let (new_state, cmds) = update(Msg::Timeline(TimelineMsg::AddNote(event)), state);
 
         assert_eq!(new_state.timeline.notes.len(), 1);
         assert!(cmds.is_empty());
+
+        Ok(())
     }
 
     #[test]

@@ -104,18 +104,20 @@ impl NostrOperation {
 
 #[cfg(test)]
 mod tests {
+    use color_eyre::Result;
+
     use super::*;
 
-    fn create_test_event() -> Event {
+    fn create_test_event() -> Result<Event> {
         let keys = Keys::generate();
         EventBuilder::text_note("test")
             .sign_with_keys(&keys)
-            .unwrap()
+            .map_err(|e| e.into())
     }
 
     #[test]
-    fn test_nostr_operation_names() {
-        let event = create_test_event();
+    fn test_nostr_operation_names() -> Result<()> {
+        let event = create_test_event()?;
 
         assert_eq!(NostrOperation::like(event.clone()).name(), "SendReaction");
         assert_eq!(NostrOperation::repost(event, None).name(), "SendRepost");
@@ -135,87 +137,76 @@ mod tests {
             NostrOperation::SubscribeToTimeline.name(),
             "SubscribeToTimeline"
         );
+
+        Ok(())
     }
 
     #[test]
-    fn test_reaction_helpers() {
-        let event = create_test_event();
+    fn test_reaction_helpers() -> Result<()> {
+        let event = create_test_event()?;
 
         let like = NostrOperation::like(event.clone());
-        match like {
+        assert!(matches!(
+            like,
             NostrOperation::SendReaction {
                 target_event,
                 content,
-            } => {
-                assert_eq!(target_event.id, event.id);
-                assert_eq!(content, "+");
-            }
-            _ => panic!("Expected SendReaction"),
-        }
+            } if target_event.id == event.id && content == "+"
+        ));
 
         let dislike = NostrOperation::dislike(event.clone());
-        match dislike {
+        assert!(matches!(
+            dislike,
             NostrOperation::SendReaction {
                 target_event,
                 content,
-            } => {
-                assert_eq!(target_event.id, event.id);
-                assert_eq!(content, "-");
-            }
-            _ => panic!("Expected SendReaction"),
-        }
+            } if target_event.id == event.id && content == "-"
+        ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_text_note_helpers() {
+    fn test_text_note_helpers() -> Result<()> {
         let simple = NostrOperation::simple_text_note("Hello, Nostr!");
-        match simple {
-            NostrOperation::SendTextNote { content, tags } => {
-                assert_eq!(content, "Hello, Nostr!");
-                assert!(tags.is_empty());
-            }
-            _ => panic!("Expected SendTextNote"),
-        }
+        assert!(matches!(
+            simple,
+            NostrOperation::SendTextNote { content, tags } if content == "Hello, Nostr!" && tags.is_empty()
+        ));
 
-        let with_tags =
-            NostrOperation::text_note("Tagged note", vec![Tag::parse(["t", "test"]).unwrap()]);
-        match with_tags {
-            NostrOperation::SendTextNote { content, tags } => {
-                assert_eq!(content, "Tagged note");
-                assert_eq!(tags.len(), 1);
-            }
-            _ => panic!("Expected SendTextNote"),
-        }
+        let with_tags = NostrOperation::text_note("Tagged note", vec![Tag::parse(["t", "test"])?]);
+        assert!(matches!(
+            with_tags,
+            NostrOperation::SendTextNote { content, tags } if content == "Tagged note" && tags.len() == 1
+        ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_repost_operation() {
-        let event = create_test_event();
+    fn test_repost_operation() -> Result<()> {
+        let event = create_test_event()?;
 
         let simple_repost = NostrOperation::repost(event.clone(), None);
-        match simple_repost {
+        assert!(matches!(
+            simple_repost,
             NostrOperation::SendRepost {
                 target_event,
                 reason,
-            } => {
-                assert_eq!(target_event.id, event.id);
-                assert!(reason.is_none());
-            }
-            _ => panic!("Expected SendRepost"),
-        }
+            } if target_event.id == event.id && reason.is_none()
+        ));
 
         let repost_with_reason =
             NostrOperation::repost(event.clone(), Some("Great point!".to_string()));
-        match repost_with_reason {
+        assert!(matches!(
+            repost_with_reason,
             NostrOperation::SendRepost {
                 target_event,
                 reason,
-            } => {
-                assert_eq!(target_event.id, event.id);
-                assert_eq!(reason, Some("Great point!".to_string()));
-            }
-            _ => panic!("Expected SendRepost"),
-        }
+            } if target_event.id == event.id && reason == Some("Great point!".to_string())
+        ));
+
+        Ok(())
     }
 
     #[test]
@@ -226,11 +217,9 @@ mod tests {
         ];
 
         let cmd = NostrOperation::connect_relays(relays.clone());
-        match cmd {
-            NostrOperation::ConnectToRelays { relays: cmd_relays } => {
-                assert_eq!(cmd_relays, relays);
-            }
-            _ => panic!("Expected ConnectToRelays"),
-        }
+        assert!(matches!(
+            cmd,
+            NostrOperation::ConnectToRelays { relays: cmd_relays } if cmd_relays == relays
+        ));
     }
 }
