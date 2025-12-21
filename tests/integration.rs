@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
 use tokio::time::{sleep, timeout};
 
@@ -11,7 +12,7 @@ use nostui::{
         update::update,
     },
     integration::runtime::Runtime,
-    Cmd, VERSION,
+    Cmd, RawMsg, VERSION,
 };
 
 /// Basic library flow test
@@ -153,18 +154,31 @@ async fn test_async_message_handling() -> Result<()> {
     let keys = Keys::generate();
     let initial_state = AppState::new(keys.public_key());
     let mut runtime = Runtime::new(initial_state);
-    let sender = runtime.get_sender().unwrap();
+    // Ensure input mode is active without relying on keybinding config
+    runtime.send_msg(Msg::Ui(UiMsg::ShowNewNote));
+    runtime.process_all_messages();
+    assert!(runtime.state().ui.is_composing());
 
-    // Send messages asynchronously
+    // Send messages asynchronously using RawMsg sequence via translator (typing + submit)
+    let raw_sender = runtime.get_raw_sender();
     let handle = tokio::spawn(async move {
         sleep(Duration::from_millis(10)).await;
-        sender.send(Msg::Ui(UiMsg::ShowNewNote)).unwrap();
-        sender
-            .send(Msg::Ui(UiMsg::UpdateInputContent(
-                "Async message".to_string(),
+        // Type content "Async message"
+        for ch in "Async message".chars() {
+            raw_sender
+                .send(RawMsg::Key(KeyEvent::new(
+                    KeyCode::Char(ch),
+                    KeyModifiers::NONE,
+                )))
+                .unwrap();
+        }
+        // Submit with Ctrl+P
+        raw_sender
+            .send(RawMsg::Key(KeyEvent::new(
+                KeyCode::Char('p'),
+                KeyModifiers::CONTROL,
             )))
             .unwrap();
-        sender.send(Msg::Ui(UiMsg::SubmitNote)).unwrap();
     });
 
     // Wait for task completion
