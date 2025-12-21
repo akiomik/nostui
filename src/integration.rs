@@ -9,4 +9,3 @@ pub mod cmd_executor;
 pub mod coalescer;
 pub mod renderer;
 pub mod runtime;
-pub mod update_executor;
