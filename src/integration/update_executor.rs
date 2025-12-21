@@ -9,7 +9,7 @@ impl UpdateExecutor {
         if let Some((w, h)) = pending_resize.take() {
             runtime.send_raw_msg(RawMsg::Resize(w, h));
         }
-        if let Err(e) = runtime.run_update_cycle() {
+        if let Err(e) = runtime.run_cycle() {
             log::error!("Runtime error: {e}");
             runtime.send_raw_msg(RawMsg::Error(format!("Runtime error: {e}")));
         }
