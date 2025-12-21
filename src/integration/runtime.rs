@@ -157,11 +157,7 @@ impl Runtime {
 
     /// Get pending commands
     pub fn pending_commands(&mut self) -> Vec<Cmd> {
-        let mut commands = Vec::new();
-        while let Some(cmd) = self.cmd_queue.pop_front() {
-            commands.push(cmd);
-        }
-        commands
+        Vec::from(self.cmd_queue.clone())
     }
 
     /// Execute all pending commands using the command executor
