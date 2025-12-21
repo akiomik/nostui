@@ -244,7 +244,7 @@ impl Runtime {
     }
 
     /// Process all messages and execute commands in one step
-    pub fn run_update_cycle(&mut self) -> Result<Vec<String>> {
+    pub fn run_cycle(&mut self) -> Result<Vec<String>> {
         let _commands = self.process_all_messages();
         self.execute_pending_commands()
     }
@@ -524,7 +524,7 @@ mod tests {
         runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(target_event)));
 
         // Process messages and execute commands
-        let execution_log = runtime.run_update_cycle()?;
+        let execution_log = runtime.run_cycle()?;
         assert_eq!(execution_log.len(), 1);
         assert!(execution_log[0].contains("✓ Executed: SendReaction"));
 
@@ -548,7 +548,7 @@ mod tests {
         runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(target_event.clone())));
 
         // Process messages and execute commands
-        let execution_log = runtime.run_update_cycle()?;
+        let execution_log = runtime.run_cycle()?;
         assert_eq!(execution_log.len(), 1);
         assert!(execution_log[0].contains("✓ Executed: SendReaction"));
 

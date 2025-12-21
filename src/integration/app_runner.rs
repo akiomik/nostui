@@ -334,7 +334,7 @@ mod tests {
             &mut sr,
         );
         // Process update to move raw queue through translator without assertions here, just ensure no panic
-        let _ = runner.runtime_mut().run_update_cycle();
+        let _ = runner.runtime_mut().run_cycle();
         // Render event sets the flag but does not render yet
         runner.handle_tui_event(tui::Event::Render, &mut sr);
         assert!(sr);

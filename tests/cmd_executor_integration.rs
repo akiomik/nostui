@@ -107,7 +107,7 @@ fn test_complete_elm_to_action_workflow() -> Result<()> {
 
     // 2. Process all messages and execute commands
     let execution_log = runtime
-        .run_update_cycle()
+        .run_cycle()
         .expect("Command execution should succeed");
 
     // Debug: Print execution log
@@ -149,7 +149,7 @@ fn test_text_note_submission_workflow() -> Result<()> {
 
     // Process and execute commands
     let execution_log = runtime
-        .run_update_cycle()
+        .run_cycle()
         .expect("Command execution should succeed");
 
     // Should have executed SendTextNote command
@@ -177,7 +177,7 @@ fn test_reply_workflow_with_tags() -> Result<()> {
     runtime.send_msg(Msg::Ui(UiMsg::SubmitNote));
 
     let execution_log = runtime
-        .run_update_cycle()
+        .run_cycle()
         .expect("Command execution should succeed");
     assert!(execution_log.iter().any(|log| log.contains("SendTextNote")));
 
@@ -206,7 +206,7 @@ fn test_multiple_commands_in_sequence() -> Result<()> {
     runtime.add_tui_sender(tui_tx)?;
 
     let execution_log = runtime
-        .run_update_cycle()
+        .run_cycle()
         .expect("Command execution should succeed");
     assert_eq!(execution_log.len(), 3);
 
@@ -280,7 +280,7 @@ fn test_error_handling_in_execution() -> Result<()> {
 
     // Try to send a command - should handle the error gracefully
     runtime.send_msg(Msg::Nostr(NostrMsg::SendReaction(create_test_event()?)));
-    let result = runtime.run_update_cycle();
+    let result = runtime.run_cycle();
 
     // The execution should succeed and simply ignore the command when Nostr is unavailable
     match result {
@@ -325,7 +325,7 @@ fn test_translator_integration_with_executor() -> Result<()> {
     }
 
     let _execution_log = runtime
-        .run_update_cycle()
+        .run_cycle()
         .expect("Command execution should succeed");
 
     // Should have triggered ShowReply message (no command)
@@ -353,7 +353,7 @@ fn test_performance_with_many_commands() -> Result<()> {
     }
 
     let execution_log = runtime
-        .run_update_cycle()
+        .run_cycle()
         .expect("Command execution should succeed");
     let duration = start.elapsed();
 
