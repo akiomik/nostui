@@ -520,11 +520,11 @@ mod tests {
 
     #[test]
     fn test_translate_nostr_events() {
-        let _state = create_test_state();
+        let state = create_test_state();
 
         // Test text note
         let event = create_test_event();
-        let result = translate_raw_to_domain(RawMsg::ReceiveEvent(event.clone()), &_state);
+        let result = translate_raw_to_domain(RawMsg::ReceiveEvent(event.clone()), &state);
         assert_eq!(
             result,
             vec![
@@ -540,7 +540,7 @@ mod tests {
             .sign_with_keys(&keys)
             .unwrap();
 
-        let result = translate_raw_to_domain(RawMsg::ReceiveEvent(metadata_event), &_state);
+        let result = translate_raw_to_domain(RawMsg::ReceiveEvent(metadata_event), &state);
         assert_eq!(result.len(), 2);
         match (&result[0], &result[1]) {
             (Msg::System(SystemMsg::SetLoading(false)), Msg::UpdateProfile(pubkey, _)) => {

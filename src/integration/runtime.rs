@@ -95,7 +95,7 @@ impl Runtime {
         }
     }
 
-    /// Set command executor (Action only)
+    /// Set command executor
     pub fn set_executor(&mut self) {
         self.cmd_executor = Some(CmdExecutor::new());
     }
@@ -530,7 +530,6 @@ mod tests {
     fn test_runtime_with_executor() {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
         let mut runtime = Runtime::new_with_executor(state);
 
         // Check stats show executor is available but no Nostr support
@@ -546,16 +545,12 @@ mod tests {
         let execution_log = runtime.run_update_cycle().unwrap();
         assert_eq!(execution_log.len(), 1);
         assert!(execution_log[0].contains("✓ Executed: SendReaction"));
-
-        // Without Nostr executor, no Action should be sent (command is dropped with warning)
-        assert!(action_rx.try_recv().is_err());
     }
 
     #[test]
     fn test_runtime_with_nostr_executor() {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let (_action_tx, mut action_rx) = mpsc::unbounded_channel::<()>();
         let (nostr_tx, mut nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let mut runtime = Runtime::new_with_nostr_executor(state, nostr_tx);
 
@@ -585,16 +580,12 @@ mod tests {
             }
             _ => panic!("Expected SendReaction NostrOperation"),
         }
-
-        // No Action should be sent when NostrOperation is available
-        assert!(action_rx.try_recv().is_err());
     }
 
     #[test]
     fn test_add_nostr_support() {
         let keys = Keys::generate();
         let state = AppState::new(keys.public_key());
-        let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
         let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let mut runtime = Runtime::new_with_executor(state);
 
@@ -641,7 +632,6 @@ mod tests {
     #[test]
     fn test_set_executor() {
         let mut runtime = create_test_runtime();
-        let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
 
         // Initially no executor
         assert!(!runtime.get_stats().has_executor);

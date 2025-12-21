@@ -6,7 +6,7 @@ use crate::{
     infrastructure::nostr::NostrOperation,
 };
 
-/// Command executor that bridges Elm commands to Action and NostrOperation systems
+/// Command executor that bridges Elm commands to side effects (e.g. NostrOperation)
 #[derive(Clone, Default)]
 pub struct CmdExecutor {
     nostr_sender: Option<mpsc::UnboundedSender<NostrOperation>>,
@@ -98,7 +98,7 @@ impl CmdExecutor {
         Ok(())
     }
 
-    /// Execute a single command by converting it to appropriate Action or NostrOperation
+    /// Execute a single command by converting it to external effects
     pub fn execute_command(&self, cmd: &Cmd) -> Result<()> {
         match cmd {
             Cmd::None => {
@@ -384,7 +384,6 @@ mod tests {
 
     #[test]
     fn test_executor_with_nostr_sender() {
-        let (_action_tx, _action_rx) = mpsc::unbounded_channel::<()>();
         let (nostr_tx, _nostr_rx) = mpsc::unbounded_channel::<NostrOperation>();
         let executor = CmdExecutor::new_with_nostr(nostr_tx);
 
