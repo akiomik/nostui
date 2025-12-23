@@ -50,7 +50,7 @@ unicode-width = "0.2.0"
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"
-rstest = "0.22.0"
+rstest = "0.26.1"
 
 [lints.clippy]
 absolute_paths = "warn"
