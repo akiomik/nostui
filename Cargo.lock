@@ -1530,6 +1530,7 @@ dependencies = [
  "sorted-vec",
  "strip-ansi-escapes",
  "strum 0.27.2",
+ "tears",
  "thousands",
  "tokio",
  "tokio-util",
@@ -2582,6 +2583,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.111",
+]
+
+[[package]]
+name = "tears"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fdde4a22a57abf63d6e0cf6a32f7c778a0f5c032c3a6cf40607b48a6dc949a1"
+dependencies = [
+ "color-eyre",
+ "crossterm",
+ "futures",
+ "ratatui",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
