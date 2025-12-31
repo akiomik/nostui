@@ -72,6 +72,9 @@ pub mod integration;
 // New architecture
 pub mod tears;
 
+// Tears framework application
+pub mod tears_app;
+
 // Test helpers module (available in dev and test builds)
 #[cfg(any(test, debug_assertions))]
 pub mod test_helpers;
