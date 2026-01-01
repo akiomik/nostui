@@ -31,7 +31,7 @@ impl HomeListComponent {
         let notes = &state.timeline.notes;
         let selected_index = state.timeline.selected_index;
 
-        let padding = Padding::new(1, 1, 1, 3);
+        let padding = Padding::new(1, 1, 1, 1);
         let item_count = notes.len();
 
         if item_count == 0 {
