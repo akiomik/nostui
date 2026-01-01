@@ -99,11 +99,6 @@ impl<'a> Application for TearsApp<'a> {
     fn update(&mut self, msg: AppMsg) -> Command<Self::Message> {
         log::debug!("update: {msg:?}");
 
-        // Track app FPS (every update call counts as a frame)
-        if let Some(fps) = self.app_fps_tracker.record_frame() {
-            self.state.system.fps_data.app_fps = fps;
-        }
-
         // Handle messages and update state
         match msg {
             AppMsg::System(system_msg) => self.handle_system_msg(system_msg),
@@ -161,8 +156,11 @@ impl<'a> TearsApp<'a> {
                 // Terminal resize is handled automatically by ratatui
             }
             SystemMsg::Tick => {
-                // Tick events are used for periodic operations
-                // FPS tracking is done in update() method
+                // Track app FPS based on tick events (approximately matches render FPS)
+                if let Some(fps) = self.app_fps_tracker.record_frame() {
+                    self.state.system.fps_data.app_fps = fps;
+                    log::debug!("App FPS: {fps:.2}");
+                }
             }
             SystemMsg::ShowError(error) => {
                 self.state.system.status_message = Some(error);
