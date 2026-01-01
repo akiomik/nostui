@@ -50,6 +50,10 @@ pub enum TimelineMsg {
     Select(usize),
     /// Deselect the current note
     Deselect,
+    /// Select the first note in the timeline
+    SelectFirst,
+    /// Select the last note in the timeline
+    SelectLast,
 }
 
 /// UI messages

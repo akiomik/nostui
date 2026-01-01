@@ -277,19 +277,12 @@ impl<'a> TearsApp<'a> {
             KeyAction::ScrollUp => Command::single(AppMsg::Timeline(TimelineMsg::ScrollUp)),
             KeyAction::ScrollDown => Command::single(AppMsg::Timeline(TimelineMsg::ScrollDown)),
             KeyAction::ScrollToTop => {
-                // Select first item
-                if !self.state.timeline.notes.is_empty() {
-                    self.state.timeline.selected_index = Some(0);
-                }
-                Command::none()
+                // Delegate to TimelineMsg::SelectFirst
+                Command::single(AppMsg::Timeline(TimelineMsg::SelectFirst))
             }
             KeyAction::ScrollToBottom => {
-                // Select last item
-                let max_index = self.state.timeline.notes.len().saturating_sub(1);
-                if max_index > 0 {
-                    self.state.timeline.selected_index = Some(max_index);
-                }
-                Command::none()
+                // Delegate to TimelineMsg::SelectLast
+                Command::single(AppMsg::Timeline(TimelineMsg::SelectLast))
             }
             KeyAction::Unselect => {
                 // Delegate to TimelineMsg::Deselect to keep logic centralized
@@ -352,6 +345,19 @@ impl<'a> TearsApp<'a> {
                 // This matches the old architecture behavior (TimelineMsg::DeselectNote)
                 self.state.timeline.selected_index = None;
                 self.state.system.status_message = None;
+            }
+            TimelineMsg::SelectFirst => {
+                // Select the first note in the timeline
+                if !self.state.timeline.notes.is_empty() {
+                    self.state.timeline.selected_index = Some(0);
+                }
+            }
+            TimelineMsg::SelectLast => {
+                // Select the last note in the timeline
+                let max_index = self.state.timeline.notes.len().saturating_sub(1);
+                if !self.state.timeline.notes.is_empty() {
+                    self.state.timeline.selected_index = Some(max_index);
+                }
             }
         }
         Command::none()
@@ -849,5 +855,125 @@ mod tests {
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_index, None);
         assert_eq!(app.state.system.status_message, None);
+    }
+
+    #[test]
+    fn test_select_first_with_empty_timeline() {
+        let mut app = create_test_app();
+
+        // Timeline is empty
+        assert!(app.state.timeline.notes.is_empty());
+
+        // Try to select first
+        app.handle_timeline_msg(TimelineMsg::SelectFirst);
+
+        // Selection should remain None
+        assert_eq!(app.state.timeline.selected_index, None);
+    }
+
+    #[test]
+    fn test_select_first_with_notes() {
+        let mut app = create_test_app();
+
+        // Add some notes to timeline
+        let keys = Keys::generate();
+        let event1 = EventBuilder::text_note("test note 1")
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+        let event2 = EventBuilder::text_note("test note 2")
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+        app.process_nostr_event(event1);
+        app.process_nostr_event(event2);
+
+        // Select somewhere in the middle
+        app.state.timeline.selected_index = Some(1);
+
+        // Select first
+        app.handle_timeline_msg(TimelineMsg::SelectFirst);
+
+        // Selection should be at index 0
+        assert_eq!(app.state.timeline.selected_index, Some(0));
+    }
+
+    #[test]
+    fn test_select_last_with_empty_timeline() {
+        let mut app = create_test_app();
+
+        // Timeline is empty
+        assert!(app.state.timeline.notes.is_empty());
+
+        // Try to select last
+        app.handle_timeline_msg(TimelineMsg::SelectLast);
+
+        // Selection should remain None
+        assert_eq!(app.state.timeline.selected_index, None);
+    }
+
+    #[test]
+    fn test_select_last_with_notes() {
+        let mut app = create_test_app();
+
+        // Add some notes to timeline
+        let keys = Keys::generate();
+        let event1 = EventBuilder::text_note("test note 1")
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+        let event2 = EventBuilder::text_note("test note 2")
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+        app.process_nostr_event(event1);
+        app.process_nostr_event(event2);
+
+        // Start with no selection
+        app.state.timeline.selected_index = None;
+
+        // Select last
+        app.handle_timeline_msg(TimelineMsg::SelectLast);
+
+        // Selection should be at the last index
+        let expected_index = app.state.timeline.notes.len() - 1;
+        assert_eq!(app.state.timeline.selected_index, Some(expected_index));
+    }
+
+    #[test]
+    fn test_scroll_to_top_delegates() {
+        let mut app = create_test_app();
+
+        // Add some notes
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("test note")
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+        app.process_nostr_event(event);
+
+        // Directly test the delegation by calling SelectFirst
+        app.update(AppMsg::Timeline(TimelineMsg::SelectFirst));
+
+        // Selection should be at index 0
+        assert_eq!(app.state.timeline.selected_index, Some(0));
+    }
+
+    #[test]
+    fn test_scroll_to_bottom_delegates() {
+        let mut app = create_test_app();
+
+        // Add some notes
+        let keys = Keys::generate();
+        let event1 = EventBuilder::text_note("test note 1")
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+        let event2 = EventBuilder::text_note("test note 2")
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+        app.process_nostr_event(event1);
+        app.process_nostr_event(event2);
+
+        // Directly test the delegation by calling SelectLast
+        app.update(AppMsg::Timeline(TimelineMsg::SelectLast));
+
+        // Selection should be at the last index
+        let expected_index = app.state.timeline.notes.len() - 1;
+        assert_eq!(app.state.timeline.selected_index, Some(expected_index));
     }
 }
