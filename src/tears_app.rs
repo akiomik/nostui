@@ -7,3 +7,6 @@
 //! - Only the top-level App implements the Application trait
 
 pub mod fps_tracker;
+pub mod message;
+
+pub use message::AppMsg;
