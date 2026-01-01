@@ -2,39 +2,70 @@
 
 use clap::Parser;
 use color_eyre::eyre::Result;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use nostr_sdk::prelude::*;
+use tears::Runtime;
 
 use nostui::{
-    infrastructure::{cli::Cli, config::Config, tui::real::RealTui},
-    integration::app_runner::AppRunner,
+    infrastructure::{cli::Cli, config::Config},
+    tears_app::{app::InitFlags, TearsApp},
     utils::{initialize_logging, initialize_panic_handler},
 };
 
 async fn tokio_main() -> Result<()> {
     initialize_logging()?;
-
     initialize_panic_handler()?;
 
-    let args = <Cli as Parser>::parse();
+    let _args = <Cli as Parser>::parse();
 
-    // Load configuration (file-based)
+    // Load configuration
     let config = Config::new()?;
 
-    // Override runtime rates from CLI for now (future: move tick/frame rates into Config)
-    let tick_rate = args.tick_rate;
-    let frame_rate = args.frame_rate;
-
-    // Initialize and run the new Elm AppRunner
-    let mut runner = {
-        let tui = Arc::new(Mutex::new(
-            RealTui::new()?.tick_rate(tick_rate).frame_rate(frame_rate),
-        ));
-        AppRunner::new_with_real(config.clone(), tui).await?
+    // Load user keys from config
+    let keys = if config.privatekey.is_empty() {
+        return Err(color_eyre::eyre::eyre!("Private key not found in config"));
+    } else {
+        Keys::parse(&config.privatekey)?
     };
-    runner.run().await?;
+    let pubkey = keys.public_key();
 
-    Ok(())
+    log::info!("Starting nostui with public key: {pubkey}");
+
+    // Create Nostr client
+    let client = Client::new(keys.clone());
+
+    // Add relays from config
+    for relay_url in &config.relays {
+        log::info!("Adding relay: {relay_url}");
+        client.add_relay(relay_url).await?;
+    }
+
+    // Connect to relays
+    log::info!("Connecting to relays...");
+    client.connect().await;
+
+    // Create initialization flags for TearsApp
+    let init_flags = InitFlags {
+        pubkey: Some(pubkey),
+        config,
+        nostr_client: client,
+        keys,
+    };
+
+    // Create Tears runtime
+    let runtime = Runtime::<TearsApp>::new(init_flags);
+
+    // Setup terminal
+    let mut terminal = ratatui::init();
+    terminal.clear()?;
+
+    // Run the Tears application
+    log::info!("Starting Tears application...");
+    let result = runtime.run(&mut terminal, 60).await;
+
+    // Restore terminal
+    ratatui::restore();
+
+    result
 }
 
 #[tokio::main]
