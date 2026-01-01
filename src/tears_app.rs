@@ -6,8 +6,10 @@
 //! - Components delegate update/view logic but receive state as parameters
 //! - Only the top-level App implements the Application trait
 
+pub mod app;
 pub mod components;
 pub mod fps_tracker;
 pub mod message;
 
+pub use app::TearsApp;
 pub use message::AppMsg;
