@@ -48,6 +48,8 @@ pub enum TimelineMsg {
     ScrollDown,
     /// Select a specific note
     Select(usize),
+    /// Deselect the current note
+    Deselect,
 }
 
 /// UI messages

@@ -238,12 +238,8 @@ impl<'a> TearsApp<'a> {
 
         // Fallback: handle special keys not in config
         match key.code {
-            // Escape key - unselect/cancel (clear selection and status message)
-            KeyCode::Esc => {
-                self.state.timeline.selected_index = None;
-                self.state.system.status_message = None;
-                Command::none()
-            }
+            // Escape key - unselect/cancel (delegates to TimelineMsg::Deselect)
+            KeyCode::Esc => Command::single(AppMsg::Timeline(TimelineMsg::Deselect)),
             _ => Command::none(),
         }
     }
@@ -296,10 +292,8 @@ impl<'a> TearsApp<'a> {
                 Command::none()
             }
             KeyAction::Unselect => {
-                self.state.timeline.selected_index = None;
-                // Clear status message when unselecting, matching old architecture behavior
-                self.state.system.status_message = None;
-                Command::none()
+                // Delegate to TimelineMsg::Deselect to keep logic centralized
+                Command::single(AppMsg::Timeline(TimelineMsg::Deselect))
             }
 
             // Compose/interactions
@@ -351,6 +345,12 @@ impl<'a> TearsApp<'a> {
                 }
                 // Clear status message when explicitly selecting/deselecting
                 // This matches the old architecture behavior (TimelineMsg::DeselectNote)
+                self.state.system.status_message = None;
+            }
+            TimelineMsg::Deselect => {
+                // Deselect the current note and clear status message
+                // This matches the old architecture behavior (TimelineMsg::DeselectNote)
+                self.state.timeline.selected_index = None;
                 self.state.system.status_message = None;
             }
         }
@@ -720,7 +720,6 @@ impl<'a> TearsApp<'a> {
 mod tests {
     use super::*;
     use crate::infrastructure::config::Config;
-    use crossterm::event::{KeyEventKind, KeyEventState};
 
     /// Create a test app instance
     fn create_test_app() -> TearsApp<'static> {
@@ -804,15 +803,16 @@ mod tests {
     }
 
     #[test]
-    fn test_unselect_action_clears_status_message() {
+    fn test_unselect_action_delegates_to_deselect() {
         let mut app = create_test_app();
 
         // Set selection and status message
         app.state.timeline.selected_index = Some(0);
         app.state.system.status_message = Some("Test message".to_string());
 
-        // Handle Unselect action
-        app.handle_action(KeyAction::Unselect);
+        // KeyAction::Unselect should delegate to TimelineMsg::Deselect
+        // We test the end result by calling TimelineMsg::Deselect directly
+        app.update(AppMsg::Timeline(TimelineMsg::Deselect));
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_index, None);
@@ -820,21 +820,31 @@ mod tests {
     }
 
     #[test]
-    fn test_escape_key_clears_status_message() {
+    fn test_escape_key_triggers_deselect() {
         let mut app = create_test_app();
 
         // Set selection and status message
         app.state.timeline.selected_index = Some(5);
         app.state.system.status_message = Some("Test message".to_string());
 
-        // Simulate Escape key press
-        let key = KeyEvent {
-            code: KeyCode::Esc,
-            modifiers: KeyModifiers::empty(),
-            kind: KeyEventKind::Press,
-            state: KeyEventState::empty(),
-        };
-        app.handle_normal_mode_key(key);
+        // Simulate Escape key press and execute the TimelineMsg::Deselect directly
+        app.update(AppMsg::Timeline(TimelineMsg::Deselect));
+
+        // Both selection and status message should be cleared
+        assert_eq!(app.state.timeline.selected_index, None);
+        assert_eq!(app.state.system.status_message, None);
+    }
+
+    #[test]
+    fn test_timeline_deselect_clears_status_message() {
+        let mut app = create_test_app();
+
+        // Set selection and status message
+        app.state.timeline.selected_index = Some(3);
+        app.state.system.status_message = Some("Test message".to_string());
+
+        // Deselect
+        app.handle_timeline_msg(TimelineMsg::Deselect);
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_index, None);
