@@ -37,21 +37,19 @@ impl<'a> HomeComponent<'a> {
     ///
     /// This renders the timeline list and optionally the input area.
     pub fn view(&mut self, state: &AppState, frame: &mut Frame, area: Rect) {
-        if state.ui.is_composing() {
-            // When composing, split area for list and input
-            let layout = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints(vec![
-                    Constraint::Min(0),    // List area (flexible)
-                    Constraint::Length(5), // Input area (fixed 5 lines)
-                ])
-                .split(area);
+        // Render timeline first (always full area for scrolling continuity)
+        self.list.view(state, frame, area);
 
-            self.list.view(state, frame, layout[0]);
-            self.input.view(state, frame, layout[1]);
-        } else {
-            // When not composing, use full area for list
-            self.list.view(state, frame, area);
+        // Render input area as overlay if composing (matching old architecture)
+        if state.ui.is_composing() {
+            // Calculate overlay input area exactly like original implementation
+            // Take bottom half of the screen, minus 2 lines for margin
+            let mut input_area = area;
+            input_area.height /= 2;
+            input_area.y = input_area.height;
+            input_area.height = input_area.height.saturating_sub(2);
+
+            self.input.view(state, frame, input_area);
         }
     }
 }
