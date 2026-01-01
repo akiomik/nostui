@@ -1,0 +1,166 @@
+//! Home input component
+//!
+//! Handles text input for composing new posts.
+
+use ratatui::{prelude::*, widgets::*};
+use tui_textarea::TextArea;
+
+use crate::core::state::AppState;
+
+/// Home input component
+///
+/// Displays and manages the text input area for composing posts.
+/// This is a stateless component that syncs with AppState's textarea state.
+#[derive(Debug)]
+pub struct HomeInputComponent<'a> {
+    /// Internal TextArea widget for rendering
+    /// This is synced with AppState before rendering
+    textarea: TextArea<'a>,
+}
+
+impl<'a> HomeInputComponent<'a> {
+    /// Create a new input component
+    pub fn new() -> Self {
+        Self {
+            textarea: TextArea::default(),
+        }
+    }
+
+    /// Render the input area
+    ///
+    /// This syncs the internal TextArea with AppState and renders it.
+    pub fn view(&mut self, state: &AppState, frame: &mut Frame, area: Rect) {
+        if !state.ui.is_composing() {
+            return;
+        }
+
+        // Sync TextArea content with AppState
+        self.sync_textarea_with_state(state);
+
+        // Clear the input area
+        frame.render_widget(Clear, area);
+
+        // Set block based on reply state
+        let block = if let Some(reply_to) = &state.ui.reply_to {
+            let name = self.get_reply_target_name(state, reply_to);
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!("Replying to {name}: Press ESC to close"))
+        } else {
+            Block::default()
+                .borders(Borders::ALL)
+                .title("New note: Press ESC to close")
+        };
+
+        self.textarea.set_block(block);
+        frame.render_widget(&self.textarea, area);
+    }
+
+    /// Synchronize internal TextArea with AppState content
+    fn sync_textarea_with_state(&mut self, state: &AppState) {
+        let current_content = self.textarea.lines().join("\n");
+
+        // Update content if it differs
+        if current_content != state.ui.textarea.content {
+            // Clear and replace with state content
+            self.textarea.select_all();
+            self.textarea.delete_str(usize::MAX);
+
+            // Set new content
+            if !state.ui.textarea.content.is_empty() {
+                self.textarea.insert_str(&state.ui.textarea.content);
+            }
+        }
+
+        // Update cursor position
+        let target_row = state.ui.textarea.cursor_position.line;
+        let target_col = state.ui.textarea.cursor_position.column;
+        self.textarea.move_cursor(tui_textarea::CursorMove::Jump(
+            target_row as u16,
+            target_col as u16,
+        ));
+    }
+
+    /// Get the name of the reply target
+    fn get_reply_target_name(&self, state: &AppState, reply_to: &nostr_sdk::Event) -> String {
+        // Get author profile from the reply target event
+        state
+            .user
+            .profiles
+            .get(&reply_to.pubkey)
+            .map(|profile| profile.name())
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+
+    /// Check if currently composing
+    pub fn is_composing(state: &AppState) -> bool {
+        state.ui.is_composing()
+    }
+
+    /// Get the current content
+    pub fn content(state: &AppState) -> &str {
+        &state.ui.textarea.content
+    }
+
+    /// Check if replying to a note
+    pub fn is_replying(state: &AppState) -> bool {
+        state.ui.reply_to.is_some()
+    }
+}
+
+impl<'a> Default for HomeInputComponent<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nostr_sdk::prelude::*;
+
+    fn create_test_state() -> AppState {
+        let keys = Keys::generate();
+        AppState::new(keys.public_key())
+    }
+
+    #[test]
+    fn test_input_component_creation() {
+        let _input = HomeInputComponent::new();
+        // Component should be creatable
+    }
+
+    #[test]
+    fn test_is_composing() {
+        use crate::core::state::ui::UiMode;
+
+        let mut state = create_test_state();
+        assert!(!HomeInputComponent::is_composing(&state));
+
+        // Manually set composing state
+        state.ui.current_mode = UiMode::Composing;
+        assert!(HomeInputComponent::is_composing(&state));
+    }
+
+    #[test]
+    fn test_content() {
+        let mut state = create_test_state();
+        assert_eq!(HomeInputComponent::content(&state), "");
+
+        state.ui.textarea.content = "test content".to_string();
+        assert_eq!(HomeInputComponent::content(&state), "test content");
+    }
+
+    #[test]
+    fn test_is_replying() -> Result<()> {
+        let mut state = create_test_state();
+        assert!(!HomeInputComponent::is_replying(&state));
+
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("test").sign_with_keys(&keys)?;
+        state.ui.reply_to = Some(event);
+        assert!(HomeInputComponent::is_replying(&state));
+
+        Ok(())
+    }
+}
