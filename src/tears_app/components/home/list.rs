@@ -251,6 +251,9 @@ mod tests {
 
     #[test]
     fn test_multibyte_character_rendering() -> Result<()> {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
         // Test that Japanese text (multibyte characters) renders correctly
         // without extra spaces between characters
         let keys = Keys::generate();
@@ -266,8 +269,8 @@ mod tests {
         // Render the note
         let list = HomeListComponent::new();
         let area = Rect::new(0, 0, 80, 20);
-        let backend = ratatui::backend::TestBackend::new(80, 20);
-        let mut terminal = ratatui::Terminal::new(backend)?;
+        let backend = TestBackend::new(80, 20);
+        let mut terminal = Terminal::new(backend)?;
 
         terminal.draw(|frame| {
             list.view(&state, frame, area);
@@ -275,7 +278,7 @@ mod tests {
 
         // Get the rendered buffer
         let buffer = terminal.backend().buffer();
-        
+
         let raw_content = buffer
             .content()
             .iter()
@@ -299,7 +302,7 @@ mod tests {
             raw_content.contains("push"),
             "Expected 'push' in rendered output"
         );
-        
+
         // For Japanese text, we check each character individually since they have padding
         assert!(
             raw_content.contains("め"),

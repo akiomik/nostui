@@ -31,6 +31,12 @@ pub enum SystemMsg {
     Tick,
     /// Show an error message
     ShowError(String),
+    /// Key input event
+    KeyInput(KeyEvent),
+    /// Terminal event error
+    TerminalError(String),
+    /// Suspend the application (Ctrl+Z)
+    Suspend,
 }
 
 /// Timeline messages
@@ -49,12 +55,18 @@ pub enum TimelineMsg {
 pub enum UiMsg {
     /// Start composing a new note
     StartComposing,
+    /// Start replying to the selected note
+    StartReply,
     /// Cancel composing
     CancelComposing,
     /// Submit the composed note
     SubmitNote,
     /// Process textarea input
     ProcessTextAreaInput(KeyEvent),
+    /// React to the selected note
+    ReactToSelected,
+    /// Repost the selected note
+    RepostSelected,
 }
 
 /// Nostr messages

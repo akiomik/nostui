@@ -1,19 +1,26 @@
 //! Main Tears Application implementation
 
 use std::cell::RefCell;
+use std::cmp::Reverse;
 use std::sync::Arc;
 
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
 use ratatui::prelude::*;
 use tears::prelude::*;
+use tears::subscription::terminal::TerminalEvents;
 use tears::subscription::time::{Message as TimerMessage, Timer};
+use tui_textarea::CursorMove;
 
 use crate::core::state::{ui::UiMode, AppState};
+use crate::domain::nostr::{Profile, SortableEvent};
 use crate::domain::ui::{CursorPosition, TextSelection};
 use crate::infrastructure::config::Config;
+use crate::presentation::config::keybindings::Action as KeyAction;
 use crate::tears::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrCommand, NostrEvents,
 };
+use crate::tears_app::message::NostrMsg;
 
 use super::{
     components::Components,
@@ -46,6 +53,8 @@ pub struct TearsApp<'a> {
     nostr_client: Arc<Client>,
     /// FPS tracker for app updates
     app_fps_tracker: FpsTracker,
+    /// Configuration (including keybindings)
+    config: Config,
 }
 
 impl<'a> Application for TearsApp<'a> {
@@ -53,6 +62,9 @@ impl<'a> Application for TearsApp<'a> {
     type Flags = InitFlags;
 
     fn new(flags: InitFlags) -> (Self, Command<Self::Message>) {
+        // Store config separately for keybindings access
+        let config = flags.config.clone();
+
         // Initialize global state
         let state = if let Some(pubkey) = flags.pubkey {
             AppState::new_with_config(pubkey, flags.config)
@@ -76,6 +88,7 @@ impl<'a> Application for TearsApp<'a> {
             keys: flags.keys,
             nostr_client,
             app_fps_tracker: FpsTracker::new(),
+            config,
         };
 
         // Return initial commands if needed
@@ -111,14 +124,24 @@ impl<'a> Application for TearsApp<'a> {
             // This ensures the subscription ID remains constant and the subscription
             // is not recreated every frame
             Subscription::new(NostrEvents::new(Arc::clone(&self.nostr_client)))
-                .map(|msg| AppMsg::Nostr(super::message::NostrMsg::SubscriptionMessage(msg))),
+                .map(|msg| AppMsg::Nostr(NostrMsg::SubscriptionMessage(msg))),
             // Timer subscription - matches runtime FPS (60 Hz = ~16.67ms)
             Subscription::new(Timer::new(16)).map(|msg| match msg {
                 TimerMessage::Tick => AppMsg::System(SystemMsg::Tick),
             }),
-            // TODO: Add TerminalEvents subscription
-            // Currently disabled due to crossterm version conflicts
-            // - TerminalEvents for keyboard/mouse input
+            Subscription::new(TerminalEvents::new()).map(|result| match result {
+                Ok(event) => {
+                    // Handle different terminal event types
+                    match event {
+                        Event::Key(key) => AppMsg::System(SystemMsg::KeyInput(key)),
+                        Event::Resize(width, height) => {
+                            AppMsg::System(SystemMsg::Resize(width, height))
+                        }
+                        _ => AppMsg::System(SystemMsg::Tick), // Ignore other events for now
+                    }
+                }
+                Err(e) => AppMsg::System(SystemMsg::TerminalError(e.to_string())),
+            }),
         ]
     }
 }
@@ -128,9 +151,10 @@ impl<'a> TearsApp<'a> {
     fn handle_system_msg(&mut self, msg: SystemMsg) -> Command<AppMsg> {
         match msg {
             SystemMsg::Quit => {
-                // Set a flag or handle quit
-                // For now, just log
-                log::info!("Quit requested");
+                log::info!("Quit requested - initiating graceful shutdown");
+                // TODO: Add cleanup logic here in the future (e.g., save state, close connections)
+                // For now, directly trigger the quit action
+                return Command::effect(Action::Quit);
             }
             SystemMsg::Resize(width, height) => {
                 log::debug!("Terminal resized to {width}x{height}");
@@ -143,8 +167,151 @@ impl<'a> TearsApp<'a> {
             SystemMsg::ShowError(error) => {
                 self.state.system.status_message = Some(error);
             }
+            SystemMsg::KeyInput(key) => {
+                return self.handle_key_input(key);
+            }
+            SystemMsg::TerminalError(error) => {
+                log::error!("Terminal error: {error}");
+                self.state.system.status_message = Some(format!("Terminal error: {error}"));
+            }
+            SystemMsg::Suspend => {
+                log::info!("Suspend requested");
+                // Send SIGTSTP signal to suspend the application
+                #[cfg(unix)]
+                {
+                    use std::process::{id, Command as StdCommand};
+                    // Use kill command to send SIGTSTP to current process
+                    let pid = id();
+                    let _ = StdCommand::new("kill")
+                        .arg("-TSTP")
+                        .arg(pid.to_string())
+                        .spawn();
+                }
+                #[cfg(not(unix))]
+                {
+                    log::warn!("Suspend is only supported on Unix systems");
+                    self.state.system.status_message =
+                        Some("Suspend is only supported on Unix systems".to_string());
+                }
+            }
         }
         Command::none()
+    }
+
+    /// Handle key input based on current UI mode
+    fn handle_key_input(&mut self, key: KeyEvent) -> Command<AppMsg> {
+        // Global keybindings (work in any mode)
+        match (key.code, key.modifiers) {
+            // Ctrl+C or Ctrl+D to quit (hardcoded for safety)
+            (KeyCode::Char('c'), KeyModifiers::CONTROL)
+            | (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
+                return Command::single(AppMsg::System(SystemMsg::Quit));
+            }
+            _ => {}
+        }
+
+        // Mode-specific keybindings
+        match self.state.ui.current_mode {
+            UiMode::Normal => self.handle_normal_mode_key(key),
+            UiMode::Composing => self.handle_composing_mode_key(key),
+        }
+    }
+
+    /// Resolve keybinding to KeyAction
+    /// Returns the KeyAction if the key matches a configured keybinding
+    fn resolve_keybinding(&self, key: KeyEvent) -> Option<KeyAction> {
+        // Check for single-key binding
+        if let Some(action) = self.config.keybindings.get(&vec![key]) {
+            return Some(action.clone());
+        }
+
+        // TODO: Support multi-key sequences in the future
+        // For now, only single-key bindings are supported
+
+        None
+    }
+
+    /// Handle key input in Normal mode
+    fn handle_normal_mode_key(&mut self, key: KeyEvent) -> Command<AppMsg> {
+        // First, try to resolve from configured keybindings
+        if let Some(action) = self.resolve_keybinding(key) {
+            return self.handle_action(action);
+        }
+
+        // Fallback: handle special keys not in config
+        match key.code {
+            // Escape key - unselect/cancel
+            KeyCode::Esc => Command::single(AppMsg::Timeline(TimelineMsg::Select(0))),
+            _ => Command::none(),
+        }
+    }
+
+    /// Handle key input in Composing mode
+    fn handle_composing_mode_key(&mut self, key: KeyEvent) -> Command<AppMsg> {
+        // In composing mode, check for specific actions
+        if let Some(action) = self.resolve_keybinding(key) {
+            match action {
+                KeyAction::Quit => {
+                    // Allow quitting even in composing mode
+                    return Command::single(AppMsg::System(SystemMsg::Quit));
+                }
+                KeyAction::SubmitTextNote => {
+                    return Command::single(AppMsg::Ui(UiMsg::SubmitNote));
+                }
+                _ => {
+                    // Other actions are ignored in composing mode
+                }
+            }
+        }
+
+        // Special handling for Escape to cancel
+        match key.code {
+            KeyCode::Esc => Command::single(AppMsg::Ui(UiMsg::CancelComposing)),
+            // All other keys are passed to textarea
+            _ => Command::single(AppMsg::Ui(UiMsg::ProcessTextAreaInput(key))),
+        }
+    }
+
+    /// Handle a KeyAction resolved from keybinding
+    fn handle_action(&mut self, action: KeyAction) -> Command<AppMsg> {
+        match action {
+            // Navigation
+            KeyAction::ScrollUp => Command::single(AppMsg::Timeline(TimelineMsg::ScrollUp)),
+            KeyAction::ScrollDown => Command::single(AppMsg::Timeline(TimelineMsg::ScrollDown)),
+            KeyAction::ScrollToTop => {
+                // Select first item
+                if !self.state.timeline.notes.is_empty() {
+                    self.state.timeline.selected_index = Some(0);
+                }
+                Command::none()
+            }
+            KeyAction::ScrollToBottom => {
+                // Select last item
+                let max_index = self.state.timeline.notes.len().saturating_sub(1);
+                if max_index > 0 {
+                    self.state.timeline.selected_index = Some(max_index);
+                }
+                Command::none()
+            }
+            KeyAction::Unselect => {
+                self.state.timeline.selected_index = None;
+                Command::none()
+            }
+
+            // Compose/interactions
+            KeyAction::NewTextNote => Command::single(AppMsg::Ui(UiMsg::StartComposing)),
+            KeyAction::ReplyTextNote => Command::single(AppMsg::Ui(UiMsg::StartReply)),
+            KeyAction::React => Command::single(AppMsg::Ui(UiMsg::ReactToSelected)),
+            KeyAction::Repost => Command::single(AppMsg::Ui(UiMsg::RepostSelected)),
+
+            // System
+            KeyAction::Quit => Command::single(AppMsg::System(SystemMsg::Quit)),
+            KeyAction::Suspend => Command::single(AppMsg::System(SystemMsg::Suspend)),
+            KeyAction::SubmitTextNote => {
+                // Only valid in composing mode, handled separately
+                Command::none()
+            }
+        }
     }
 
     /// Handle timeline messages
@@ -185,22 +352,58 @@ impl<'a> TearsApp<'a> {
         match msg {
             UiMsg::StartComposing => {
                 self.state.ui.current_mode = UiMode::Composing;
+                self.state.ui.reply_to = None;
+            }
+            UiMsg::StartReply => {
+                // Get the selected note
+                if let Some(selected_index) = self.state.timeline.selected_index {
+                    if let Some(note) = self.state.timeline.notes.get(selected_index) {
+                        let event_id = note.0.event.id;
+
+                        // Set reply context
+                        self.state.ui.reply_to = Some(note.0.event.clone());
+                        self.state.ui.current_mode = UiMode::Composing;
+
+                        // Show status message
+                        self.state.system.status_message =
+                            Some(format!("Replying to note {}", &event_id.to_hex()[..8]));
+
+                        log::info!("Starting reply to event: {event_id}");
+                    } else {
+                        self.state.system.status_message = Some("No note selected".to_string());
+                    }
+                } else {
+                    self.state.system.status_message = Some("No note selected".to_string());
+                }
             }
             UiMsg::CancelComposing => {
                 self.state.ui.current_mode = UiMode::Normal;
                 self.state.ui.textarea.content.clear();
+                self.state.ui.reply_to = None;
             }
             UiMsg::SubmitNote => {
                 // Create and publish note
                 let content = self.state.ui.textarea.content.clone();
-                log::info!("Publishing note: {content}");
 
                 // Create event and send through NostrEvents subscription
                 if let Some(sender) = &self.state.nostr.command_sender {
+                    // Build event with appropriate tags
+                    let event_builder = if let Some(ref reply_to_event) = self.state.ui.reply_to {
+                        log::info!("Publishing reply: {content}");
+                        // Create reply with proper NIP-10 tags
+                        EventBuilder::text_note(&content)
+                            .tag(Tag::event(reply_to_event.id))
+                            .tag(Tag::public_key(reply_to_event.pubkey))
+                    } else {
+                        log::info!("Publishing note: {content}");
+                        EventBuilder::text_note(&content)
+                    };
+
                     // Sign event with user's keys
-                    match EventBuilder::text_note(&content).sign_with_keys(&self.keys) {
+                    match event_builder.sign_with_keys(&self.keys) {
                         Ok(event) => {
                             let _ = sender.send(NostrCommand::SendEvent { event });
+                            self.state.system.status_message = Some("Note published".to_string());
                         }
                         Err(e) => {
                             log::error!("Failed to sign event: {e}");
@@ -215,6 +418,73 @@ impl<'a> TearsApp<'a> {
                 self.state.ui.textarea.content.clear();
                 self.state.ui.textarea.cursor_position.column = 0;
                 self.state.ui.textarea.cursor_position.line = 0;
+                self.state.ui.reply_to = None;
+            }
+            UiMsg::ReactToSelected => {
+                // React to the selected note
+                if let Some(selected_index) = self.state.timeline.selected_index {
+                    if let Some(note) = self.state.timeline.notes.get(selected_index) {
+                        let event_id = note.0.event.id;
+
+                        log::info!("Reacting to event: {event_id}");
+
+                        if let Some(sender) = &self.state.nostr.command_sender {
+                            // Create reaction event (+ emoji)
+                            match EventBuilder::reaction(&note.0.event, "+")
+                                .sign_with_keys(&self.keys)
+                            {
+                                Ok(event) => {
+                                    let _ = sender.send(NostrCommand::SendEvent { event });
+                                    self.state.system.status_message = Some(format!(
+                                        "Reacted to note {}",
+                                        &event_id.to_hex()[..8]
+                                    ));
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to sign reaction: {e}");
+                                    self.state.system.status_message =
+                                        Some(format!("Failed to react: {e}"));
+                                }
+                            }
+                        }
+                    } else {
+                        self.state.system.status_message = Some("No note selected".to_string());
+                    }
+                } else {
+                    self.state.system.status_message = Some("No note selected".to_string());
+                }
+            }
+            UiMsg::RepostSelected => {
+                // Repost the selected note
+                if let Some(selected_index) = self.state.timeline.selected_index {
+                    if let Some(note) = self.state.timeline.notes.get(selected_index) {
+                        let event_id = note.0.event.id;
+
+                        log::info!("Reposting event: {event_id}");
+
+                        if let Some(sender) = &self.state.nostr.command_sender {
+                            // Create repost event (with no specific relay URL)
+                            match EventBuilder::repost(&note.0.event, None)
+                                .sign_with_keys(&self.keys)
+                            {
+                                Ok(event) => {
+                                    let _ = sender.send(NostrCommand::SendEvent { event });
+                                    self.state.system.status_message =
+                                        Some(format!("Reposted note {}", &event_id.to_hex()[..8]));
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to sign repost: {e}");
+                                    self.state.system.status_message =
+                                        Some(format!("Failed to repost: {e}"));
+                                }
+                            }
+                        }
+                    } else {
+                        self.state.system.status_message = Some("No note selected".to_string());
+                    }
+                } else {
+                    self.state.system.status_message = Some("No note selected".to_string());
+                }
             }
             UiMsg::ProcessTextAreaInput(key_event) => {
                 // Process key event using tui-textarea
@@ -231,19 +501,19 @@ impl<'a> TearsApp<'a> {
                 }
 
                 // Restore cursor position
-                textarea.move_cursor(tui_textarea::CursorMove::Jump(
+                textarea.move_cursor(CursorMove::Jump(
                     self.state.ui.textarea.cursor_position.line as u16,
                     self.state.ui.textarea.cursor_position.column as u16,
                 ));
 
                 // Restore selection if any
                 if let Some(selection) = &self.state.ui.textarea.selection {
-                    textarea.move_cursor(tui_textarea::CursorMove::Jump(
+                    textarea.move_cursor(CursorMove::Jump(
                         selection.start.line as u16,
                         selection.start.column as u16,
                     ));
                     textarea.start_selection();
-                    textarea.move_cursor(tui_textarea::CursorMove::Jump(
+                    textarea.move_cursor(CursorMove::Jump(
                         selection.end.line as u16,
                         selection.end.column as u16,
                     ));
@@ -279,23 +549,23 @@ impl<'a> TearsApp<'a> {
     }
 
     /// Handle Nostr messages from the subscription
-    fn handle_nostr_msg(&mut self, msg: super::message::NostrMsg) -> Command<AppMsg> {
+    fn handle_nostr_msg(&mut self, msg: NostrMsg) -> Command<AppMsg> {
         match msg {
-            super::message::NostrMsg::Connect => {
+            NostrMsg::Connect => {
                 // NostrEvents subscription handles connection automatically
                 log::info!("NostrEvents subscription will handle connection");
             }
-            super::message::NostrMsg::Disconnect => {
+            NostrMsg::Disconnect => {
                 // Send shutdown command through the sender
                 if let Some(sender) = &self.state.nostr.command_sender {
                     let _ = sender.send(NostrCommand::Shutdown);
                 }
             }
-            super::message::NostrMsg::EventReceived(event) => {
+            NostrMsg::EventReceived(event) => {
                 log::debug!("Received event: {}", event.id);
                 self.process_nostr_event(*event);
             }
-            super::message::NostrMsg::SubscriptionMessage(sub_msg) => {
+            NostrMsg::SubscriptionMessage(sub_msg) => {
                 self.handle_nostr_subscription_message(sub_msg);
             }
         }
@@ -304,8 +574,6 @@ impl<'a> TearsApp<'a> {
 
     /// Handle NostrEvents subscription messages
     fn handle_nostr_subscription_message(&mut self, msg: NostrSubscriptionMessage) {
-        use nostr_sdk::RelayPoolNotification;
-
         match msg {
             NostrSubscriptionMessage::Ready { sender } => {
                 log::info!("NostrEvents subscription ready");
@@ -336,9 +604,6 @@ impl<'a> TearsApp<'a> {
 
     /// Process a received Nostr event
     fn process_nostr_event(&mut self, event: nostr_sdk::Event) {
-        use crate::domain::nostr::{Profile, SortableEvent};
-        use std::cmp::Reverse;
-
         // Receiving any Nostr event implies that initial loading has progressed
         // Clear the loading indicator on first event reception
         if self.state.system.is_loading {
@@ -346,22 +611,25 @@ impl<'a> TearsApp<'a> {
         }
 
         match event.kind {
-            nostr_sdk::Kind::TextNote => {
+            Kind::TextNote => {
                 // Add text note to timeline
                 let sortable = SortableEvent::new(event);
                 self.state.timeline.notes.find_or_insert(Reverse(sortable));
                 log::debug!("Added text note to timeline");
             }
-            nostr_sdk::Kind::Metadata => {
+            Kind::Metadata => {
                 // Parse and store profile metadata
-                if let Ok(metadata) = nostr_sdk::Metadata::from_json(event.content.clone()) {
+                if let Ok(metadata) = Metadata::from_json(event.content.clone()) {
                     let profile = Profile::new(event.pubkey, event.created_at, metadata);
-                    
+
                     // Only update if this is newer than existing profile
-                    let should_update = self.state.user.profiles.get(&event.pubkey).is_none_or(|existing| {
-                        profile.created_at > existing.created_at
-                    });
-                    
+                    let should_update = self
+                        .state
+                        .user
+                        .profiles
+                        .get(&event.pubkey)
+                        .is_none_or(|existing| profile.created_at > existing.created_at);
+
                     if should_update {
                         self.state.user.profiles.insert(event.pubkey, profile);
                         log::debug!("Updated profile for pubkey: {}", event.pubkey);
@@ -372,30 +640,36 @@ impl<'a> TearsApp<'a> {
                         Some("Failed to parse profile metadata".to_string());
                 }
             }
-            nostr_sdk::Kind::Reaction => {
+            Kind::Reaction => {
                 // Add reaction to timeline engagement data
                 if let Some(event_id) = self.extract_last_event_id(&event) {
-                    self.state.timeline.reactions
+                    self.state
+                        .timeline
+                        .reactions
                         .entry(event_id)
                         .or_default()
                         .insert(event);
                     log::debug!("Added reaction for event: {event_id}");
                 }
             }
-            nostr_sdk::Kind::Repost => {
+            Kind::Repost => {
                 // Add repost to timeline engagement data
                 if let Some(event_id) = self.extract_last_event_id(&event) {
-                    self.state.timeline.reposts
+                    self.state
+                        .timeline
+                        .reposts
                         .entry(event_id)
                         .or_default()
                         .insert(event);
                     log::debug!("Added repost for event: {event_id}");
                 }
             }
-            nostr_sdk::Kind::ZapReceipt => {
+            Kind::ZapReceipt => {
                 // Add zap receipt to timeline engagement data
                 if let Some(event_id) = self.extract_last_event_id(&event) {
-                    self.state.timeline.zap_receipts
+                    self.state
+                        .timeline
+                        .zap_receipts
                         .entry(event_id)
                         .or_default()
                         .insert(event);
