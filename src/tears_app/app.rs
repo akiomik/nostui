@@ -238,8 +238,12 @@ impl<'a> TearsApp<'a> {
 
         // Fallback: handle special keys not in config
         match key.code {
-            // Escape key - unselect/cancel
-            KeyCode::Esc => Command::single(AppMsg::Timeline(TimelineMsg::Select(0))),
+            // Escape key - unselect/cancel (clear selection and status message)
+            KeyCode::Esc => {
+                self.state.timeline.selected_index = None;
+                self.state.system.status_message = None;
+                Command::none()
+            }
             _ => Command::none(),
         }
     }
@@ -293,6 +297,8 @@ impl<'a> TearsApp<'a> {
             }
             KeyAction::Unselect => {
                 self.state.timeline.selected_index = None;
+                // Clear status message when unselecting, matching old architecture behavior
+                self.state.system.status_message = None;
                 Command::none()
             }
 
@@ -339,7 +345,13 @@ impl<'a> TearsApp<'a> {
             TimelineMsg::Select(index) => {
                 if index < self.state.timeline.notes.len() {
                     self.state.timeline.selected_index = Some(index);
+                } else {
+                    // Deselecting (e.g., Select(0) when timeline is empty or invalid index)
+                    self.state.timeline.selected_index = None;
                 }
+                // Clear status message when explicitly selecting/deselecting
+                // This matches the old architecture behavior (TimelineMsg::DeselectNote)
+                self.state.system.status_message = None;
             }
         }
         Command::none()
@@ -701,5 +713,131 @@ impl<'a> TearsApp<'a> {
                     None
                 }
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::config::Config;
+    use crossterm::event::{KeyEventKind, KeyEventState};
+
+    /// Create a test app instance
+    fn create_test_app() -> TearsApp<'static> {
+        let keys = Keys::generate();
+        let client = Client::default();
+        let config = Config::default();
+
+        let flags = InitFlags {
+            pubkey: Some(keys.public_key()),
+            config,
+            nostr_client: client,
+            keys,
+        };
+
+        let (app, _) = TearsApp::new(flags);
+        app
+    }
+
+    #[test]
+    fn test_timeline_select_clears_status_message() {
+        let mut app = create_test_app();
+
+        // Set a status message
+        app.state.system.status_message = Some("Test message".to_string());
+
+        // Select a note (index 0)
+        app.handle_timeline_msg(TimelineMsg::Select(0));
+
+        // Status message should be cleared
+        assert_eq!(app.state.system.status_message, None);
+    }
+
+    #[test]
+    fn test_timeline_select_invalid_index_clears_status_message() {
+        let mut app = create_test_app();
+
+        // Set a status message
+        app.state.system.status_message = Some("Test message".to_string());
+
+        // Select with invalid index (timeline is empty)
+        app.handle_timeline_msg(TimelineMsg::Select(999));
+
+        // Status message should be cleared
+        assert_eq!(app.state.system.status_message, None);
+        // Selection should be None
+        assert_eq!(app.state.timeline.selected_index, None);
+    }
+
+    #[test]
+    fn test_scroll_up_does_not_clear_status_message() {
+        let mut app = create_test_app();
+
+        // Set a status message
+        app.state.system.status_message = Some("Test message".to_string());
+
+        // Scroll up
+        app.handle_timeline_msg(TimelineMsg::ScrollUp);
+
+        // Status message should remain
+        assert_eq!(
+            app.state.system.status_message,
+            Some("Test message".to_string())
+        );
+    }
+
+    #[test]
+    fn test_scroll_down_does_not_clear_status_message() {
+        let mut app = create_test_app();
+
+        // Set a status message
+        app.state.system.status_message = Some("Test message".to_string());
+
+        // Scroll down
+        app.handle_timeline_msg(TimelineMsg::ScrollDown);
+
+        // Status message should remain
+        assert_eq!(
+            app.state.system.status_message,
+            Some("Test message".to_string())
+        );
+    }
+
+    #[test]
+    fn test_unselect_action_clears_status_message() {
+        let mut app = create_test_app();
+
+        // Set selection and status message
+        app.state.timeline.selected_index = Some(0);
+        app.state.system.status_message = Some("Test message".to_string());
+
+        // Handle Unselect action
+        app.handle_action(KeyAction::Unselect);
+
+        // Both selection and status message should be cleared
+        assert_eq!(app.state.timeline.selected_index, None);
+        assert_eq!(app.state.system.status_message, None);
+    }
+
+    #[test]
+    fn test_escape_key_clears_status_message() {
+        let mut app = create_test_app();
+
+        // Set selection and status message
+        app.state.timeline.selected_index = Some(5);
+        app.state.system.status_message = Some("Test message".to_string());
+
+        // Simulate Escape key press
+        let key = KeyEvent {
+            code: KeyCode::Esc,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: KeyEventState::empty(),
+        };
+        app.handle_normal_mode_key(key);
+
+        // Both selection and status message should be cleared
+        assert_eq!(app.state.timeline.selected_index, None);
+        assert_eq!(app.state.system.status_message, None);
     }
 }
