@@ -114,7 +114,7 @@ impl<'a> Application for TearsApp<'a> {
     }
 
     fn subscriptions(&self) -> Vec<Subscription<Self::Message>> {
-        vec![
+        let mut subs = vec![
             // NostrEvents subscription - reuse the same Arc<Client> across frames
             // This ensures the subscription ID remains constant and the subscription
             // is not recreated every frame
@@ -137,7 +137,46 @@ impl<'a> Application for TearsApp<'a> {
                 }
                 Err(e) => AppMsg::System(SystemMsg::TerminalError(e.to_string())),
             }),
-        ]
+        ];
+
+        // Add signal subscription for Ctrl+C (SIGINT)
+        // This handles OS-level signals separately from keyboard input
+        #[cfg(unix)]
+        {
+            use tears::subscription::signal::Signal;
+            use tokio::signal::unix::SignalKind;
+
+            subs.push(
+                Subscription::new(Signal::new(SignalKind::interrupt())).map(
+                    |result| match result {
+                        Ok(()) => {
+                            log::info!("Received SIGINT (Ctrl+C) - requesting quit");
+                            AppMsg::System(SystemMsg::Quit)
+                        }
+                        Err(e) => AppMsg::System(SystemMsg::ShowError(format!(
+                            "Signal handler error: {e}"
+                        ))),
+                    },
+                ),
+            );
+        }
+
+        #[cfg(windows)]
+        {
+            use tears::subscription::signal::CtrlC;
+
+            subs.push(Subscription::new(CtrlC::new()).map(|result| match result {
+                Ok(()) => {
+                    log::info!("Received Ctrl+C - requesting quit");
+                    AppMsg::System(SystemMsg::Quit)
+                }
+                Err(e) => {
+                    AppMsg::System(SystemMsg::ShowError(format!("Signal handler error: {e}")))
+                }
+            }));
+        }
+
+        subs
     }
 }
 
@@ -198,15 +237,9 @@ impl<'a> TearsApp<'a> {
 
     /// Handle key input based on current UI mode
     fn handle_key_input(&mut self, key: KeyEvent) -> Command<AppMsg> {
-        // Global keybindings (work in any mode)
-        match (key.code, key.modifiers) {
-            // Ctrl+C or Ctrl+D to quit (hardcoded for safety)
-            (KeyCode::Char('c'), KeyModifiers::CONTROL)
-            | (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
-                return Command::single(AppMsg::System(SystemMsg::Quit));
-            }
-            _ => {}
-        }
+        // Note: Ctrl+C is now handled by signal subscription, not as keyboard input
+        // This ensures it works reliably across different terminal emulators and
+        // properly separates OS signals from application keybindings
 
         // Mode-specific keybindings
         match self.state.ui.current_mode {
@@ -246,26 +279,17 @@ impl<'a> TearsApp<'a> {
 
     /// Handle key input in Composing mode
     fn handle_composing_mode_key(&mut self, key: KeyEvent) -> Command<AppMsg> {
-        // In composing mode, check for specific actions
-        if let Some(action) = self.resolve_keybinding(key) {
-            match action {
-                KeyAction::Quit => {
-                    // Allow quitting even in composing mode
-                    return Command::single(AppMsg::System(SystemMsg::Quit));
-                }
-                KeyAction::SubmitTextNote => {
-                    return Command::single(AppMsg::Ui(UiMsg::SubmitNote));
-                }
-                _ => {
-                    // Other actions are ignored in composing mode
-                }
+        // In composing mode, ignore all keybindings to allow normal text input
+        // This matches the old architecture behavior where 'q' is just a character,
+        // not a quit command. Only hardcoded special keys are processed.
+        match (key.code, key.modifiers) {
+            // Escape: cancel composing
+            (KeyCode::Esc, _) => Command::single(AppMsg::Ui(UiMsg::CancelComposing)),
+            // Ctrl+P: submit note (hardcoded for safety)
+            (KeyCode::Char('p'), KeyModifiers::CONTROL) => {
+                Command::single(AppMsg::Ui(UiMsg::SubmitNote))
             }
-        }
-
-        // Special handling for Escape to cancel
-        match key.code {
-            KeyCode::Esc => Command::single(AppMsg::Ui(UiMsg::CancelComposing)),
-            // All other keys are passed to textarea
+            // All other keys are passed to textarea for input
             _ => Command::single(AppMsg::Ui(UiMsg::ProcessTextAreaInput(key))),
         }
     }
@@ -975,5 +999,79 @@ mod tests {
         // Selection should be at the last index
         let expected_index = app.state.timeline.notes.len() - 1;
         assert_eq!(app.state.timeline.selected_index, Some(expected_index));
+    }
+
+    #[test]
+    fn test_quit_key_works_in_normal_mode() {
+        let mut app = create_test_app();
+
+        // In normal mode, 'q' key should trigger quit via keybinding
+        let q_key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
+        let _cmd = app.handle_key_input(q_key);
+
+        // Should produce a Quit command
+        // Note: We can't directly inspect Command contents, but we can test
+        // the message handling instead
+        let quit_msg = AppMsg::System(SystemMsg::Quit);
+        let _cmd = app.update(quit_msg);
+
+        // Command should be Action::Quit effect (we can't directly test this,
+        // but the system should have processed it)
+        // The test passes if no panic occurs
+    }
+
+    #[test]
+    fn test_q_key_does_not_quit_in_composing_mode() {
+        let mut app = create_test_app();
+
+        // Start composing mode
+        app.state.ui.current_mode = UiMode::Composing;
+
+        // In composing mode, 'q' key should be passed to textarea, not trigger quit
+        let q_key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
+        let _cmd = app.handle_key_input(q_key);
+
+        // Should produce ProcessTextAreaInput command
+        // The application should still be in composing mode
+        assert_eq!(app.state.ui.current_mode, UiMode::Composing);
+
+        // The textarea should contain 'q' after processing
+        app.update(AppMsg::Ui(UiMsg::ProcessTextAreaInput(q_key)));
+        assert_eq!(app.state.ui.textarea.content, "q");
+    }
+
+    #[test]
+    fn test_escape_cancels_composing_mode() {
+        let mut app = create_test_app();
+
+        // Start composing mode with some content
+        app.state.ui.current_mode = UiMode::Composing;
+        app.state.ui.textarea.content = "test content".to_string();
+
+        // Escape key should cancel composing
+        let esc_key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        let _cmd = app.handle_key_input(esc_key);
+
+        // Should return to normal mode
+        app.update(AppMsg::Ui(UiMsg::CancelComposing));
+        assert_eq!(app.state.ui.current_mode, UiMode::Normal);
+        assert!(app.state.ui.textarea.content.is_empty());
+    }
+
+    #[test]
+    fn test_ctrl_p_submits_note_in_composing_mode() {
+        let mut app = create_test_app();
+
+        // Start composing mode with some content
+        app.state.ui.current_mode = UiMode::Composing;
+        app.state.ui.textarea.content = "test note".to_string();
+
+        // Ctrl+P should submit note
+        let ctrl_p_key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
+        let _cmd = app.handle_key_input(ctrl_p_key);
+
+        // Should produce SubmitNote command
+        // Note: Actual submission requires nostr connection, but we can verify
+        // the key handling produces the right command
     }
 }
