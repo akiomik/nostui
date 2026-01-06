@@ -17,10 +17,10 @@ use crate::domain::nostr::{Profile, SortableEvent};
 use crate::domain::ui::{CursorPosition, TextSelection};
 use crate::infrastructure::config::Config;
 use crate::presentation::config::keybindings::Action as KeyAction;
+use crate::tears::message::NostrMsg;
 use crate::tears::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrCommand, NostrEvents,
 };
-use crate::tears_app::message::NostrMsg;
 
 use super::{
     components::Components,

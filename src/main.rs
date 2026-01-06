@@ -7,7 +7,7 @@ use tears::Runtime;
 
 use nostui::{
     infrastructure::{cli::Cli, config::Config},
-    tears_app::{app::InitFlags, TearsApp},
+    tears::{app::InitFlags, TearsApp},
     utils::{initialize_logging, initialize_panic_handler},
 };
 
