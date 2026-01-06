@@ -272,7 +272,7 @@ impl<'a> TearsApp<'a> {
         // Fallback: handle special keys not in config
         match key.code {
             // Escape key - unselect/cancel (delegates to TimelineMsg::Deselect)
-            KeyCode::Esc => Command::single(AppMsg::Timeline(TimelineMsg::Deselect)),
+            KeyCode::Esc => Command::message(AppMsg::Timeline(TimelineMsg::Deselect)),
             _ => Command::none(),
         }
     }
@@ -284,13 +284,13 @@ impl<'a> TearsApp<'a> {
         // not a quit command. Only hardcoded special keys are processed.
         match (key.code, key.modifiers) {
             // Escape: cancel composing
-            (KeyCode::Esc, _) => Command::single(AppMsg::Ui(UiMsg::CancelComposing)),
+            (KeyCode::Esc, _) => Command::message(AppMsg::Ui(UiMsg::CancelComposing)),
             // Ctrl+P: submit note (hardcoded for safety)
             (KeyCode::Char('p'), KeyModifiers::CONTROL) => {
-                Command::single(AppMsg::Ui(UiMsg::SubmitNote))
+                Command::message(AppMsg::Ui(UiMsg::SubmitNote))
             }
             // All other keys are passed to textarea for input
-            _ => Command::single(AppMsg::Ui(UiMsg::ProcessTextAreaInput(key))),
+            _ => Command::message(AppMsg::Ui(UiMsg::ProcessTextAreaInput(key))),
         }
     }
 
@@ -298,30 +298,30 @@ impl<'a> TearsApp<'a> {
     fn handle_action(&mut self, action: KeyAction) -> Command<AppMsg> {
         match action {
             // Navigation
-            KeyAction::ScrollUp => Command::single(AppMsg::Timeline(TimelineMsg::ScrollUp)),
-            KeyAction::ScrollDown => Command::single(AppMsg::Timeline(TimelineMsg::ScrollDown)),
+            KeyAction::ScrollUp => Command::message(AppMsg::Timeline(TimelineMsg::ScrollUp)),
+            KeyAction::ScrollDown => Command::message(AppMsg::Timeline(TimelineMsg::ScrollDown)),
             KeyAction::ScrollToTop => {
                 // Delegate to TimelineMsg::SelectFirst
-                Command::single(AppMsg::Timeline(TimelineMsg::SelectFirst))
+                Command::message(AppMsg::Timeline(TimelineMsg::SelectFirst))
             }
             KeyAction::ScrollToBottom => {
                 // Delegate to TimelineMsg::SelectLast
-                Command::single(AppMsg::Timeline(TimelineMsg::SelectLast))
+                Command::message(AppMsg::Timeline(TimelineMsg::SelectLast))
             }
             KeyAction::Unselect => {
                 // Delegate to TimelineMsg::Deselect to keep logic centralized
-                Command::single(AppMsg::Timeline(TimelineMsg::Deselect))
+                Command::message(AppMsg::Timeline(TimelineMsg::Deselect))
             }
 
             // Compose/interactions
-            KeyAction::NewTextNote => Command::single(AppMsg::Ui(UiMsg::StartComposing)),
-            KeyAction::ReplyTextNote => Command::single(AppMsg::Ui(UiMsg::StartReply)),
-            KeyAction::React => Command::single(AppMsg::Ui(UiMsg::ReactToSelected)),
-            KeyAction::Repost => Command::single(AppMsg::Ui(UiMsg::RepostSelected)),
+            KeyAction::NewTextNote => Command::message(AppMsg::Ui(UiMsg::StartComposing)),
+            KeyAction::ReplyTextNote => Command::message(AppMsg::Ui(UiMsg::StartReply)),
+            KeyAction::React => Command::message(AppMsg::Ui(UiMsg::ReactToSelected)),
+            KeyAction::Repost => Command::message(AppMsg::Ui(UiMsg::RepostSelected)),
 
             // System
-            KeyAction::Quit => Command::single(AppMsg::System(SystemMsg::Quit)),
-            KeyAction::Suspend => Command::single(AppMsg::System(SystemMsg::Suspend)),
+            KeyAction::Quit => Command::message(AppMsg::System(SystemMsg::Quit)),
+            KeyAction::Suspend => Command::message(AppMsg::System(SystemMsg::Suspend)),
             KeyAction::SubmitTextNote => {
                 // Only valid in composing mode, handled separately
                 Command::none()
@@ -418,12 +418,12 @@ impl<'a> TearsApp<'a> {
             }
             UiMsg::CancelComposing => {
                 self.state.ui.current_mode = UiMode::Normal;
-                self.state.ui.textarea.content.clear();
+                self.components.borrow_mut().home.input.clear();
                 self.state.ui.reply_to = None;
             }
             UiMsg::SubmitNote => {
-                // Create and publish note
-                let content = self.state.ui.textarea.content.clone();
+                // Get content from Component's TextArea
+                let content = self.components.borrow().home.input.get_content();
 
                 // Create event and send through NostrEvents subscription
                 if let Some(sender) = &self.state.nostr.command_sender {
@@ -455,9 +455,7 @@ impl<'a> TearsApp<'a> {
 
                 // Clear UI state
                 self.state.ui.current_mode = UiMode::Normal;
-                self.state.ui.textarea.content.clear();
-                self.state.ui.textarea.cursor_position.column = 0;
-                self.state.ui.textarea.cursor_position.line = 0;
+                self.components.borrow_mut().home.input.clear();
                 self.state.ui.reply_to = None;
             }
             UiMsg::ReactToSelected => {
@@ -527,62 +525,13 @@ impl<'a> TearsApp<'a> {
                 }
             }
             UiMsg::ProcessTextAreaInput(key_event) => {
-                // Process key event using tui-textarea
-                // This delegates all key handling to tui-textarea's built-in logic
-                use crossterm::event::Event;
-                use tui_textarea::TextArea;
-
-                // Create temporary TextArea with current state
-                let mut textarea = TextArea::default();
-
-                // Restore content
-                if !self.state.ui.textarea.content.is_empty() {
-                    textarea.insert_str(&self.state.ui.textarea.content);
-                }
-
-                // Restore cursor position
-                textarea.move_cursor(CursorMove::Jump(
-                    self.state.ui.textarea.cursor_position.line as u16,
-                    self.state.ui.textarea.cursor_position.column as u16,
-                ));
-
-                // Restore selection if any
-                if let Some(selection) = &self.state.ui.textarea.selection {
-                    textarea.move_cursor(CursorMove::Jump(
-                        selection.start.line as u16,
-                        selection.start.column as u16,
-                    ));
-                    textarea.start_selection();
-                    textarea.move_cursor(CursorMove::Jump(
-                        selection.end.line as u16,
-                        selection.end.column as u16,
-                    ));
-                }
-
-                // Apply the key input to textarea
-                textarea.input(Event::Key(key_event));
-
-                // Extract updated state
-                let content = textarea.lines().join("\n");
-                let (line, column) = textarea.cursor();
-                let selection = textarea.selection_range().map(
-                    |((start_row, start_col), (end_row, end_col))| TextSelection {
-                        start: CursorPosition {
-                            line: start_row,
-                            column: start_col,
-                        },
-                        end: CursorPosition {
-                            line: end_row,
-                            column: end_col,
-                        },
-                    },
-                );
-
-                // Update state
-                self.state.ui.textarea.content = content;
-                self.state.ui.textarea.cursor_position.line = line;
-                self.state.ui.textarea.cursor_position.column = column;
-                self.state.ui.textarea.selection = selection;
+                // Process key input directly on the Component's TextArea
+                // This avoids the expensive State → TextArea → State round-trip
+                self.components
+                    .borrow_mut()
+                    .home
+                    .input
+                    .process_input(key_event);
             }
         }
         Command::none()
@@ -1037,7 +986,7 @@ mod tests {
 
         // The textarea should contain 'q' after processing
         app.update(AppMsg::Ui(UiMsg::ProcessTextAreaInput(q_key)));
-        assert_eq!(app.state.ui.textarea.content, "q");
+        assert_eq!(app.components.borrow().home.input.get_content(), "q");
     }
 
     #[test]
@@ -1046,7 +995,12 @@ mod tests {
 
         // Start composing mode with some content
         app.state.ui.current_mode = UiMode::Composing;
-        app.state.ui.textarea.content = "test content".to_string();
+        // Set content directly on the component (simulating user input)
+        app.components
+            .borrow_mut()
+            .home
+            .input
+            .process_input(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE));
 
         // Escape key should cancel composing
         let esc_key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
@@ -1055,7 +1009,7 @@ mod tests {
         // Should return to normal mode
         app.update(AppMsg::Ui(UiMsg::CancelComposing));
         assert_eq!(app.state.ui.current_mode, UiMode::Normal);
-        assert!(app.state.ui.textarea.content.is_empty());
+        assert!(app.components.borrow().home.input.get_content().is_empty());
     }
 
     #[test]
@@ -1064,7 +1018,8 @@ mod tests {
 
         // Start composing mode with some content
         app.state.ui.current_mode = UiMode::Composing;
-        app.state.ui.textarea.content = "test note".to_string();
+        // Note: In real usage, content would be set via ProcessTextAreaInput messages
+        // For this test, we're just verifying the key handling produces the right command
 
         // Ctrl+P should submit note
         let ctrl_p_key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);

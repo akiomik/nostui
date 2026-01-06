@@ -106,6 +106,40 @@ impl<'a> HomeInputComponent<'a> {
     pub fn is_replying(state: &AppState) -> bool {
         state.ui.reply_to.is_some()
     }
+
+    /// Process key input directly on the internal TextArea
+    ///
+    /// This method updates the TextArea state immediately without going through
+    /// the State → TextArea → State round-trip, improving input responsiveness.
+    pub fn process_input(&mut self, key: crossterm::event::KeyEvent) {
+        use crossterm::event::Event;
+        self.textarea.input(Event::Key(key));
+
+        // Update cached state to keep sync logic working
+        self.last_synced_content = self.textarea.lines().join("\n");
+        let (line, col) = self.textarea.cursor();
+        self.last_synced_cursor = (line, col);
+    }
+
+    /// Get the current content from the TextArea
+    ///
+    /// This should be called when you need to submit or save the content.
+    pub fn get_content(&self) -> String {
+        self.textarea.lines().join("\n")
+    }
+
+    /// Get the current cursor position
+    pub fn get_cursor(&self) -> (usize, usize) {
+        self.textarea.cursor()
+    }
+
+    /// Clear the TextArea content
+    pub fn clear(&mut self) {
+        self.textarea.select_all();
+        self.textarea.delete_str(usize::MAX);
+        self.last_synced_content.clear();
+        self.last_synced_cursor = (0, 0);
+    }
 }
 
 impl<'a> Default for HomeInputComponent<'a> {

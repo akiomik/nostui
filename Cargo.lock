@@ -2587,15 +2587,15 @@ dependencies = [
 
 [[package]]
 name = "tears"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fdde4a22a57abf63d6e0cf6a32f7c778a0f5c032c3a6cf40607b48a6dc949a1"
+version = "0.6.1"
+source = "git+https://github.com/akiomik/tears?branch=ratatui-0.29#1dec9ba3fa2c4af571e3999505811bdb2e1a5b78"
 dependencies = [
  "color-eyre",
  "crossterm",
  "futures",
  "ratatui",
  "tokio",
+ "tokio-stream",
  "tokio-util",
 ]
 
@@ -2746,6 +2746,18 @@ dependencies = [
  "futures-util",
  "thiserror 1.0.69",
  "tokio",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
