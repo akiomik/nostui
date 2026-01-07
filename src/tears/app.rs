@@ -605,7 +605,24 @@ impl<'a> TearsApp<'a> {
             Kind::TextNote => {
                 // Add text note to timeline
                 let sortable = SortableEvent::new(event);
-                self.state.timeline.notes.find_or_insert(Reverse(sortable));
+                let insert_result = self.state.timeline.notes.find_or_insert(Reverse(sortable));
+
+                // Adjust selected index if a new item was inserted before it
+                // This prevents the selection from shifting when new events arrive
+                if let sorted_vec::FindOrInsert::Inserted(inserted_at) = insert_result {
+                    if let Some(selected) = self.state.timeline.selected_index {
+                        if inserted_at <= selected {
+                            self.state.timeline.selected_index = Some(selected + 1);
+                            log::debug!(
+                                "Adjusted selected index from {} to {} due to insertion at {}",
+                                selected,
+                                selected + 1,
+                                inserted_at
+                            );
+                        }
+                    }
+                }
+
                 log::debug!("Added text note to timeline");
             }
             Kind::Metadata => {
@@ -1031,5 +1048,147 @@ mod tests {
         // Should produce SubmitNote command
         // Note: Actual submission requires nostr connection, but we can verify
         // the key handling produces the right command
+    }
+
+    #[test]
+    fn test_selection_preserved_when_newer_event_arrives() {
+        let mut app = create_test_app();
+
+        // Add initial events with controlled timestamps
+        let keys = Keys::generate();
+
+        // Create events with custom timestamps to ensure ordering
+        // We need to use custom_created_at to guarantee different timestamps
+        let now = Timestamp::now();
+
+        let event1 = EventBuilder::text_note("oldest note")
+            .custom_created_at(now - 20) // 20 seconds ago
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+
+        let event2 = EventBuilder::text_note("middle note")
+            .custom_created_at(now - 10) // 10 seconds ago
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+
+        let event3 = EventBuilder::text_note("newest note")
+            .custom_created_at(now) // now
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+
+        app.process_nostr_event(event1);
+        app.process_nostr_event(event2.clone());
+        app.process_nostr_event(event3);
+
+        // Timeline should be: [event3 (newest), event2 (middle), event1 (oldest)]
+        // User selects index 1 (middle note - event2)
+        app.state.timeline.selected_index = Some(1);
+        let selected_event_id = app
+            .state
+            .timeline
+            .notes
+            .get(1)
+            .expect("Timeline should have event at index 1")
+            .0
+            .event
+            .id;
+        assert_eq!(selected_event_id, event2.id);
+
+        // New event arrives with timestamp between now and middle (5 seconds ago)
+        let new_event = EventBuilder::text_note("very newest note")
+            .custom_created_at(now - 5)
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+
+        app.process_nostr_event(new_event);
+
+        // Timeline should now be: [event3, new_event, event2, event1]
+        // Selection index should be adjusted from 1 to 2 to still point to event2
+        assert_eq!(app.state.timeline.selected_index, Some(2));
+        let still_selected_event_id = app
+            .state
+            .timeline
+            .notes
+            .get(2)
+            .expect("Timeline should have event at index 2")
+            .0
+            .event
+            .id;
+        assert_eq!(still_selected_event_id, event2.id);
+    }
+
+    #[test]
+    fn test_selection_not_adjusted_when_older_event_arrives() {
+        let mut app = create_test_app();
+
+        let keys = Keys::generate();
+        let now = Timestamp::now();
+
+        let event1 = EventBuilder::text_note("oldest note")
+            .custom_created_at(now - 20)
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+
+        let event2 = EventBuilder::text_note("newest note")
+            .custom_created_at(now)
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+
+        app.process_nostr_event(event1);
+        app.process_nostr_event(event2.clone());
+
+        // Timeline should be: [event2 (newest), event1 (oldest)]
+        // User selects index 0 (newest note - event2)
+        app.state.timeline.selected_index = Some(0);
+        let selected_event_id = app
+            .state
+            .timeline
+            .notes
+            .first()
+            .expect("Timeline should have first event")
+            .0
+            .event
+            .id;
+        assert_eq!(selected_event_id, event2.id);
+
+        // Even older event arrives (will be inserted after the selection)
+        let old_event = EventBuilder::text_note("very old note")
+            .custom_created_at(now - 30)
+            .sign_with_keys(&Keys::generate())
+            .expect("Failed to sign test event");
+
+        app.process_nostr_event(old_event);
+
+        // Timeline should now be: [event2, event1, old_event]
+        // Selection should remain at index 0, still pointing to the newest note
+        assert_eq!(app.state.timeline.selected_index, Some(0));
+        let still_selected_event_id = app
+            .state
+            .timeline
+            .notes
+            .first()
+            .expect("Timeline should have first event")
+            .0
+            .event
+            .id;
+        assert_eq!(still_selected_event_id, event2.id);
+    }
+
+    #[test]
+    fn test_no_selection_when_event_arrives() {
+        let mut app = create_test_app();
+
+        // No selection
+        app.state.timeline.selected_index = None;
+
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("test note")
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+
+        app.process_nostr_event(event);
+
+        // Selection should remain None
+        assert_eq!(app.state.timeline.selected_index, None);
     }
 }
