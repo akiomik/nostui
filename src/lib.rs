@@ -1,5 +1,7 @@
 #![deny(warnings)]
 
+pub mod app;
+
 // Core Elm architecture modules
 pub mod core;
 
@@ -14,9 +16,6 @@ pub mod domain;
 
 // Utilities
 pub mod utils;
-
-// Tears framework application
-pub mod tears;
 
 // Re-exports for convenience
 pub use color_eyre::eyre::Result;

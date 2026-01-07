@@ -6,8 +6,8 @@ use nostr_sdk::prelude::*;
 use tears::Runtime;
 
 use nostui::{
+    app::{InitFlags, TearsApp},
     infrastructure::{cli::Cli, config::Config},
-    tears::{app::InitFlags, TearsApp},
     utils::{initialize_logging, initialize_panic_handler},
 };
 

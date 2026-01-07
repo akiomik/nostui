@@ -67,7 +67,7 @@ impl NostrEvents {
     /// ```
     /// use std::sync::Arc;
     /// use nostr_sdk::Client;
-    /// use nostui::tears::subscription::nostr::NostrEvents;
+    /// use nostui::infrastructure::subscription::nostr::NostrEvents;
     ///
     /// let client = Arc::new(Client::default());
     /// let nostr_events = NostrEvents::new(Arc::clone(&client));

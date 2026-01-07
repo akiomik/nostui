@@ -1,6 +1,6 @@
 use tokio::sync::mpsc;
 
-use crate::tears::subscription::nostr::NostrCommand;
+use crate::infrastructure::subscription::nostr::NostrCommand;
 
 #[derive(Debug, Clone, Default)]
 pub struct NostrState {
