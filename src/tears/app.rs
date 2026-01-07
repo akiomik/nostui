@@ -33,6 +33,7 @@ pub struct InitFlags {
     pub config: Config,
     pub nostr_client: Client,
     pub keys: Keys,
+    pub tick_rate: f64,
 }
 
 /// Main Tears application structure
@@ -53,6 +54,8 @@ pub struct TearsApp<'a> {
     app_fps_tracker: FpsTracker,
     /// Configuration (including keybindings)
     config: Config,
+    /// Tick rate (Hz) for timer subscription
+    tick_rate: f64,
 }
 
 impl<'a> Application for TearsApp<'a> {
@@ -87,6 +90,7 @@ impl<'a> Application for TearsApp<'a> {
             nostr_client,
             app_fps_tracker: FpsTracker::new(),
             config,
+            tick_rate: flags.tick_rate,
         };
 
         // Return initial commands if needed
@@ -118,8 +122,8 @@ impl<'a> Application for TearsApp<'a> {
             // is not recreated every frame
             Subscription::new(NostrEvents::new(Arc::clone(&self.nostr_client)))
                 .map(|msg| AppMsg::Nostr(NostrMsg::SubscriptionMessage(msg))),
-            // Timer subscription - matches runtime FPS (60 Hz = ~16.67ms)
-            Subscription::new(Timer::new(16)).map(|msg| match msg {
+            // Timer subscription - tick interval calculated from tick_rate
+            Subscription::new(Timer::new((1000.0 / self.tick_rate) as u64)).map(|msg| match msg {
                 TimerMessage::Tick => AppMsg::System(SystemMsg::Tick),
             }),
             Subscription::new(TerminalEvents::new()).map(|result| match result {
@@ -709,6 +713,7 @@ mod tests {
             config,
             nostr_client: client,
             keys,
+            tick_rate: 16.0,
         };
 
         let (app, _) = TearsApp::new(flags);

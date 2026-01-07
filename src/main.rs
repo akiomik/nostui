@@ -15,7 +15,7 @@ async fn tokio_main() -> Result<()> {
     initialize_logging()?;
     initialize_panic_handler()?;
 
-    let _args = <Cli as Parser>::parse();
+    let args = <Cli as Parser>::parse();
 
     // Load configuration
     let config = Config::new()?;
@@ -49,6 +49,7 @@ async fn tokio_main() -> Result<()> {
         config,
         nostr_client: client,
         keys,
+        tick_rate: args.tick_rate,
     };
 
     // Create Tears runtime
@@ -59,8 +60,8 @@ async fn tokio_main() -> Result<()> {
     terminal.clear()?;
 
     // Run the Tears application
-    log::info!("Starting Tears application...");
-    let result = runtime.run(&mut terminal, 60).await;
+    log::info!("Starting Tears application with frame_rate: {}", args.frame_rate);
+    let result = runtime.run(&mut terminal, args.frame_rate as u32).await;
 
     // Restore terminal
     ratatui::restore();
