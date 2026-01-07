@@ -5,10 +5,7 @@
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::{ListBuilder, ListView};
 
-use crate::{
-    core::state::AppState, domain::collections::EventSet,
-    presentation::widgets::text_note::TextNote,
-};
+use crate::{core::state::AppState, presentation::widgets::text_note::TextNote};
 
 /// Home list component
 ///
@@ -27,12 +24,8 @@ impl HomeListComponent {
     ///
     /// This renders a scrollable list of text notes from the timeline state.
     pub fn view(&self, state: &AppState, frame: &mut Frame, area: Rect) {
-        // Get notes from timeline state
-        let notes = &state.timeline.notes;
-        let selected_index = state.timeline.selected_index;
-
         let padding = Padding::new(1, 1, 1, 1);
-        let item_count = notes.len();
+        let item_count = state.timeline.len();
 
         if item_count == 0 {
             // Render empty state
@@ -52,7 +45,8 @@ impl HomeListComponent {
         }
 
         // Prepare note data for the list builder
-        let notes_data: Vec<_> = notes
+        let notes_data: Vec<_> = state
+            .timeline
             .iter()
             .map(|sortable_event| {
                 let event = &sortable_event.0.event;
@@ -62,24 +56,9 @@ impl HomeListComponent {
                 let profile = state.user.profiles.get(&event.pubkey).cloned();
 
                 // Get reactions, reposts, and zap receipts for this event
-                let reactions = state
-                    .timeline
-                    .reactions
-                    .get(&event_id)
-                    .cloned()
-                    .unwrap_or_else(EventSet::new);
-                let reposts = state
-                    .timeline
-                    .reposts
-                    .get(&event_id)
-                    .cloned()
-                    .unwrap_or_else(EventSet::new);
-                let zap_receipts = state
-                    .timeline
-                    .zap_receipts
-                    .get(&event_id)
-                    .cloned()
-                    .unwrap_or_else(EventSet::new);
+                let reactions = state.timeline.reactions_for(&event_id);
+                let reposts = state.timeline.reposts_for(&event_id);
+                let zap_receipts = state.timeline.zap_receipts_for(&event_id);
 
                 // Create TextNote widget
                 let text_note = TextNote::new(
@@ -106,6 +85,7 @@ impl HomeListComponent {
 
         // Create list state from AppState
         let mut list_state = tui_widget_list::ListState::default();
+        let selected_index = state.timeline.selected_index();
         list_state.select(selected_index);
 
         let list = ListView::new(builder, item_count)
@@ -123,17 +103,17 @@ impl HomeListComponent {
 
     /// Get the number of notes in the timeline
     pub fn note_count(state: &AppState) -> usize {
-        state.timeline.notes.len()
+        state.timeline.len()
     }
 
     /// Check if a note is selected
     pub fn has_selection(state: &AppState) -> bool {
-        state.timeline.selected_index.is_some()
+        state.timeline.selected_index().is_some()
     }
 
     /// Get the selected note index
     pub fn selected_index(state: &AppState) -> Option<usize> {
-        state.timeline.selected_index
+        state.timeline.selected_index()
     }
 
     /// Get the selected event if any
@@ -151,9 +131,7 @@ impl Default for HomeListComponent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::nostr::EventWrapper;
     use nostr_sdk::prelude::*;
-    use std::cmp::Reverse;
 
     fn create_test_state_with_notes(note_count: usize) -> Result<AppState> {
         let keys = Keys::generate();
@@ -163,8 +141,7 @@ mod tests {
             let note_keys = Keys::generate();
             let content = format!("Test note {i}");
             let event = EventBuilder::text_note(&content).sign_with_keys(&note_keys)?;
-            let wrapper = EventWrapper::new(event);
-            state.timeline.notes.find_or_insert(Reverse(wrapper));
+            state.timeline.add_note(event);
         }
 
         Ok(state)
@@ -203,7 +180,7 @@ mod tests {
 
         assert!(!HomeListComponent::has_selection(&state));
 
-        state.timeline.selected_index = Some(2);
+        state.timeline.select(2);
         assert!(HomeListComponent::has_selection(&state));
 
         Ok(())
@@ -215,7 +192,7 @@ mod tests {
 
         assert_eq!(HomeListComponent::selected_index(&state), None);
 
-        state.timeline.selected_index = Some(2);
+        state.timeline.select(2);
         assert_eq!(HomeListComponent::selected_index(&state), Some(2));
 
         Ok(())
@@ -227,7 +204,7 @@ mod tests {
 
         assert!(HomeListComponent::selected_event(&state).is_none());
 
-        state.timeline.selected_index = Some(2);
+        state.timeline.select(2);
         let selected = HomeListComponent::selected_event(&state);
         assert!(selected.is_some());
         if let Some(event) = selected {
@@ -242,7 +219,7 @@ mod tests {
     fn test_selected_event_out_of_bounds() -> Result<()> {
         let mut state = create_test_state_with_notes(3)?;
 
-        state.timeline.selected_index = Some(10); // Out of bounds
+        state.timeline.select(10); // Out of bounds
         let selected = HomeListComponent::selected_event(&state);
         assert!(selected.is_none());
 
@@ -263,8 +240,7 @@ mod tests {
         let note_keys = Keys::generate();
         let japanese_text = "初force pushめでたい";
         let event = EventBuilder::text_note(japanese_text).sign_with_keys(&note_keys)?;
-        let wrapper = EventWrapper::new(event);
-        state.timeline.notes.find_or_insert(Reverse(wrapper));
+        state.timeline.add_note(event);
 
         // Render the note
         let list = HomeListComponent::new();

@@ -65,7 +65,7 @@ mod tests {
     fn test_app_state_default() {
         let state = AppState::default();
 
-        assert_eq!(state.timeline.notes.len(), 0);
+        assert_eq!(state.timeline.len(), 0);
         assert!(!state.ui.is_composing());
         assert!(!state.system.should_quit);
         assert!(state.system.is_loading);
