@@ -1,7 +1,6 @@
 //! Main Tears Application implementation
 
 use std::cell::RefCell;
-use std::cmp::Reverse;
 use std::sync::Arc;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
@@ -14,7 +13,7 @@ use tears::subscription::time::{Message as TimerMessage, Timer};
 use crate::core::message::{AppMsg, NostrMsg, SystemMsg, TimelineMsg, UiMsg};
 use crate::core::state::{ui::UiMode, AppState};
 use crate::domain::fps_tracker::FpsTracker;
-use crate::domain::nostr::{EventWrapper, Profile};
+use crate::domain::nostr::Profile;
 use crate::infrastructure::config::Config;
 use crate::infrastructure::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrCommand, NostrEvents,
@@ -330,57 +329,22 @@ impl<'a> TearsApp<'a> {
     /// Handle timeline messages
     fn handle_timeline_msg(&mut self, msg: TimelineMsg) -> Command<AppMsg> {
         match msg {
-            TimelineMsg::ScrollUp => {
-                // Move selection up
-                if let Some(current) = self.state.timeline.selected_index {
-                    if current > 0 {
-                        self.state.timeline.selected_index = Some(current - 1);
-                    }
-                } else if !self.state.timeline.notes.is_empty() {
-                    self.state.timeline.selected_index = Some(0);
-                }
-            }
-            TimelineMsg::ScrollDown => {
-                // Move selection down
-                let max_index = self.state.timeline.notes.len().saturating_sub(1);
-                if let Some(current) = self.state.timeline.selected_index {
-                    if current < max_index {
-                        self.state.timeline.selected_index = Some(current + 1);
-                    }
-                } else if !self.state.timeline.notes.is_empty() {
-                    self.state.timeline.selected_index = Some(0);
-                }
-            }
+            TimelineMsg::ScrollUp => self.state.timeline.scroll_up(),
+            TimelineMsg::ScrollDown => self.state.timeline.scroll_down(),
             TimelineMsg::Select(index) => {
-                if index < self.state.timeline.notes.len() {
-                    self.state.timeline.selected_index = Some(index);
-                } else {
-                    // Deselecting (e.g., Select(0) when timeline is empty or invalid index)
-                    self.state.timeline.selected_index = None;
-                }
-                // Clear status message when explicitly selecting/deselecting
-                // This matches the old architecture behavior (TimelineMsg::DeselectNote)
+                // Select the note and clear status message
+                self.state.timeline.select(index);
                 self.state.system.status_message = None;
             }
             TimelineMsg::Deselect => {
                 // Deselect the current note and clear status message
-                // This matches the old architecture behavior (TimelineMsg::DeselectNote)
-                self.state.timeline.selected_index = None;
+                self.state.timeline.deselect();
                 self.state.system.status_message = None;
             }
-            TimelineMsg::SelectFirst => {
-                // Select the first note in the timeline
-                if !self.state.timeline.notes.is_empty() {
-                    self.state.timeline.selected_index = Some(0);
-                }
-            }
-            TimelineMsg::SelectLast => {
-                // Select the last note in the timeline
-                let max_index = self.state.timeline.notes.len().saturating_sub(1);
-                if !self.state.timeline.notes.is_empty() {
-                    self.state.timeline.selected_index = Some(max_index);
-                }
-            }
+            // Select the first note in the timeline
+            TimelineMsg::SelectFirst => self.state.timeline.select_first(),
+            // Select the last note in the timeline
+            TimelineMsg::SelectLast => self.state.timeline.select_last(),
         }
         Command::none()
     }
@@ -549,25 +513,7 @@ impl<'a> TearsApp<'a> {
         match event.kind {
             Kind::TextNote => {
                 // Add text note to timeline
-                let wrapper = EventWrapper::new(event);
-                let insert_result = self.state.timeline.notes.find_or_insert(Reverse(wrapper));
-
-                // Adjust selected index if a new item was inserted before it
-                // This prevents the selection from shifting when new events arrive
-                if let sorted_vec::FindOrInsert::Inserted(inserted_at) = insert_result {
-                    if let Some(selected) = self.state.timeline.selected_index {
-                        if inserted_at <= selected {
-                            self.state.timeline.selected_index = Some(selected + 1);
-                            log::debug!(
-                                "Adjusted selected index from {} to {} due to insertion at {}",
-                                selected,
-                                selected + 1,
-                                inserted_at
-                            );
-                        }
-                    }
-                }
-
+                self.state.timeline.add_note(event);
                 log::debug!("Added text note to timeline");
             }
             Kind::Metadata => {
@@ -595,40 +541,19 @@ impl<'a> TearsApp<'a> {
             }
             Kind::Reaction => {
                 // Add reaction to timeline engagement data
-                let wrapper = EventWrapper::new(event);
-                if let Some(event_id) = wrapper.last_event_id_from_tags() {
-                    self.state
-                        .timeline
-                        .reactions
-                        .entry(event_id)
-                        .or_default()
-                        .insert(wrapper.event);
+                if let Some(event_id) = self.state.timeline.add_reaction(event) {
                     log::debug!("Added reaction for event: {event_id}");
                 }
             }
             Kind::Repost => {
                 // Add repost to timeline engagement data
-                let wrapper = EventWrapper::new(event);
-                if let Some(event_id) = wrapper.last_event_id_from_tags() {
-                    self.state
-                        .timeline
-                        .reposts
-                        .entry(event_id)
-                        .or_default()
-                        .insert(wrapper.event);
+                if let Some(event_id) = self.state.timeline.add_repost(event) {
                     log::debug!("Added repost for event: {event_id}");
                 }
             }
             Kind::ZapReceipt => {
                 // Add zap receipt to timeline engagement data
-                let wrapper = EventWrapper::new(event);
-                if let Some(event_id) = wrapper.last_event_id_from_tags() {
-                    self.state
-                        .timeline
-                        .zap_receipts
-                        .entry(event_id)
-                        .or_default()
-                        .insert(wrapper.event);
+                if let Some(event_id) = self.state.timeline.add_zap_receipt(event) {
                     log::debug!("Added zap receipt for event: {event_id}");
                 }
             }
@@ -718,7 +643,7 @@ mod tests {
         // Status message should be cleared
         assert_eq!(app.state.system.status_message, None);
         // Selection should be None
-        assert_eq!(app.state.timeline.selected_index, None);
+        assert_eq!(app.state.timeline.selected_note(), None);
     }
 
     #[test]
@@ -760,7 +685,7 @@ mod tests {
         let mut app = create_test_app();
 
         // Set selection and status message
-        app.state.timeline.selected_index = Some(0);
+        app.state.timeline.select_first();
         app.state.system.status_message = Some("Test message".to_string());
 
         // KeyAction::Unselect should delegate to TimelineMsg::Deselect
@@ -768,7 +693,7 @@ mod tests {
         app.update(AppMsg::Timeline(TimelineMsg::Deselect));
 
         // Both selection and status message should be cleared
-        assert_eq!(app.state.timeline.selected_index, None);
+        assert_eq!(app.state.timeline.selected_note(), None);
         assert_eq!(app.state.system.status_message, None);
     }
 
@@ -777,14 +702,14 @@ mod tests {
         let mut app = create_test_app();
 
         // Set selection and status message
-        app.state.timeline.selected_index = Some(5);
+        app.state.timeline.select(5);
         app.state.system.status_message = Some("Test message".to_string());
 
         // Simulate Escape key press and execute the TimelineMsg::Deselect directly
         app.update(AppMsg::Timeline(TimelineMsg::Deselect));
 
         // Both selection and status message should be cleared
-        assert_eq!(app.state.timeline.selected_index, None);
+        assert_eq!(app.state.timeline.selected_note(), None);
         assert_eq!(app.state.system.status_message, None);
     }
 
@@ -793,14 +718,14 @@ mod tests {
         let mut app = create_test_app();
 
         // Set selection and status message
-        app.state.timeline.selected_index = Some(3);
+        app.state.timeline.select(3);
         app.state.system.status_message = Some("Test message".to_string());
 
         // Deselect
         app.handle_timeline_msg(TimelineMsg::Deselect);
 
         // Both selection and status message should be cleared
-        assert_eq!(app.state.timeline.selected_index, None);
+        assert_eq!(app.state.timeline.selected_note(), None);
         assert_eq!(app.state.system.status_message, None);
     }
 
@@ -809,13 +734,13 @@ mod tests {
         let mut app = create_test_app();
 
         // Timeline is empty
-        assert!(app.state.timeline.notes.is_empty());
+        assert!(app.state.timeline.is_empty());
 
         // Try to select first
         app.handle_timeline_msg(TimelineMsg::SelectFirst);
 
         // Selection should remain None
-        assert_eq!(app.state.timeline.selected_index, None);
+        assert_eq!(app.state.timeline.selected_note(), None);
     }
 
     #[test]
@@ -834,13 +759,13 @@ mod tests {
         app.process_nostr_event(event2);
 
         // Select somewhere in the middle
-        app.state.timeline.selected_index = Some(1);
+        app.state.timeline.select(1);
 
         // Select first
         app.handle_timeline_msg(TimelineMsg::SelectFirst);
 
         // Selection should be at index 0
-        assert_eq!(app.state.timeline.selected_index, Some(0));
+        assert_eq!(app.state.timeline.selected_index(), Some(0));
     }
 
     #[test]
@@ -848,13 +773,13 @@ mod tests {
         let mut app = create_test_app();
 
         // Timeline is empty
-        assert!(app.state.timeline.notes.is_empty());
+        assert!(app.state.timeline.is_empty());
 
         // Try to select last
         app.handle_timeline_msg(TimelineMsg::SelectLast);
 
         // Selection should remain None
-        assert_eq!(app.state.timeline.selected_index, None);
+        assert_eq!(app.state.timeline.selected_note(), None);
     }
 
     #[test]
@@ -873,14 +798,14 @@ mod tests {
         app.process_nostr_event(event2);
 
         // Start with no selection
-        app.state.timeline.selected_index = None;
+        app.state.timeline.deselect();
 
         // Select last
         app.handle_timeline_msg(TimelineMsg::SelectLast);
 
         // Selection should be at the last index
-        let expected_index = app.state.timeline.notes.len() - 1;
-        assert_eq!(app.state.timeline.selected_index, Some(expected_index));
+        let expected_index = app.state.timeline.len() - 1;
+        assert_eq!(app.state.timeline.selected_index(), Some(expected_index));
     }
 
     #[test]
@@ -898,7 +823,7 @@ mod tests {
         app.update(AppMsg::Timeline(TimelineMsg::SelectFirst));
 
         // Selection should be at index 0
-        assert_eq!(app.state.timeline.selected_index, Some(0));
+        assert_eq!(app.state.timeline.selected_index(), Some(0));
     }
 
     #[test]
@@ -920,8 +845,8 @@ mod tests {
         app.update(AppMsg::Timeline(TimelineMsg::SelectLast));
 
         // Selection should be at the last index
-        let expected_index = app.state.timeline.notes.len() - 1;
-        assert_eq!(app.state.timeline.selected_index, Some(expected_index));
+        let expected_index = app.state.timeline.len() - 1;
+        assert_eq!(app.state.timeline.selected_index(), Some(expected_index));
     }
 
     #[test]
@@ -1036,15 +961,13 @@ mod tests {
 
         // Timeline should be: [event3 (newest), event2 (middle), event1 (oldest)]
         // User selects index 1 (middle note - event2)
-        app.state.timeline.selected_index = Some(1);
+        app.state.timeline.select(1);
+
         let selected_event_id = app
             .state
             .timeline
-            .notes
-            .get(1)
+            .selected_note()
             .expect("Timeline should have event at index 1")
-            .0
-            .event
             .id;
         assert_eq!(selected_event_id, event2.id);
 
@@ -1058,15 +981,12 @@ mod tests {
 
         // Timeline should now be: [event3, new_event, event2, event1]
         // Selection index should be adjusted from 1 to 2 to still point to event2
-        assert_eq!(app.state.timeline.selected_index, Some(2));
+        assert_eq!(app.state.timeline.selected_index(), Some(2));
         let still_selected_event_id = app
             .state
             .timeline
-            .notes
-            .get(2)
+            .selected_note()
             .expect("Timeline should have event at index 2")
-            .0
-            .event
             .id;
         assert_eq!(still_selected_event_id, event2.id);
     }
@@ -1093,15 +1013,12 @@ mod tests {
 
         // Timeline should be: [event2 (newest), event1 (oldest)]
         // User selects index 0 (newest note - event2)
-        app.state.timeline.selected_index = Some(0);
+        app.state.timeline.select_first();
         let selected_event_id = app
             .state
             .timeline
-            .notes
-            .first()
+            .selected_note()
             .expect("Timeline should have first event")
-            .0
-            .event
             .id;
         assert_eq!(selected_event_id, event2.id);
 
@@ -1115,15 +1032,12 @@ mod tests {
 
         // Timeline should now be: [event2, event1, old_event]
         // Selection should remain at index 0, still pointing to the newest note
-        assert_eq!(app.state.timeline.selected_index, Some(0));
+        assert_eq!(app.state.timeline.selected_index(), Some(0));
         let still_selected_event_id = app
             .state
             .timeline
-            .notes
-            .first()
+            .selected_note()
             .expect("Timeline should have first event")
-            .0
-            .event
             .id;
         assert_eq!(still_selected_event_id, event2.id);
     }
@@ -1133,7 +1047,7 @@ mod tests {
         let mut app = create_test_app();
 
         // No selection
-        app.state.timeline.selected_index = None;
+        app.state.timeline.deselect();
 
         let keys = Keys::generate();
         let event = EventBuilder::text_note("test note")
@@ -1143,6 +1057,6 @@ mod tests {
         app.process_nostr_event(event);
 
         // Selection should remain None
-        assert_eq!(app.state.timeline.selected_index, None);
+        assert_eq!(app.state.timeline.selected_note(), None);
     }
 }
