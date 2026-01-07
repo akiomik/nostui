@@ -11,20 +11,16 @@ use tears::prelude::*;
 use tears::subscription::terminal::TerminalEvents;
 use tears::subscription::time::{Message as TimerMessage, Timer};
 
+use crate::core::message::{AppMsg, NostrMsg, SystemMsg, TimelineMsg, UiMsg};
 use crate::core::state::{ui::UiMode, AppState};
+use crate::domain::fps_tracker::FpsTracker;
 use crate::domain::nostr::{Profile, SortableEvent};
 use crate::infrastructure::config::Config;
-use crate::presentation::config::keybindings::Action as KeyAction;
-use crate::tears::message::NostrMsg;
-use crate::tears::subscription::nostr::{
+use crate::infrastructure::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrCommand, NostrEvents,
 };
-
-use super::{
-    components::Components,
-    fps_tracker::FpsTracker,
-    message::{AppMsg, SystemMsg, TimelineMsg, UiMsg},
-};
+use crate::presentation::components::Components;
+use crate::presentation::config::keybindings::Action as KeyAction;
 
 /// Initialization flags for the Tears application
 #[derive(Debug)]

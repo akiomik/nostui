@@ -6,6 +6,7 @@
 //! - Text processing utilities
 
 pub mod collections;
+pub mod fps_tracker;
 pub mod nostr;
 pub mod text;
 pub mod ui;

@@ -5,7 +5,7 @@
 
 use crossterm::event::KeyEvent;
 
-use crate::tears::subscription::nostr::Message as NostrSubscriptionMessage;
+use crate::infrastructure::subscription::nostr::Message as NostrSubscriptionMessage;
 
 /// Main application message type for tears
 #[derive(Debug, Clone)]
