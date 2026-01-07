@@ -6,10 +6,4 @@
 //! - Update logic and command execution
 //! - Message translation layer
 
-pub mod cmd;
-pub mod msg;
-pub mod raw_msg;
 pub mod state;
-pub mod textarea_engine;
-pub mod translator;
-pub mod update;

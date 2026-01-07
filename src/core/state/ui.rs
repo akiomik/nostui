@@ -1,8 +1,6 @@
 use crossterm::event::KeyEvent;
 use nostr_sdk::prelude::*;
 
-use crate::core::cmd::{Cmd, NostrCmd};
-use crate::core::msg::ui::UiMsg;
 use crate::domain::nostr::nip10::ReplyTagsBuilder;
 use crate::domain::ui::{CursorPosition, TextSelection};
 
@@ -106,71 +104,6 @@ impl UiState {
 
         Some(SubmitData { content, tags })
     }
-
-    /// UiState-specific update function performing pure state transitions
-    /// and returning generated commands (currently none; coordinator emits commands)
-    pub fn update(&mut self, msg: UiMsg) -> Vec<Cmd> {
-        match msg {
-            UiMsg::ShowNewNote => {
-                self.reply_to = None;
-                self.current_mode = UiMode::Composing;
-                self.textarea = TextAreaState::empty();
-                vec![]
-            }
-
-            UiMsg::ShowReply(target_event) => {
-                self.reply_to = Some(target_event);
-                self.current_mode = UiMode::Composing;
-                self.textarea = TextAreaState::empty();
-                vec![]
-            }
-
-            UiMsg::CancelInput => {
-                self.current_mode = UiMode::Normal;
-                self.reply_to = None;
-                self.textarea = TextAreaState::empty();
-                vec![]
-            }
-
-            // Content/cursor/selection updates
-            UiMsg::UpdateInputContent(content) => {
-                self.textarea.content = content;
-                vec![]
-            }
-
-            UiMsg::UpdateInputContentWithCursor(content, pos) => {
-                self.textarea.content = content;
-                self.textarea.cursor_position = pos;
-                vec![]
-            }
-
-            UiMsg::UpdateCursorPosition(pos) => {
-                self.textarea.cursor_position = pos;
-                vec![]
-            }
-
-            UiMsg::UpdateSelection(sel) => {
-                self.textarea.selection = sel;
-                vec![]
-            }
-
-            UiMsg::SubmitNote => {
-                if let Some(submit_data) = self.prepare_submit_data() {
-                    let mut cmds = self.update(UiMsg::CancelInput);
-                    cmds.push(Cmd::Nostr(NostrCmd::SendTextNote {
-                        content: submit_data.content,
-                        tags: submit_data.tags,
-                    }));
-                    cmds
-                } else {
-                    vec![]
-                }
-            }
-
-            // Keep legacy textarea path intact (no-op here; AppState handles it)
-            UiMsg::ProcessTextAreaInput(_) => vec![],
-        }
-    }
 }
 
 #[cfg(test)]
@@ -182,86 +115,6 @@ mod tests {
         EventBuilder::text_note("t")
             .sign_with_keys(&keys)
             .map_err(|e| e.into())
-    }
-
-    #[test]
-    fn test_show_new_note_resets_and_shows_input() -> Result<()> {
-        let mut ui = UiState {
-            textarea: TextAreaState::new("abc".into(), Default::default(), None),
-            reply_to: Some(create_event()?),
-            ..Default::default()
-        };
-        let cmds = ui.update(UiMsg::ShowNewNote);
-        assert!(cmds.is_empty());
-        assert!(ui.is_composing());
-        assert!(ui.reply_to.is_none());
-        assert!(ui.textarea.content.is_empty());
-        assert_eq!(ui.textarea.cursor_position, Default::default());
-        assert!(ui.textarea.selection.is_none());
-
-        Ok(())
-    }
-
-    #[test]
-    #[allow(clippy::unwrap_used)]
-    fn test_show_reply_sets_target_and_shows_input() -> Result<()> {
-        let mut ui = UiState::default();
-        let ev = create_event()?;
-        let ev_id = ev.id;
-        let _ = ui.update(UiMsg::ShowReply(ev));
-        assert!(ui.is_composing());
-        assert!(ui.reply_to.as_ref().is_some());
-        assert_eq!(ui.reply_to.as_ref().unwrap().id, ev_id);
-        assert!(ui.textarea.content.is_empty());
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_cancel_input_hides_and_resets() -> Result<()> {
-        let mut ui = UiState {
-            current_mode: UiMode::Composing,
-            textarea: TextAreaState::new("x".into(), Default::default(), None),
-            reply_to: Some(create_event()?),
-            ..Default::default()
-        };
-        let _ = ui.update(UiMsg::CancelInput);
-        assert!(ui.is_normal());
-        assert!(ui.reply_to.is_none());
-        assert!(ui.textarea.content.is_empty());
-        assert!(ui.textarea.selection.is_none());
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_update_input_content() {
-        let mut ui = UiState::default();
-        let _ = ui.update(UiMsg::UpdateInputContent("hello".into()));
-        assert_eq!(ui.textarea.content, "hello");
-    }
-
-    #[test]
-    #[allow(clippy::unwrap_used)]
-    fn test_update_cursor_and_selection() {
-        let mut ui = UiState::default();
-        let _ = ui.update(UiMsg::UpdateCursorPosition(CursorPosition {
-            line: 1,
-            column: 2,
-        }));
-        assert_eq!(ui.textarea.cursor_position.line, 1);
-        assert_eq!(ui.textarea.cursor_position.column, 2);
-
-        let sel = TextSelection {
-            start: CursorPosition { line: 0, column: 1 },
-            end: CursorPosition { line: 2, column: 3 },
-        };
-        let _ = ui.update(UiMsg::UpdateSelection(Some(sel)));
-        let s = ui.textarea.selection.unwrap();
-        assert_eq!(s.start.line, 0);
-        assert_eq!(s.start.column, 1);
-        assert_eq!(s.end.line, 2);
-        assert_eq!(s.end.column, 3);
     }
 
     #[test]
