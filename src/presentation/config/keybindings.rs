@@ -2,14 +2,24 @@ use std::collections::HashMap;
 
 use color_eyre::eyre::{eyre, Result};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use derive_deref::{Deref, DerefMut};
 use serde::{
     de::{Deserializer, Error},
     Deserialize,
 };
 
-#[derive(Clone, Debug, Default, Deref, DerefMut)]
-pub struct KeyBindings(pub HashMap<Vec<KeyEvent>, Action>);
+// Screen-specific keybindings
+#[derive(Clone, Debug, Default)]
+pub struct KeyBindings {
+    pub home: HashMap<Vec<KeyEvent>, Action>,
+}
+
+// Raw keybindings structure for deserialization
+#[derive(Clone, Debug, Default, Deserialize)]
+struct RawKeyBindings {
+    #[serde(default)]
+    #[serde(rename = "Home")]
+    home: HashMap<String, Action>,
+}
 
 #[derive(Clone, Debug, Deserialize)]
 pub enum Action {
@@ -37,8 +47,11 @@ impl<'de> Deserialize<'de> for KeyBindings {
     where
         D: Deserializer<'de>,
     {
-        let parsed_map = HashMap::<String, Action>::deserialize(deserializer)?;
-        let keybindings = parsed_map
+        let raw = RawKeyBindings::deserialize(deserializer)?;
+
+        // Parse Home keybindings
+        let home = raw
+            .home
             .into_iter()
             .map(|(key_str, action)| {
                 parse_key_sequence(&key_str)
@@ -46,7 +59,8 @@ impl<'de> Deserialize<'de> for KeyBindings {
                     .map_err(Error::custom)
             })
             .collect::<Result<HashMap<_, _>, _>>()?;
-        Ok(KeyBindings(keybindings))
+
+        Ok(KeyBindings { home })
     }
 }
 

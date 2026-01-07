@@ -1,23 +1,25 @@
 {
   "keybindings": {
-    "<up>": "ScrollUp",            // Scroll up the page
-    "<k>": "ScrollUp",             // Scroll up the page
-    "<down>": "ScrollDown",        // Scroll down the page
-    "<j>": "ScrollDown",           // Scroll down the page
-    "<home>": "ScrollToTop",       // Scroll to top of the page
-    "<g>": "ScrollToTop",          // Scroll to top of the page
-    "<end>": "ScrollToBottom",     // Scroll to bottom of the page
-    "<Shift-g>": "ScrollToBottom", // Scroll to bottom of the page
-    "<f>": "React",                // React to the post
-    "<t>": "Repost",               // Repost the post
-    "<esc>": "Unselect",           // Unselect the posts
-    "<q>": "Quit",                 // Quit the application
-    "<Ctrl-d>": "Quit",            // Another way to quit
-    "<Ctrl-c>": "Quit",            // Yet another way to quit
-    "<Ctrl-z>": "Suspend",         // Suspend the application
-    "<n>": "NewTextNote",          // Show the text note input form
-    "<r>": "ReplyTextNote",        // Show the text note input form to reply
-    "<Ctrl-p>": "SubmitTextNote"   // Submit the text note on input form
+    "Home": {
+      "<up>": "ScrollUp",            // Scroll up the page
+      "<k>": "ScrollUp",             // Scroll up the page
+      "<down>": "ScrollDown",        // Scroll down the page
+      "<j>": "ScrollDown",           // Scroll down the page
+      "<home>": "ScrollToTop",       // Scroll to top of the page
+      "<g>": "ScrollToTop",          // Scroll to top of the page
+      "<end>": "ScrollToBottom",     // Scroll to bottom of the page
+      "<Shift-g>": "ScrollToBottom", // Scroll to bottom of the page
+      "<f>": "React",                // React to the post
+      "<t>": "Repost",               // Repost the post
+      "<esc>": "Unselect",           // Unselect the posts
+      "<q>": "Quit",                 // Quit the application
+      "<Ctrl-d>": "Quit",            // Another way to quit
+      "<Ctrl-c>": "Quit",            // Yet another way to quit
+      "<Ctrl-z>": "Suspend",         // Suspend the application
+      "<n>": "NewTextNote",          // Show the text note input form
+      "<r>": "ReplyTextNote",        // Show the text note input form to reply
+      "<Ctrl-p>": "SubmitTextNote"   // Submit the text note on input form
+    }
   },
   "relays": [
     "wss://nos.lol",

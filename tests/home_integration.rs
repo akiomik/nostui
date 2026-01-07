@@ -59,7 +59,9 @@ fn create_test_state_with_config() -> AppState {
         Action::Unselect,
     );
 
-    config.keybindings = KeyBindings(home_bindings);
+    config.keybindings = KeyBindings {
+        home: home_bindings,
+    };
 
     AppState::new_with_config(Keys::generate().public_key(), config)
 }

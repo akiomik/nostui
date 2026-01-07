@@ -253,8 +253,8 @@ impl<'a> TearsApp<'a> {
     /// Resolve keybinding to KeyAction
     /// Returns the KeyAction if the key matches a configured keybinding
     fn resolve_keybinding(&self, key: KeyEvent) -> Option<KeyAction> {
-        // Check for single-key binding
-        if let Some(action) = self.config.keybindings.get(&vec![key]) {
+        // Check for single-key binding in Home screen keybindings
+        if let Some(action) = self.config.keybindings.home.get(&vec![key]) {
             return Some(action.clone());
         }
 
