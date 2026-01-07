@@ -52,16 +52,17 @@ async fn tokio_main() -> Result<()> {
         tick_rate: args.tick_rate,
     };
 
-    // Create Tears runtime
-    let runtime = Runtime::<TearsApp>::new(init_flags);
-
     // Setup terminal
     let mut terminal = ratatui::init();
     terminal.clear()?;
 
     // Run the Tears application
-    log::info!("Starting Tears application with frame_rate: {}", args.frame_rate);
-    let result = runtime.run(&mut terminal, args.frame_rate as u32).await;
+    log::info!(
+        "Starting Tears application with frame_rate: {}",
+        args.frame_rate
+    );
+    let runtime = Runtime::<TearsApp>::new(init_flags, args.frame_rate as u32);
+    let result = runtime.run(&mut terminal).await;
 
     // Restore terminal
     ratatui::restore();
