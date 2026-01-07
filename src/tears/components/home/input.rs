@@ -40,9 +40,6 @@ impl<'a> HomeInputComponent<'a> {
             return;
         }
 
-        // Sync TextArea content with AppState
-        self.sync_textarea_with_state(state);
-
         // Clear the input area
         frame.render_widget(Clear, area);
 
@@ -60,46 +57,6 @@ impl<'a> HomeInputComponent<'a> {
 
         self.textarea.set_block(block);
         frame.render_widget(&self.textarea, area);
-    }
-
-    /// Synchronize internal TextArea with AppState content
-    ///
-    /// Uses dirty checking to avoid unnecessary operations:
-    /// - Only updates content if it has changed since last sync
-    /// - Only moves cursor if position has changed since last sync
-    fn sync_textarea_with_state(&mut self, state: &AppState) {
-        // Check if content changed by comparing with last synced state
-        // This avoids the expensive lines().join() operation when unchanged
-        if self.last_synced_content != state.ui.textarea.content {
-            // Clear and replace with state content
-            self.textarea.select_all();
-            self.textarea.delete_str(usize::MAX);
-
-            // Set new content
-            if !state.ui.textarea.content.is_empty() {
-                self.textarea.insert_str(&state.ui.textarea.content);
-            }
-
-            // Update cached content
-            self.last_synced_content = state.ui.textarea.content.clone();
-        }
-
-        // Check if cursor position changed
-        let target_cursor = (
-            state.ui.textarea.cursor_position.line,
-            state.ui.textarea.cursor_position.column,
-        );
-
-        if self.last_synced_cursor != target_cursor {
-            // Update cursor position
-            self.textarea.move_cursor(tui_textarea::CursorMove::Jump(
-                target_cursor.0 as u16,
-                target_cursor.1 as u16,
-            ));
-
-            // Update cached cursor position
-            self.last_synced_cursor = target_cursor;
-        }
     }
 
     /// Get the name of the reply target

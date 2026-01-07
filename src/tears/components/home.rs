@@ -19,7 +19,7 @@ pub use list::HomeListComponent;
 #[derive(Debug)]
 pub struct HomeComponent<'a> {
     /// Input area component
-    input: HomeInputComponent<'a>,
+    pub(crate) input: HomeInputComponent<'a>,
     /// Timeline list component
     list: HomeListComponent,
 }

@@ -10,11 +10,9 @@ use ratatui::prelude::*;
 use tears::prelude::*;
 use tears::subscription::terminal::TerminalEvents;
 use tears::subscription::time::{Message as TimerMessage, Timer};
-use tui_textarea::CursorMove;
 
 use crate::core::state::{ui::UiMode, AppState};
 use crate::domain::nostr::{Profile, SortableEvent};
-use crate::domain::ui::{CursorPosition, TextSelection};
 use crate::infrastructure::config::Config;
 use crate::presentation::config::keybindings::Action as KeyAction;
 use crate::tears::message::NostrMsg;
