@@ -14,7 +14,7 @@ use tears::subscription::time::{Message as TimerMessage, Timer};
 use crate::core::message::{AppMsg, NostrMsg, SystemMsg, TimelineMsg, UiMsg};
 use crate::core::state::{ui::UiMode, AppState};
 use crate::domain::fps_tracker::FpsTracker;
-use crate::domain::nostr::{Profile, SortableEvent};
+use crate::domain::nostr::{EventWrapper, Profile};
 use crate::infrastructure::config::Config;
 use crate::infrastructure::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrCommand, NostrEvents,
@@ -549,8 +549,8 @@ impl<'a> TearsApp<'a> {
         match event.kind {
             Kind::TextNote => {
                 // Add text note to timeline
-                let sortable = SortableEvent::new(event);
-                let insert_result = self.state.timeline.notes.find_or_insert(Reverse(sortable));
+                let wrapper = EventWrapper::new(event);
+                let insert_result = self.state.timeline.notes.find_or_insert(Reverse(wrapper));
 
                 // Adjust selected index if a new item was inserted before it
                 // This prevents the selection from shifting when new events arrive
@@ -595,37 +595,40 @@ impl<'a> TearsApp<'a> {
             }
             Kind::Reaction => {
                 // Add reaction to timeline engagement data
-                if let Some(event_id) = self.extract_last_event_id(&event) {
+                let wrapper = EventWrapper::new(event);
+                if let Some(event_id) = wrapper.last_event_id_from_tags() {
                     self.state
                         .timeline
                         .reactions
                         .entry(event_id)
                         .or_default()
-                        .insert(event);
+                        .insert(wrapper.event);
                     log::debug!("Added reaction for event: {event_id}");
                 }
             }
             Kind::Repost => {
                 // Add repost to timeline engagement data
-                if let Some(event_id) = self.extract_last_event_id(&event) {
+                let wrapper = EventWrapper::new(event);
+                if let Some(event_id) = wrapper.last_event_id_from_tags() {
                     self.state
                         .timeline
                         .reposts
                         .entry(event_id)
                         .or_default()
-                        .insert(event);
+                        .insert(wrapper.event);
                     log::debug!("Added repost for event: {event_id}");
                 }
             }
             Kind::ZapReceipt => {
                 // Add zap receipt to timeline engagement data
-                if let Some(event_id) = self.extract_last_event_id(&event) {
+                let wrapper = EventWrapper::new(event);
+                if let Some(event_id) = wrapper.last_event_id_from_tags() {
                     self.state
                         .timeline
                         .zap_receipts
                         .entry(event_id)
                         .or_default()
-                        .insert(event);
+                        .insert(wrapper.event);
                     log::debug!("Added zap receipt for event: {event_id}");
                 }
             }
@@ -662,22 +665,6 @@ impl<'a> TearsApp<'a> {
         } else {
             false
         }
-    }
-
-    /// Helper function to extract event_id from the last e tag of an event
-    fn extract_last_event_id(&self, event: &nostr_sdk::Event) -> Option<nostr_sdk::EventId> {
-        use nostr_sdk::nostr::{Alphabet, SingleLetterTag, TagKind, TagStandard};
-
-        event
-            .tags
-            .filter_standardized(TagKind::SingleLetter(SingleLetterTag::lowercase(
-                Alphabet::E,
-            )))
-            .last()
-            .and_then(|tag| match tag {
-                TagStandard::Event { event_id, .. } => Some(*event_id),
-                _ => None,
-            })
     }
 }
 

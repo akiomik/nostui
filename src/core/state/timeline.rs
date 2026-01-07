@@ -2,12 +2,12 @@ use nostr_sdk::prelude::*;
 use sorted_vec::ReverseSortedSet;
 use std::collections::HashMap;
 
-use crate::domain::{collections::EventSet, nostr::SortableEvent};
+use crate::domain::{collections::EventSet, nostr::EventWrapper};
 
 /// Timeline-related state
 #[derive(Debug, Clone)]
 pub struct TimelineState {
-    pub notes: ReverseSortedSet<SortableEvent>,
+    pub notes: ReverseSortedSet<EventWrapper>,
     pub reactions: HashMap<EventId, EventSet>,
     pub reposts: HashMap<EventId, EventSet>,
     pub zap_receipts: HashMap<EventId, EventSet>,
