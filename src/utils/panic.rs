@@ -1,4 +1,3 @@
-use better_panic::Settings;
 use color_eyre::config::HookBuilder;
 use color_eyre::eyre::Result;
 use std::panic;
@@ -43,8 +42,9 @@ pub fn initialize_panic_handler() -> Result<()> {
 
         #[cfg(debug_assertions)]
         {
-            // Better Panic stacktrace that is only enabled when debugging.
+            use better_panic::Settings;
 
+            // Better Panic stacktrace that is only enabled when debugging.
             Settings::auto()
                 .most_recent_first(false)
                 .lineno_suffix(true)
