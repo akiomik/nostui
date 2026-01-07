@@ -151,7 +151,7 @@ impl Default for HomeListComponent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::nostr::SortableEvent;
+    use crate::domain::nostr::EventWrapper;
     use nostr_sdk::prelude::*;
     use std::cmp::Reverse;
 
@@ -163,8 +163,8 @@ mod tests {
             let note_keys = Keys::generate();
             let content = format!("Test note {i}");
             let event = EventBuilder::text_note(&content).sign_with_keys(&note_keys)?;
-            let sortable = SortableEvent::new(event);
-            state.timeline.notes.find_or_insert(Reverse(sortable));
+            let wrapper = EventWrapper::new(event);
+            state.timeline.notes.find_or_insert(Reverse(wrapper));
         }
 
         Ok(state)
@@ -263,8 +263,8 @@ mod tests {
         let note_keys = Keys::generate();
         let japanese_text = "初force pushめでたい";
         let event = EventBuilder::text_note(japanese_text).sign_with_keys(&note_keys)?;
-        let sortable = SortableEvent::new(event);
-        state.timeline.notes.find_or_insert(Reverse(sortable));
+        let wrapper = EventWrapper::new(event);
+        state.timeline.notes.find_or_insert(Reverse(wrapper));
 
         // Render the note
         let list = HomeListComponent::new();
