@@ -1530,6 +1530,7 @@ dependencies = [
  "sorted-vec",
  "strip-ansi-escapes",
  "strum 0.27.2",
+ "tears",
  "thousands",
  "tokio",
  "tokio-util",
@@ -2585,6 +2586,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tears"
+version = "0.7.0"
+source = "git+https://github.com/akiomik/tears?branch=ratatui-0.29#560d17574e9f5feb8e1855bfb6f2745c8f535572"
+dependencies = [
+ "color-eyre",
+ "crossterm",
+ "futures",
+ "ratatui",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+]
+
+[[package]]
 name = "terminal_size"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2731,6 +2746,18 @@ dependencies = [
  "futures-util",
  "thiserror 1.0.69",
  "tokio",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]

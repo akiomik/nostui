@@ -1,10 +1,17 @@
+use tokio::sync::mpsc;
+
 use crate::core::{
     cmd::{Cmd, NostrCmd},
     msg::nostr::NostrMsg,
 };
+use crate::tears::subscription::nostr::NostrCommand;
 
 #[derive(Debug, Clone, Default)]
-pub struct NostrState;
+pub struct NostrState {
+    /// Command sender for NostrEvents subscription
+    /// This is set when the subscription emits a Ready message
+    pub command_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
+}
 
 impl NostrState {
     /// Handle Nostr operations and produce the corresponding commands.
@@ -39,7 +46,7 @@ mod tests {
 
     #[test]
     fn test_nostr_state_send_reaction() -> Result<()> {
-        let mut ns = NostrState;
+        let mut ns = NostrState::default();
         let ev = create_event()?;
         let cmds = ns.update(NostrMsg::SendReaction(ev.clone()));
 
@@ -53,7 +60,7 @@ mod tests {
 
     #[test]
     fn test_nostr_state_send_repost() -> Result<()> {
-        let mut ns = NostrState;
+        let mut ns = NostrState::default();
         let ev = create_event()?;
         let cmds = ns.update(NostrMsg::SendRepost(ev.clone()));
 
@@ -67,7 +74,7 @@ mod tests {
 
     #[test]
     fn test_nostr_state_send_text_note() {
-        let mut ns = NostrState;
+        let mut ns = NostrState::default();
         let cmds = ns.update(NostrMsg::SendTextNote("hello".into(), vec![]));
 
         assert!(matches!(

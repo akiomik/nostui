@@ -93,9 +93,10 @@ impl Config {
 
         let mut cfg: Self = builder.build()?.try_deserialize()?;
 
-        // Merge default keybindings into user config (flat mapping)
-        for (keyseq, action) in default_config.keybindings.iter() {
+        // Merge default keybindings into user config (screen-specific mapping)
+        for (keyseq, action) in default_config.keybindings.home.iter() {
             cfg.keybindings
+                .home
                 .entry(keyseq.clone())
                 .or_insert_with(|| action.clone());
         }

@@ -38,6 +38,7 @@ signal-hook = "0.3.17"
 sorted-vec = "0.8.6"
 strip-ansi-escapes = "0.2.0"
 strum = { version = "0.27.1", features = ["derive"] }
+tears = { git = "https://github.com/akiomik/tears", branch = "ratatui-0.29" }
 thousands = "0.2.0"
 tokio = { version = "1.46.1", features = ["full"] }
 tokio-util = "0.7.16"

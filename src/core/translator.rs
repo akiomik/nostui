@@ -103,8 +103,8 @@ fn translate_input_mode_keys(key: KeyEvent, state: &AppState) -> Vec<Msg> {
 
 /// Key bindings when in normal navigation mode
 fn translate_normal_mode_keys(key: KeyEvent, state: &AppState) -> Vec<Msg> {
-    // Get keybindings from config state (flat mapping)
-    if let Some(action) = state.config.config.keybindings.get(&vec![key]) {
+    // Get keybindings from config state (Home screen mapping)
+    if let Some(action) = state.config.config.keybindings.home.get(&vec![key]) {
         return translate_action_to_msg(action, state);
     }
 
@@ -371,7 +371,9 @@ mod tests {
             Action::Unselect,
         );
 
-        config.keybindings = KeyBindings(home_bindings);
+        config.keybindings = KeyBindings {
+            home: home_bindings,
+        };
 
         AppState::new_with_config(Keys::generate().public_key(), config)
     }
