@@ -2,6 +2,7 @@
 //!
 //! Handles text input for composing new posts.
 
+use crossterm::event::KeyEvent;
 use ratatui::{prelude::*, widgets::*};
 use tui_textarea::TextArea;
 
@@ -89,7 +90,7 @@ impl<'a> HomeInputComponent<'a> {
     ///
     /// This method updates the TextArea state immediately without going through
     /// the State → TextArea → State round-trip, improving input responsiveness.
-    pub fn process_input(&mut self, key: crossterm::event::KeyEvent) {
+    pub fn process_input(&mut self, key: KeyEvent) {
         use crossterm::event::Event;
         self.textarea.input(Event::Key(key));
 
