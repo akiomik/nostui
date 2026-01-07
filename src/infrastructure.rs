@@ -10,4 +10,3 @@
 pub mod cli;
 pub mod config;
 pub mod subscription;
-pub mod tui;

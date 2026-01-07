@@ -4,8 +4,6 @@ use std::panic;
 use std::process;
 use tracing::error;
 
-use crate::infrastructure::tui::real::RealTui;
-
 pub fn initialize_panic_handler() -> Result<()> {
     let (panic_hook, eyre_hook) = HookBuilder::default()
         .panic_section(format!(
@@ -18,11 +16,10 @@ pub fn initialize_panic_handler() -> Result<()> {
         .into_hooks();
     eyre_hook.install()?;
     panic::set_hook(Box::new(move |panic_info| {
-        if let Ok(mut t) = RealTui::new() {
-            if let Err(r) = t.exit() {
-                error!("Unable to exit Terminal: {:?}", r);
-            }
-        }
+        // Restore terminal to normal state before panic handling
+        // This matches the current architecture using ratatui::restore()
+        ratatui::restore();
+        error!("Terminal restored after panic");
 
         #[cfg(not(debug_assertions))]
         {
