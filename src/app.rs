@@ -394,22 +394,18 @@ impl<'a> TearsApp<'a> {
             }
             UiMsg::StartReply => {
                 // Get the selected note
-                if let Some(selected_index) = self.state.timeline.selected_index {
-                    if let Some(note) = self.state.timeline.notes.get(selected_index) {
-                        let event_id = note.0.event.id;
+                if let Some(note) = self.state.timeline.selected_note() {
+                    let event_id = note.id;
 
-                        // Set reply context
-                        self.state.ui.reply_to = Some(note.0.event.clone());
-                        self.state.ui.current_mode = UiMode::Composing;
+                    // Set reply context
+                    self.state.ui.reply_to = Some(note.clone());
+                    self.state.ui.current_mode = UiMode::Composing;
 
-                        // Show status message
-                        self.state.system.status_message =
-                            Some(format!("Replying to note {}", &event_id.to_hex()[..8]));
+                    // Show status message
+                    self.state.system.status_message =
+                        Some(format!("Replying to note {}", &event_id.to_hex()[..8]));
 
-                        log::info!("Starting reply to event: {event_id}");
-                    } else {
-                        self.state.system.status_message = Some("No note selected".to_string());
-                    }
+                    log::info!("Starting reply to event: {event_id}");
                 } else {
                     self.state.system.status_message = Some("No note selected".to_string());
                 }
@@ -423,33 +419,24 @@ impl<'a> TearsApp<'a> {
                 // Get content from Component's TextArea
                 let content = self.components.borrow().home.input.get_content();
 
-                // Create event and send through NostrEvents subscription
-                if let Some(sender) = &self.state.nostr.command_sender {
-                    // Build event with appropriate tags
-                    let event_builder = if let Some(ref reply_to_event) = self.state.ui.reply_to {
-                        log::info!("Publishing reply: {content}");
-                        // Create reply with proper NIP-10 tags
-                        EventBuilder::text_note(&content)
-                            .tag(Tag::event(reply_to_event.id))
-                            .tag(Tag::public_key(reply_to_event.pubkey))
-                    } else {
-                        log::info!("Publishing note: {content}");
-                        EventBuilder::text_note(&content)
-                    };
+                // Build event with appropriate tags
+                let event_builder = if let Some(ref reply_to_event) = self.state.ui.reply_to {
+                    log::info!("Publishing reply: {content}");
+                    // Create reply with proper NIP-10 tags
+                    EventBuilder::text_note(&content)
+                        .tag(Tag::event(reply_to_event.id))
+                        .tag(Tag::public_key(reply_to_event.pubkey))
+                } else {
+                    log::info!("Publishing note: {content}");
+                    EventBuilder::text_note(&content)
+                };
 
-                    // Sign event with user's keys
-                    match event_builder.sign_with_keys(&self.keys) {
-                        Ok(event) => {
-                            let _ = sender.send(NostrCommand::SendEvent { event });
-                            self.state.system.status_message = Some("Note published".to_string());
-                        }
-                        Err(e) => {
-                            log::error!("Failed to sign event: {e}");
-                            self.state.system.status_message =
-                                Some(format!("Failed to create note: {e}"));
-                        }
-                    }
-                }
+                // Send the signed event
+                self.send_signed_event(
+                    event_builder,
+                    "Note published".to_string(),
+                    "Failed to sign event",
+                );
 
                 // Clear UI state
                 self.state.ui.current_mode = UiMode::Normal;
@@ -458,66 +445,28 @@ impl<'a> TearsApp<'a> {
             }
             UiMsg::ReactToSelected => {
                 // React to the selected note
-                if let Some(selected_index) = self.state.timeline.selected_index {
-                    if let Some(note) = self.state.timeline.notes.get(selected_index) {
-                        let event_id = note.0.event.id;
+                if let Some(note) = self.state.timeline.selected_note() {
+                    let event_id = note.id;
 
-                        log::info!("Reacting to event: {event_id}");
+                    log::info!("Reacting to event: {event_id}");
 
-                        if let Some(sender) = &self.state.nostr.command_sender {
-                            // Create reaction event (+ emoji)
-                            match EventBuilder::reaction(&note.0.event, "+")
-                                .sign_with_keys(&self.keys)
-                            {
-                                Ok(event) => {
-                                    let _ = sender.send(NostrCommand::SendEvent { event });
-                                    self.state.system.status_message = Some(format!(
-                                        "Reacted to note {}",
-                                        &event_id.to_hex()[..8]
-                                    ));
-                                }
-                                Err(e) => {
-                                    log::error!("Failed to sign reaction: {e}");
-                                    self.state.system.status_message =
-                                        Some(format!("Failed to react: {e}"));
-                                }
-                            }
-                        }
-                    } else {
-                        self.state.system.status_message = Some("No note selected".to_string());
-                    }
+                    let event_builder = EventBuilder::reaction(note, "+");
+                    let success_msg = format!("Reacted to note {}", &event_id.to_hex()[..8]);
+                    self.send_signed_event(event_builder, success_msg, "Failed to sign reaction");
                 } else {
                     self.state.system.status_message = Some("No note selected".to_string());
                 }
             }
             UiMsg::RepostSelected => {
                 // Repost the selected note
-                if let Some(selected_index) = self.state.timeline.selected_index {
-                    if let Some(note) = self.state.timeline.notes.get(selected_index) {
-                        let event_id = note.0.event.id;
+                if let Some(note) = self.state.timeline.selected_note() {
+                    let event_id = note.id;
 
-                        log::info!("Reposting event: {event_id}");
+                    log::info!("Reposting event: {event_id}");
 
-                        if let Some(sender) = &self.state.nostr.command_sender {
-                            // Create repost event (with no specific relay URL)
-                            match EventBuilder::repost(&note.0.event, None)
-                                .sign_with_keys(&self.keys)
-                            {
-                                Ok(event) => {
-                                    let _ = sender.send(NostrCommand::SendEvent { event });
-                                    self.state.system.status_message =
-                                        Some(format!("Reposted note {}", &event_id.to_hex()[..8]));
-                                }
-                                Err(e) => {
-                                    log::error!("Failed to sign repost: {e}");
-                                    self.state.system.status_message =
-                                        Some(format!("Failed to repost: {e}"));
-                                }
-                            }
-                        }
-                    } else {
-                        self.state.system.status_message = Some("No note selected".to_string());
-                    }
+                    let event_builder = EventBuilder::repost(note, None);
+                    let success_msg = format!("Reposted note {}", &event_id.to_hex()[..8]);
+                    self.send_signed_event(event_builder, success_msg, "Failed to sign repost");
                 } else {
                     self.state.system.status_message = Some("No note selected".to_string());
                 }
@@ -686,6 +635,32 @@ impl<'a> TearsApp<'a> {
                 self.state.system.status_message =
                     Some(format!("Received unknown event type: {}", event.kind));
             }
+        }
+    }
+
+    /// Send a signed Nostr event through the command sender
+    /// Returns true if the event was sent successfully, false otherwise
+    fn send_signed_event(
+        &mut self,
+        event_builder: EventBuilder,
+        success_message: String,
+        error_prefix: &str,
+    ) -> bool {
+        if let Some(sender) = &self.state.nostr.command_sender {
+            match event_builder.sign_with_keys(&self.keys) {
+                Ok(event) => {
+                    let _ = sender.send(NostrCommand::SendEvent { event });
+                    self.state.system.status_message = Some(success_message);
+                    true
+                }
+                Err(e) => {
+                    log::error!("{error_prefix}: {e}");
+                    self.state.system.status_message = Some(format!("{error_prefix}: {e}"));
+                    false
+                }
+            }
+        } else {
+            false
         }
     }
 
