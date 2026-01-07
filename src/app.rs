@@ -695,17 +695,13 @@ impl<'a> TearsApp<'a> {
 
         event
             .tags
-            .iter()
-            .filter(|tag| {
-                tag.kind() == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::E))
-            })
-            .next_back()
-            .and_then(|tag| {
-                if let Some(TagStandard::Event { event_id, .. }) = tag.as_standardized() {
-                    Some(*event_id)
-                } else {
-                    None
-                }
+            .filter_standardized(TagKind::SingleLetter(SingleLetterTag::lowercase(
+                Alphabet::E,
+            )))
+            .last()
+            .and_then(|tag| match tag {
+                TagStandard::Event { event_id, .. } => Some(*event_id),
+                _ => None,
             })
     }
 }
