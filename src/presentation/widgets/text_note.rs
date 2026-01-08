@@ -44,10 +44,10 @@ impl TextNote {
     }
 
     pub fn display_name(&self) -> Option<String> {
-        if let Some(profile) = self.profile.clone() {
-            if let Some(display_name) = profile.metadata.display_name {
+        if let Some(profile) = &self.profile {
+            if let Some(display_name) = &profile.metadata.display_name {
                 if !display_name.is_empty() {
-                    return Some(display_name);
+                    return Some(display_name.clone());
                 }
             }
         }
@@ -56,11 +56,11 @@ impl TextNote {
     }
 
     pub fn name(&self) -> Option<String> {
-        if let Some(profile) = self.profile.clone() {
-            if let Some(name) = profile.metadata.name {
+        if let Some(profile) = &self.profile {
+            if let Some(name) = &profile.metadata.name {
                 if !name.is_empty() {
                     match self.display_name() {
-                        Some(display_name) if name == display_name => return None,
+                        Some(display_name) if *name == display_name => return None,
                         _ => return Some(format!("@{name}")),
                     }
                 }
@@ -86,35 +86,29 @@ impl TextNote {
         self.reposts.len()
     }
 
-    fn find_amount(&self, ev: &Event) -> Option<Tag> {
+    fn find_amount(&self, ev: &Event) -> Option<TagStandard> {
         ev.tags
-            .iter()
-            .filter(|tag| {
-                tag.kind() == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::A))
-            })
-            .next_back()
+            .filter_standardized(TagKind::SingleLetter(SingleLetterTag::lowercase(
+                Alphabet::A,
+            )))
+            .last()
             .cloned()
     }
 
-    fn find_reply_tag(&self) -> Option<Tag> {
+    fn find_reply_tag(&self) -> Option<TagStandard> {
         self.event
             .tags
-            .iter()
-            .filter(|tag| {
-                tag.kind() == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::E))
-            })
-            .next_back()
+            .filter_standardized(TagKind::SingleLetter(SingleLetterTag::lowercase(
+                Alphabet::E,
+            )))
+            .last()
             .cloned()
     }
 
     pub fn zap_amount(&self) -> u64 {
         self.zap_receipts.iter().fold(0, |acc, ev| {
-            if let Some(tag) = self.find_amount(ev) {
-                if let Some(TagStandard::Amount { millisats, .. }) = tag.as_standardized() {
-                    acc + millisats
-                } else {
-                    acc
-                }
+            if let Some(TagStandard::Amount { millisats, .. }) = self.find_amount(ev) {
+                acc + millisats
             } else {
                 acc
             }
@@ -159,14 +153,12 @@ impl Widget for TextNote {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut text = Text::default();
 
-        if let Some(tag) = self.find_reply_tag() {
-            if let Some(TagStandard::Event { event_id, .. }) = tag.as_standardized() {
-                let note1 = event_id.to_bech32().unwrap(); // Infallible
-                text.extend(Text::styled(
-                    format!("Reply to {note1}"),
-                    Style::default().fg(Color::Cyan),
-                ));
-            }
+        if let Some(TagStandard::Event { event_id, .. }) = self.find_reply_tag() {
+            let note1 = event_id.to_bech32().unwrap(); // Infallible
+            text.extend(Text::styled(
+                format!("Reply to {note1}"),
+                Style::default().fg(Color::Cyan),
+            ));
         }
 
         let display_name = self.display_name();
