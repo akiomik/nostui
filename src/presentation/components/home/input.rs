@@ -2,7 +2,7 @@
 //!
 //! Handles text input for composing new posts.
 
-use crossterm::event::KeyEvent;
+use crossterm::event::{Event, KeyEvent};
 use ratatui::{prelude::*, widgets::*};
 use tui_textarea::TextArea;
 
@@ -45,7 +45,7 @@ impl<'a> HomeInputComponent<'a> {
         frame.render_widget(Clear, area);
 
         // Set block based on reply state
-        let block = if let Some(reply_to) = &state.ui.reply_to {
+        let block = if let Some(reply_to) = state.ui.reply_target() {
             let name = self.get_reply_target_name(state, reply_to);
             Block::default()
                 .borders(Borders::ALL)
@@ -71,27 +71,11 @@ impl<'a> HomeInputComponent<'a> {
             .unwrap_or_else(|| "unknown".to_string())
     }
 
-    /// Check if currently composing
-    pub fn is_composing(state: &AppState) -> bool {
-        state.ui.is_composing()
-    }
-
-    /// Get the current content
-    pub fn content(state: &AppState) -> &str {
-        &state.ui.textarea.content
-    }
-
-    /// Check if replying to a note
-    pub fn is_replying(state: &AppState) -> bool {
-        state.ui.reply_to.is_some()
-    }
-
     /// Process key input directly on the internal TextArea
     ///
     /// This method updates the TextArea state immediately without going through
     /// the State → TextArea → State round-trip, improving input responsiveness.
     pub fn process_input(&mut self, key: KeyEvent) {
-        use crossterm::event::Event;
         self.textarea.input(Event::Key(key));
 
         // Update cached state to keep sync logic working
@@ -130,50 +114,10 @@ impl<'a> Default for HomeInputComponent<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nostr_sdk::prelude::*;
-
-    fn create_test_state() -> AppState {
-        let keys = Keys::generate();
-        AppState::new(keys.public_key())
-    }
 
     #[test]
     fn test_input_component_creation() {
         let _input = HomeInputComponent::new();
         // Component should be creatable
-    }
-
-    #[test]
-    fn test_is_composing() {
-        use crate::core::state::ui::UiMode;
-
-        let mut state = create_test_state();
-        assert!(!HomeInputComponent::is_composing(&state));
-
-        // Manually set composing state
-        state.ui.current_mode = UiMode::Composing;
-        assert!(HomeInputComponent::is_composing(&state));
-    }
-
-    #[test]
-    fn test_content() {
-        let mut state = create_test_state();
-        assert_eq!(HomeInputComponent::content(&state), "");
-
-        state.ui.textarea.content = "test content".to_string();
-        assert_eq!(HomeInputComponent::content(&state), "test content");
-    }
-
-    #[test]
-    fn test_is_replying() -> Result<()> {
-        let mut state = create_test_state();
-        assert!(!HomeInputComponent::is_replying(&state));
-
-        let keys = Keys::generate();
-        let event = EventBuilder::text_note("test").sign_with_keys(&keys)?;
-        state.ui.reply_to = Some(event);
-        assert!(HomeInputComponent::is_replying(&state));
-
-        Ok(())
     }
 }
