@@ -4,6 +4,5 @@
 //! across different components.
 
 pub mod public_key;
-pub mod scrollable_list;
 pub mod shrink_text;
 pub mod text_note;
