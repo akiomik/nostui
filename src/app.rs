@@ -199,14 +199,16 @@ impl<'a> TearsApp<'a> {
                 }
             }
             SystemMsg::ShowError(error) => {
-                self.state.system.status_message = Some(error);
+                self.state.system.set_status_message(error);
             }
             SystemMsg::KeyInput(key) => {
                 return self.handle_key_input(key);
             }
             SystemMsg::TerminalError(error) => {
                 log::error!("Terminal error: {error}");
-                self.state.system.status_message = Some(format!("Terminal error: {error}"));
+                self.state
+                    .system
+                    .set_status_message(format!("Terminal error: {error}"));
             }
             SystemMsg::Suspend => {
                 log::info!("Suspend requested");
@@ -224,8 +226,9 @@ impl<'a> TearsApp<'a> {
                 #[cfg(not(unix))]
                 {
                     log::warn!("Suspend is only supported on Unix systems");
-                    self.state.system.status_message =
-                        Some("Suspend is only supported on Unix systems".to_string());
+                    self.state
+                        .system
+                        .set_status_message("Suspend is only supported on Unix systems");
                 }
             }
         }
@@ -334,12 +337,12 @@ impl<'a> TearsApp<'a> {
             TimelineMsg::Select(index) => {
                 // Select the note and clear status message
                 self.state.timeline.select(index);
-                self.state.system.status_message = None;
+                self.state.system.clear_status_message();
             }
             TimelineMsg::Deselect => {
                 // Deselect the current note and clear status message
                 self.state.timeline.deselect();
-                self.state.system.status_message = None;
+                self.state.system.clear_status_message();
             }
             // Select the first note in the timeline
             TimelineMsg::SelectFirst => self.state.timeline.select_first(),
@@ -362,12 +365,14 @@ impl<'a> TearsApp<'a> {
                     self.state.ui.start_reply(note.clone());
 
                     // Show status message
-                    self.state.system.status_message =
-                        Some(format!("Replying to note {}", &event_id.to_hex()[..8]));
+                    self.state.system.set_status_message(format!(
+                        "Replying to note {}",
+                        &event_id.to_hex()[..8]
+                    ));
 
                     log::info!("Starting reply to event: {event_id}");
                 } else {
-                    self.state.system.status_message = Some("No note selected".to_string());
+                    self.state.system.set_status_message("No note selected");
                 }
             }
             UiMsg::CancelComposing => {
@@ -412,7 +417,7 @@ impl<'a> TearsApp<'a> {
                     let success_msg = format!("Reacted to note {}", &event_id.to_hex()[..8]);
                     self.send_signed_event(event_builder, success_msg, "Failed to sign reaction");
                 } else {
-                    self.state.system.status_message = Some("No note selected".to_string());
+                    self.state.system.set_status_message("No note selected");
                 }
             }
             UiMsg::RepostSelected => {
@@ -426,7 +431,7 @@ impl<'a> TearsApp<'a> {
                     let success_msg = format!("Reposted note {}", &event_id.to_hex()[..8]);
                     self.send_signed_event(event_builder, success_msg, "Failed to sign repost");
                 } else {
-                    self.state.system.status_message = Some("No note selected".to_string());
+                    self.state.system.set_status_message("No note selected");
                 }
             }
             UiMsg::ProcessTextAreaInput(key_event) => {
@@ -472,8 +477,8 @@ impl<'a> TearsApp<'a> {
             NostrSubscriptionMessage::Ready { sender } => {
                 log::info!("NostrEvents subscription ready");
                 self.state.nostr.command_sender = Some(sender);
-                self.state.system.is_loading = false;
-                self.state.system.status_message = Some("Connected to Nostr".to_string());
+                self.state.system.stop_loading();
+                self.state.system.set_status_message("Connected to Nostr");
             }
             NostrSubscriptionMessage::Notification(notif) => match *notif {
                 RelayPoolNotification::Event { event, .. } => {
@@ -486,24 +491,22 @@ impl<'a> TearsApp<'a> {
                 RelayPoolNotification::Shutdown => {
                     log::info!("Nostr subscription shut down");
                     self.state.nostr.command_sender = None;
-                    self.state.system.status_message = Some("Disconnected from Nostr".to_string());
+                    self.state
+                        .system
+                        .set_status_message("Disconnected from Nostr");
                 }
             },
             NostrSubscriptionMessage::Error { error } => {
                 log::error!("NostrEvents error: {error:?}");
-                self.state.system.status_message = Some(format!("Nostr error: {error:?}"));
+                self.state
+                    .system
+                    .set_status_message(format!("Nostr error: {error:?}"));
             }
         }
     }
 
     /// Process a received Nostr event
     fn process_nostr_event(&mut self, event: nostr_sdk::Event) {
-        // Receiving any Nostr event implies that initial loading has progressed
-        // Clear the loading indicator on first event reception
-        if self.state.system.is_loading {
-            self.state.system.is_loading = false;
-        }
-
         match event.kind {
             Kind::TextNote => {
                 // Add text note to timeline
@@ -519,8 +522,9 @@ impl<'a> TearsApp<'a> {
                     }
                 } else {
                     log::warn!("Failed to parse metadata for pubkey: {}", event.pubkey);
-                    self.state.system.status_message =
-                        Some("Failed to parse profile metadata".to_string());
+                    self.state
+                        .system
+                        .set_status_message("Failed to parse profile metadata");
                 }
             }
             Kind::Reaction => {
@@ -544,8 +548,9 @@ impl<'a> TearsApp<'a> {
             _ => {
                 // Unknown event types are logged but not processed
                 log::debug!("Received unknown event type: {:?}", event.kind);
-                self.state.system.status_message =
-                    Some(format!("Received unknown event type: {}", event.kind));
+                self.state
+                    .system
+                    .set_status_message(format!("Received unknown event type: {}", event.kind));
             }
         }
     }
@@ -562,12 +567,14 @@ impl<'a> TearsApp<'a> {
             match event_builder.sign_with_keys(&self.keys) {
                 Ok(event) => {
                     let _ = sender.send(NostrCommand::SendEvent { event });
-                    self.state.system.status_message = Some(success_message);
+                    self.state.system.set_status_message(success_message);
                     true
                 }
                 Err(e) => {
                     log::error!("{error_prefix}: {e}");
-                    self.state.system.status_message = Some(format!("{error_prefix}: {e}"));
+                    self.state
+                        .system
+                        .set_status_message(format!("{error_prefix}: {e}"));
                     false
                 }
             }
@@ -605,13 +612,13 @@ mod tests {
         let mut app = create_test_app();
 
         // Set a status message
-        app.state.system.status_message = Some("Test message".to_string());
+        app.state.system.set_status_message("Test message");
 
         // Select a note (index 0)
         app.handle_timeline_msg(TimelineMsg::Select(0));
 
         // Status message should be cleared
-        assert_eq!(app.state.system.status_message, None);
+        assert_eq!(app.state.system.status_message(), None);
     }
 
     #[test]
@@ -619,13 +626,13 @@ mod tests {
         let mut app = create_test_app();
 
         // Set a status message
-        app.state.system.status_message = Some("Test message".to_string());
+        app.state.system.set_status_message("Test message");
 
         // Select with invalid index (timeline is empty)
         app.handle_timeline_msg(TimelineMsg::Select(999));
 
         // Status message should be cleared
-        assert_eq!(app.state.system.status_message, None);
+        assert_eq!(app.state.system.status_message(), None);
         // Selection should be None
         assert_eq!(app.state.timeline.selected_note(), None);
     }
@@ -635,15 +642,15 @@ mod tests {
         let mut app = create_test_app();
 
         // Set a status message
-        app.state.system.status_message = Some("Test message".to_string());
+        app.state.system.set_status_message("Test message");
 
         // Scroll up
         app.handle_timeline_msg(TimelineMsg::ScrollUp);
 
         // Status message should remain
         assert_eq!(
-            app.state.system.status_message,
-            Some("Test message".to_string())
+            app.state.system.status_message(),
+            Some(&"Test message".to_string())
         );
     }
 
@@ -652,15 +659,15 @@ mod tests {
         let mut app = create_test_app();
 
         // Set a status message
-        app.state.system.status_message = Some("Test message".to_string());
+        app.state.system.set_status_message("Test message");
 
         // Scroll down
         app.handle_timeline_msg(TimelineMsg::ScrollDown);
 
         // Status message should remain
         assert_eq!(
-            app.state.system.status_message,
-            Some("Test message".to_string())
+            app.state.system.status_message(),
+            Some(&"Test message".to_string())
         );
     }
 
@@ -670,7 +677,7 @@ mod tests {
 
         // Set selection and status message
         app.state.timeline.select_first();
-        app.state.system.status_message = Some("Test message".to_string());
+        app.state.system.set_status_message("Test message");
 
         // KeyAction::Unselect should delegate to TimelineMsg::Deselect
         // We test the end result by calling TimelineMsg::Deselect directly
@@ -678,7 +685,7 @@ mod tests {
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
-        assert_eq!(app.state.system.status_message, None);
+        assert_eq!(app.state.system.status_message(), None);
     }
 
     #[test]
@@ -687,14 +694,14 @@ mod tests {
 
         // Set selection and status message
         app.state.timeline.select(5);
-        app.state.system.status_message = Some("Test message".to_string());
+        app.state.system.set_status_message("Test message");
 
         // Simulate Escape key press and execute the TimelineMsg::Deselect directly
         app.update(AppMsg::Timeline(TimelineMsg::Deselect));
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
-        assert_eq!(app.state.system.status_message, None);
+        assert_eq!(app.state.system.status_message(), None);
     }
 
     #[test]
@@ -703,14 +710,14 @@ mod tests {
 
         // Set selection and status message
         app.state.timeline.select(3);
-        app.state.system.status_message = Some("Test message".to_string());
+        app.state.system.set_status_message("Test message");
 
         // Deselect
         app.handle_timeline_msg(TimelineMsg::Deselect);
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
-        assert_eq!(app.state.system.status_message, None);
+        assert_eq!(app.state.system.status_message(), None);
     }
 
     #[test]

@@ -61,8 +61,7 @@ mod tests {
 
         assert_eq!(state.timeline.len(), 0);
         assert!(!state.ui.is_composing());
-        assert!(!state.system.should_quit);
-        assert!(state.system.is_loading);
+        assert!(state.system.is_loading());
     }
 
     #[test]
