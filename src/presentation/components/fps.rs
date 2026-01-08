@@ -1,6 +1,6 @@
 //! FPS counter component
 //!
-//! A simple component that displays the current frames per second.
+//! A simple component that displays the current ticks per second.
 //! This is a pure, stateless component that renders FPS data from AppState.
 
 use ratatui::{prelude::*, widgets::*};
@@ -38,10 +38,7 @@ impl FpsComponent {
 
         // Get FPS data from system state
         let fps_data = &state.system.fps_data;
-        let fps_text = format!(
-            "{:.2} ticks per sec (app) {:.2} frames per sec (render)",
-            fps_data.app_fps, fps_data.render_fps
-        );
+        let fps_text = format!("{:.2} ticks per sec", fps_data.app_fps);
 
         // Render as a dimmed, right-aligned title
         let block = Block::default().title_top(Line::from(fps_text.dim()).right_aligned());
@@ -60,10 +57,9 @@ mod tests {
     use super::*;
     use nostr_sdk::prelude::*;
 
-    fn create_test_state_with_fps(app_fps: f64, render_fps: f64) -> AppState {
+    fn create_test_state_with_fps(app_fps: f64) -> AppState {
         let mut state = AppState::new(Keys::generate().public_key());
         state.system.fps_data.app_fps = app_fps;
-        state.system.fps_data.render_fps = render_fps;
         state
     }
 
@@ -90,9 +86,8 @@ mod tests {
 
     #[test]
     fn test_fps_data_access() {
-        let state = create_test_state_with_fps(60.0, 120.0);
+        let state = create_test_state_with_fps(60.0);
 
         assert_eq!(state.system.fps_data.app_fps, 60.0);
-        assert_eq!(state.system.fps_data.render_fps, 120.0);
     }
 }

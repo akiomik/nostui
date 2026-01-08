@@ -10,9 +10,7 @@ pub struct SystemState {
 #[derive(Debug, Clone, Default)]
 pub struct FpsData {
     pub app_fps: f64,
-    pub render_fps: f64,
     pub app_frames: u32,
-    pub render_frames: u32,
     // Only holds computed values since Instant is not Clone
 }
 
