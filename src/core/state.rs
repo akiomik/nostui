@@ -79,8 +79,6 @@ mod tests {
         let fps_data = FpsData::default();
 
         assert_eq!(fps_data.app_fps, 0.0);
-        assert_eq!(fps_data.render_fps, 0.0);
         assert_eq!(fps_data.app_frames, 0);
-        assert_eq!(fps_data.render_frames, 0);
     }
 }
