@@ -72,7 +72,6 @@ Options:
 | `q` `Ctrl-c` `Ctrl-d` | Quit                       |
 | `home` `g`            | Scroll to top              |
 | `end` `Shift-g`       | Scroll to bottom           |
-| `Ctrl-z`              | Suspend                    |
 | `esc`                 | Unselect                   |
 | `n`                   | New text note              |
 | `Ctrl-p`              | Submit text note           |

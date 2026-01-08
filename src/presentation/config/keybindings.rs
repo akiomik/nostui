@@ -38,7 +38,6 @@ pub enum Action {
 
     // System
     Quit,
-    Suspend,
     SubmitTextNote,
 }
 

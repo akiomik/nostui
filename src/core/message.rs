@@ -35,8 +35,6 @@ pub enum SystemMsg {
     KeyInput(KeyEvent),
     /// Terminal event error
     TerminalError(String),
-    /// Suspend the application (Ctrl+Z)
-    Suspend,
 }
 
 /// Timeline messages
