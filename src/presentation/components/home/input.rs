@@ -65,8 +65,7 @@ impl<'a> HomeInputComponent<'a> {
         // Get author profile from the reply target event
         state
             .user
-            .profiles
-            .get(&reply_to.pubkey)
+            .get_profile(&reply_to.pubkey)
             .map(|profile| profile.name())
             .unwrap_or_else(|| "unknown".to_string())
     }
