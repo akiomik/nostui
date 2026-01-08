@@ -239,7 +239,7 @@ impl<'a> TearsApp<'a> {
         // properly separates OS signals from application keybindings
 
         // Mode-specific keybindings
-        match self.state.ui.current_mode {
+        match self.state.ui.current_mode() {
             UiMode::Normal => self.handle_normal_mode_key(key),
             UiMode::Composing => self.handle_composing_mode_key(key),
         }
@@ -352,18 +352,14 @@ impl<'a> TearsApp<'a> {
     /// Handle UI messages
     fn handle_ui_msg(&mut self, msg: UiMsg) -> Command<AppMsg> {
         match msg {
-            UiMsg::StartComposing => {
-                self.state.ui.current_mode = UiMode::Composing;
-                self.state.ui.reply_to = None;
-            }
+            UiMsg::StartComposing => self.state.ui.start_composing(),
             UiMsg::StartReply => {
                 // Get the selected note
                 if let Some(note) = self.state.timeline.selected_note() {
                     let event_id = note.id;
 
                     // Set reply context
-                    self.state.ui.reply_to = Some(note.clone());
-                    self.state.ui.current_mode = UiMode::Composing;
+                    self.state.ui.start_reply(note.clone());
 
                     // Show status message
                     self.state.system.status_message =
@@ -375,16 +371,15 @@ impl<'a> TearsApp<'a> {
                 }
             }
             UiMsg::CancelComposing => {
-                self.state.ui.current_mode = UiMode::Normal;
+                self.state.ui.cancel_composing();
                 self.components.borrow_mut().home.input.clear();
-                self.state.ui.reply_to = None;
             }
             UiMsg::SubmitNote => {
                 // Get content from Component's TextArea
                 let content = self.components.borrow().home.input.get_content();
 
                 // Build event with appropriate tags
-                let event_builder = if let Some(ref reply_to_event) = self.state.ui.reply_to {
+                let event_builder = if let Some(reply_to_event) = self.state.ui.reply_target() {
                     log::info!("Publishing reply: {content}");
                     // Create reply with proper NIP-10 tags
                     EventBuilder::text_note(&content)
@@ -403,9 +398,8 @@ impl<'a> TearsApp<'a> {
                 );
 
                 // Clear UI state
-                self.state.ui.current_mode = UiMode::Normal;
+                self.state.ui.cancel_composing();
                 self.components.borrow_mut().home.input.clear();
-                self.state.ui.reply_to = None;
             }
             UiMsg::ReactToSelected => {
                 // React to the selected note
@@ -873,7 +867,7 @@ mod tests {
         let mut app = create_test_app();
 
         // Start composing mode
-        app.state.ui.current_mode = UiMode::Composing;
+        app.state.ui.start_composing();
 
         // In composing mode, 'q' key should be passed to textarea, not trigger quit
         let q_key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
@@ -881,7 +875,7 @@ mod tests {
 
         // Should produce ProcessTextAreaInput command
         // The application should still be in composing mode
-        assert_eq!(app.state.ui.current_mode, UiMode::Composing);
+        assert_eq!(app.state.ui.current_mode(), UiMode::Composing);
 
         // The textarea should contain 'q' after processing
         app.update(AppMsg::Ui(UiMsg::ProcessTextAreaInput(q_key)));
@@ -893,7 +887,8 @@ mod tests {
         let mut app = create_test_app();
 
         // Start composing mode with some content
-        app.state.ui.current_mode = UiMode::Composing;
+        app.state.ui.start_composing();
+
         // Set content directly on the component (simulating user input)
         app.components
             .borrow_mut()
@@ -907,7 +902,7 @@ mod tests {
 
         // Should return to normal mode
         app.update(AppMsg::Ui(UiMsg::CancelComposing));
-        assert_eq!(app.state.ui.current_mode, UiMode::Normal);
+        assert_eq!(app.state.ui.current_mode(), UiMode::Normal);
         assert!(app.components.borrow().home.input.get_content().is_empty());
     }
 
@@ -916,7 +911,8 @@ mod tests {
         let mut app = create_test_app();
 
         // Start composing mode with some content
-        app.state.ui.current_mode = UiMode::Composing;
+        app.state.ui.start_composing();
+
         // Note: In real usage, content would be set via ProcessTextAreaInput messages
         // For this test, we're just verifying the key handling produces the right command
 
