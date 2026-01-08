@@ -12,7 +12,6 @@ use tears::subscription::time::{Message as TimerMessage, Timer};
 
 use crate::core::message::{AppMsg, NostrMsg, SystemMsg, TimelineMsg, UiMsg};
 use crate::core::state::{ui::UiMode, AppState};
-use crate::domain::fps_tracker::FpsTracker;
 use crate::domain::nostr::Profile;
 use crate::infrastructure::config::Config;
 use crate::infrastructure::subscription::nostr::{
@@ -45,8 +44,6 @@ pub struct TearsApp<'a> {
     keys: Keys,
     /// Nostr client (wrapped in Arc for sharing across subscriptions)
     nostr_client: Arc<Client>,
-    /// FPS tracker for app updates
-    app_fps_tracker: FpsTracker,
     /// Configuration (including keybindings)
     config: Config,
     /// Tick rate (Hz) for timer subscription
@@ -83,7 +80,6 @@ impl<'a> Application for TearsApp<'a> {
             components: RefCell::new(components),
             keys: flags.keys,
             nostr_client,
-            app_fps_tracker: FpsTracker::new(),
             config,
             tick_rate: flags.tick_rate,
         };
@@ -193,8 +189,7 @@ impl<'a> TearsApp<'a> {
             }
             SystemMsg::Tick => {
                 // Track app FPS based on tick events (approximately matches render FPS)
-                if let Some(fps) = self.app_fps_tracker.record_frame() {
-                    self.state.system.fps_data.app_fps = fps;
+                if let Some(fps) = self.state.fps.record_frame(None) {
                     log::debug!("App FPS: {fps:.2}");
                 }
             }

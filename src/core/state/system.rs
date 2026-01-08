@@ -1,17 +1,8 @@
 /// System-related state
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SystemState {
-    pub fps_data: FpsData,
     status_message: Option<String>,
     is_loading: bool,
-}
-
-/// FPS measurement data
-#[derive(Debug, Clone, Default)]
-pub struct FpsData {
-    pub app_fps: f64,
-    pub app_frames: u32,
-    // Only holds computed values since Instant is not Clone
 }
 
 impl SystemState {
@@ -47,7 +38,6 @@ impl SystemState {
 impl Default for SystemState {
     fn default() -> Self {
         Self {
-            fps_data: FpsData::default(),
             status_message: None,
             is_loading: true,
         }

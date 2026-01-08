@@ -37,8 +37,7 @@ impl FpsComponent {
         let fps_rect = rects[0];
 
         // Get FPS data from system state
-        let fps_data = &state.system.fps_data;
-        let fps_text = format!("{:.2} ticks per sec", fps_data.app_fps);
+        let fps_text = format!("{:.2} ticks per sec", &state.fps.app_fps());
 
         // Render as a dimmed, right-aligned title
         let block = Block::default().title_top(Line::from(fps_text.dim()).right_aligned());
@@ -55,13 +54,6 @@ impl Default for FpsComponent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nostr_sdk::prelude::*;
-
-    fn create_test_state_with_fps(app_fps: f64) -> AppState {
-        let mut state = AppState::new(Keys::generate().public_key());
-        state.system.fps_data.app_fps = app_fps;
-        state
-    }
 
     #[test]
     fn test_fps_component_creation() {
@@ -82,12 +74,5 @@ mod tests {
 
         // Since it's stateless, all instances should be equivalent
         assert_eq!(format!("{fps1:?}"), format!("{fps2:?}"));
-    }
-
-    #[test]
-    fn test_fps_data_access() {
-        let state = create_test_state_with_fps(60.0);
-
-        assert_eq!(state.system.fps_data.app_fps, 60.0);
     }
 }
