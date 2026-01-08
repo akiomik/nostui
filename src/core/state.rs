@@ -2,20 +2,22 @@ use nostr_sdk::prelude::*;
 
 use crate::infrastructure::config::Config;
 
+pub mod fps;
 pub mod nostr;
 pub mod system;
 pub mod timeline;
 pub mod ui;
 pub mod user;
 
+pub use fps::FpsState;
 pub use nostr::NostrState;
-pub use system::{FpsData, SystemState};
+pub use system::SystemState;
 pub use timeline::TimelineState;
 pub use ui::UiState;
 pub use user::UserState;
 
 /// Unified application state
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct AppState {
     pub timeline: TimelineState,
     pub ui: UiState,
@@ -23,6 +25,7 @@ pub struct AppState {
     pub system: SystemState,
     pub nostr: NostrState,
     pub config: ConfigState,
+    pub fps: FpsState,
 }
 
 /// Configuration state - holds all user-configurable settings
@@ -72,13 +75,5 @@ mod tests {
 
         assert_eq!(state.user.current_user_pubkey(), pubkey);
         assert_eq!(state.timeline.len(), 0);
-    }
-
-    #[test]
-    fn test_fps_data() {
-        let fps_data = FpsData::default();
-
-        assert_eq!(fps_data.app_fps, 0.0);
-        assert_eq!(fps_data.app_frames, 0);
     }
 }
