@@ -210,27 +210,6 @@ impl<'a> TearsApp<'a> {
                     .system
                     .set_status_message(format!("Terminal error: {error}"));
             }
-            SystemMsg::Suspend => {
-                log::info!("Suspend requested");
-                // Send SIGTSTP signal to suspend the application
-                #[cfg(unix)]
-                {
-                    use std::process::{id, Command as StdCommand};
-                    // Use kill command to send SIGTSTP to current process
-                    let pid = id();
-                    let _ = StdCommand::new("kill")
-                        .arg("-TSTP")
-                        .arg(pid.to_string())
-                        .spawn();
-                }
-                #[cfg(not(unix))]
-                {
-                    log::warn!("Suspend is only supported on Unix systems");
-                    self.state
-                        .system
-                        .set_status_message("Suspend is only supported on Unix systems");
-                }
-            }
         }
         Command::none()
     }
@@ -321,7 +300,6 @@ impl<'a> TearsApp<'a> {
 
             // System
             KeyAction::Quit => Command::message(AppMsg::System(SystemMsg::Quit)),
-            KeyAction::Suspend => Command::message(AppMsg::System(SystemMsg::Suspend)),
             KeyAction::SubmitTextNote => {
                 // Only valid in composing mode, handled separately
                 Command::none()
