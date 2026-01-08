@@ -47,15 +47,10 @@ impl StatusBarComponent {
         frame.render_widget(status_line, layout[1]);
 
         // Render status message line
-        let message_line = if state.system.is_loading {
+        let message_line = if state.system.is_loading() {
             Paragraph::new("Loading...")
         } else {
-            let message = state
-                .system
-                .status_message
-                .as_ref()
-                .cloned()
-                .unwrap_or_default();
+            let message = state.system.status_message().cloned().unwrap_or_default();
             Paragraph::new(message)
         };
         frame.render_widget(message_line, layout[2]);
@@ -71,19 +66,6 @@ impl StatusBarComponent {
         } else {
             // Fallback to shortened public key
             PublicKey::new(state.user.current_user_pubkey()).shortened()
-        }
-    }
-
-    /// Get connection status from app state
-    pub fn get_connection_status(state: &AppState) -> String {
-        // This could be extended to show network connection status
-        // For now, we derive status from loading state and message presence
-        if state.system.is_loading {
-            "Connecting...".to_string()
-        } else if state.system.status_message.is_some() {
-            "Active".to_string()
-        } else {
-            "Ready".to_string()
         }
     }
 }
@@ -151,27 +133,6 @@ mod tests {
         // Should fall back to shortened public key
         assert!(!display_name.is_empty());
         assert!(display_name.contains(":")); // Hex shortened format
-    }
-
-    #[test]
-    fn test_connection_status() {
-        let mut state = create_test_state_with_profile(false);
-
-        // Test loading state
-        state.system.is_loading = true;
-        let status = StatusBarComponent::get_connection_status(&state);
-        assert_eq!(status, "Connecting...");
-
-        // Test active state with message
-        state.system.is_loading = false;
-        state.system.status_message = Some("Connected to relay".to_string());
-        let status = StatusBarComponent::get_connection_status(&state);
-        assert_eq!(status, "Active");
-
-        // Test ready state
-        state.system.status_message = None;
-        let status = StatusBarComponent::get_connection_status(&state);
-        assert_eq!(status, "Ready");
     }
 
     #[test]
