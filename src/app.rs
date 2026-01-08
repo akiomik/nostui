@@ -514,17 +514,7 @@ impl<'a> TearsApp<'a> {
                 // Parse and store profile metadata
                 if let Ok(metadata) = Metadata::from_json(event.content.clone()) {
                     let profile = Profile::new(event.pubkey, event.created_at, metadata);
-
-                    // Only update if this is newer than existing profile
-                    let should_update = self
-                        .state
-                        .user
-                        .profiles
-                        .get(&event.pubkey)
-                        .is_none_or(|existing| profile.created_at > existing.created_at);
-
-                    if should_update {
-                        self.state.user.profiles.insert(event.pubkey, profile);
+                    if self.state.user.insert_newer_profile(profile) {
                         log::debug!("Updated profile for pubkey: {}", event.pubkey);
                     }
                 } else {

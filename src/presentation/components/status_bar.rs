@@ -65,14 +65,12 @@ impl StatusBarComponent {
     ///
     /// Pure function that computes display name based on available profile data.
     pub fn get_display_name(&self, state: &AppState) -> String {
-        let current_pubkey = state.user.current_user_pubkey;
-
         // Try to get profile for current user
-        if let Some(profile) = state.user.profiles.get(&current_pubkey) {
+        if let Some(profile) = state.user.current_user() {
             profile.name()
         } else {
             // Fallback to shortened public key
-            PublicKey::new(current_pubkey).shortened()
+            PublicKey::new(state.user.current_user_pubkey()).shortened()
         }
     }
 
@@ -87,23 +85,6 @@ impl StatusBarComponent {
         } else {
             "Ready".to_string()
         }
-    }
-
-    /// Check if current user has profile data
-    pub fn has_profile_data(state: &AppState) -> bool {
-        state
-            .user
-            .profiles
-            .contains_key(&state.user.current_user_pubkey)
-    }
-
-    /// Get profile creation timestamp if available
-    pub fn get_profile_timestamp(state: &AppState) -> Option<nostr_sdk::Timestamp> {
-        state
-            .user
-            .profiles
-            .get(&state.user.current_user_pubkey)
-            .map(|profile| profile.created_at)
     }
 }
 
@@ -128,7 +109,7 @@ mod tests {
                 .name("Test User")
                 .display_name("Test Display");
             let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
-            state.user.profiles.insert(keys.public_key(), profile);
+            state.user.insert_newer_profile(profile);
         }
 
         state
@@ -194,29 +175,6 @@ mod tests {
     }
 
     #[test]
-    fn test_has_profile_data() {
-        let state_with_profile = create_test_state_with_profile(true);
-        let state_without_profile = create_test_state_with_profile(false);
-
-        assert!(StatusBarComponent::has_profile_data(&state_with_profile));
-        assert!(!StatusBarComponent::has_profile_data(
-            &state_without_profile
-        ));
-    }
-
-    #[test]
-    fn test_get_profile_timestamp() {
-        let state_with_profile = create_test_state_with_profile(true);
-        let state_without_profile = create_test_state_with_profile(false);
-
-        let timestamp = StatusBarComponent::get_profile_timestamp(&state_with_profile);
-        assert!(timestamp.is_some());
-
-        let timestamp = StatusBarComponent::get_profile_timestamp(&state_without_profile);
-        assert!(timestamp.is_none());
-    }
-
-    #[test]
     fn test_multiple_profiles() {
         let keys1 = Keys::generate();
         let keys2 = Keys::generate();
@@ -225,12 +183,12 @@ mod tests {
         // Add profile for current user
         let metadata1 = Metadata::new().name("Current User");
         let profile1 = Profile::new(keys1.public_key(), Timestamp::now(), metadata1);
-        state.user.profiles.insert(keys1.public_key(), profile1);
+        state.user.insert_newer_profile(profile1);
 
         // Add profile for another user
         let metadata2 = Metadata::new().name("Other User");
         let profile2 = Profile::new(keys2.public_key(), Timestamp::now(), metadata2);
-        state.user.profiles.insert(keys2.public_key(), profile2);
+        state.user.insert_newer_profile(profile2);
 
         let status_bar = StatusBarComponent::new();
         let display_name = status_bar.get_display_name(&state);

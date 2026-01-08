@@ -53,7 +53,7 @@ impl HomeListComponent {
                 let event_id = event.id;
 
                 // Get author profile if available
-                let profile = state.user.profiles.get(&event.pubkey).cloned();
+                let profile = state.user.get_profile(&event.pubkey).cloned();
 
                 // Get reactions, reposts, and zap receipts for this event
                 let reactions = state.timeline.reactions_for(&event_id);

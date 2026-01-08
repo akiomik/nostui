@@ -36,10 +36,7 @@ impl AppState {
     /// Initialize AppState with the specified public key
     pub fn new(current_user_pubkey: PublicKey) -> Self {
         Self {
-            user: UserState {
-                current_user_pubkey,
-                ..Default::default()
-            },
+            user: UserState::new_with_pubkey(current_user_pubkey),
             ..Default::default()
         }
     }
@@ -47,10 +44,7 @@ impl AppState {
     /// Initialize AppState with the specified public key and config
     pub fn new_with_config(current_user_pubkey: PublicKey, config: Config) -> Self {
         Self {
-            user: UserState {
-                current_user_pubkey,
-                ..Default::default()
-            },
+            user: UserState::new_with_pubkey(current_user_pubkey),
             config: ConfigState { config },
             ..Default::default()
         }
@@ -77,7 +71,7 @@ mod tests {
         let pubkey = keys.public_key();
         let state = AppState::new(pubkey);
 
-        assert_eq!(state.user.current_user_pubkey, pubkey);
+        assert_eq!(state.user.current_user_pubkey(), pubkey);
         assert_eq!(state.timeline.len(), 0);
     }
 
