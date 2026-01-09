@@ -8,18 +8,18 @@ use crate::domain::text;
 pub struct ShrinkText<'a> {
     pub content: Cow<'a, str>,
     pub width: usize,
-    pub height: usize,
+    pub max_height: usize,
 }
 
 impl<'a> ShrinkText<'a> {
-    pub fn new<T>(content: T, width: usize, height: usize) -> Self
+    pub fn new<T>(content: T, width: usize, max_height: usize) -> Self
     where
         T: Into<Cow<'a, str>>,
     {
         Self {
             content: content.into(),
             width,
-            height,
+            max_height,
         }
     }
 }
@@ -28,7 +28,7 @@ impl<'a> From<ShrinkText<'a>> for Text<'a> {
     fn from(value: ShrinkText) -> Self {
         Text::from(text::truncate_text(
             &text::wrap_text(&value.content, value.width),
-            value.height,
+            value.max_height,
         ))
     }
 }
