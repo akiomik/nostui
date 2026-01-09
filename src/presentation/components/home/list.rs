@@ -55,6 +55,13 @@ impl HomeListComponent {
                 // Get author profile if available
                 let profile = state.user.get_profile(&event.pubkey).cloned();
 
+                // Extract p-tags and get profiles for mentioned users
+                let mentioned_profiles: Vec<_> = event
+                    .tags
+                    .public_keys()
+                    .filter_map(|pubkey| state.user.get_profile(pubkey).cloned())
+                    .collect();
+
                 // Get reactions, reposts, and zap receipts for this event
                 let reactions = state.timeline.reactions_for(&event_id);
                 let reposts = state.timeline.reposts_for(&event_id);
@@ -64,6 +71,7 @@ impl HomeListComponent {
                 let text_note = TextNote::new(
                     event.clone(),
                     profile,
+                    mentioned_profiles,
                     reactions,
                     reposts,
                     zap_receipts,

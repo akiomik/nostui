@@ -11,6 +11,7 @@ use ratatui::{prelude::*, widgets::*};
 pub struct TextNote {
     pub event: Event,
     pub profile: Option<Profile>,
+    pub mentioned_profiles: Vec<Profile>,
     pub reactions: EventSet,
     pub reposts: EventSet,
     pub zap_receipts: EventSet,
@@ -23,6 +24,7 @@ impl TextNote {
     pub fn new(
         event: Event,
         profile: Option<Profile>,
+        mentioned_profiles: Vec<Profile>,
         reactions: EventSet,
         reposts: EventSet,
         zap_receipts: EventSet,
@@ -31,6 +33,7 @@ impl TextNote {
         TextNote {
             event,
             profile,
+            mentioned_profiles,
             reactions,
             reposts,
             zap_receipts,
@@ -123,11 +126,23 @@ impl Widget for TextNote {
         let mut text = Text::default();
 
         if let Some(TagStandard::Event { event_id, .. }) = self.find_reply_tag() {
-            let note1 = event_id.to_bech32().unwrap(); // Infallible
-            text.extend(Text::styled(
-                format!("Reply to {note1}"),
+            let mentioned_names: Vec<String> = self
+                .mentioned_profiles
+                .iter()
+                .map(|profile| profile.name())
+                .collect();
+
+            let reply_text = if mentioned_names.is_empty() {
+                let note1 = event_id.to_bech32().unwrap(); // Infallible
+                format!("Reply to {note1}")
+            } else {
+                format!("Reply to {}", mentioned_names.join(", "))
+            };
+
+            text.extend(Text::from(Line::styled(
+                reply_text,
                 Style::default().fg(Color::Cyan),
-            ));
+            )));
         }
 
         let name_with_handle =
@@ -211,6 +226,7 @@ mod tests {
         let note = TextNote::new(
             event,
             None,
+            vec![],
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
@@ -228,6 +244,7 @@ mod tests {
         let text_note = TextNote::new(
             event,
             None,
+            vec![],
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
@@ -257,6 +274,7 @@ mod tests {
         let text_note = TextNote::new(
             event,
             None,
+            vec![],
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
@@ -280,6 +298,7 @@ mod tests {
         let text_note = TextNote::new(
             event,
             None,
+            vec![],
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
@@ -309,6 +328,7 @@ mod tests {
         let text_note = TextNote::new(
             event,
             None,
+            vec![],
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
@@ -333,6 +353,7 @@ mod tests {
         let text_note = TextNote::new(
             event,
             None,
+            vec![],
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
@@ -364,6 +385,7 @@ mod tests {
         let text_note = TextNote::new(
             event,
             None,
+            vec![],
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
@@ -398,6 +420,7 @@ mod tests {
         let mut text_note_normal = TextNote::new(
             event.clone(),
             None, // No profile - will show hex
+            vec![],
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
@@ -409,6 +432,7 @@ mod tests {
         let mut text_note_highlighted = TextNote::new(
             event,
             None,
+            vec![],
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
@@ -499,6 +523,7 @@ mod tests {
         let mut text_note_normal = TextNote::new(
             event.clone(),
             Some(profile.clone()),
+            vec![],
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
@@ -509,6 +534,7 @@ mod tests {
         let mut text_note_highlighted = TextNote::new(
             event,
             Some(profile),
+            vec![],
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
@@ -545,6 +571,143 @@ mod tests {
         assert!(
             style_differences > 0,
             "Expected style differences for named user highlighting, but found none. This indicates a regression."
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_reply_with_mentioned_profiles() -> Result<()> {
+        // Create an event with reply tag and p-tags
+        let keys = Keys::generate();
+        let mentioned_key1 = Keys::generate();
+        let mentioned_key2 = Keys::generate();
+        let replied_event_id = EventId::all_zeros();
+
+        let event = EventBuilder::text_note("Reply to multiple people")
+            .tag(Tag::event(replied_event_id))
+            .tag(Tag::public_key(mentioned_key1.public_key()))
+            .tag(Tag::public_key(mentioned_key2.public_key()))
+            .sign_with_keys(&keys)?;
+
+        // Create profiles for mentioned users
+        let profile1 = Profile::new(
+            mentioned_key1.public_key(),
+            Timestamp::now(),
+            Metadata::new().display_name("Alice"),
+        );
+        let profile2 = Profile::new(
+            mentioned_key2.public_key(),
+            Timestamp::now(),
+            Metadata::new().name("bob"),
+        );
+
+        let mentioned_profiles = vec![profile1, profile2];
+
+        let text_note = TextNote::new(
+            event,
+            None,
+            mentioned_profiles,
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            Padding::new(0, 0, 0, 0),
+        );
+
+        let area = Rect::new(0, 0, 80, 20);
+        let mut buffer = Buffer::empty(area);
+
+        text_note.render(area, &mut buffer);
+
+        // Verify the reply text contains mentioned user names
+        let rendered_text: String = buffer.content().iter().map(|cell| cell.symbol()).collect();
+
+        assert!(
+            rendered_text.contains("Reply to Alice, @bob"),
+            "Expected 'Reply to Alice, @bob' in rendered output, got: {rendered_text}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_reply_without_mentioned_profiles() -> Result<()> {
+        // Create an event with reply tag but no profiles available
+        let keys = Keys::generate();
+        let replied_event_id = EventId::all_zeros();
+
+        let event = EventBuilder::text_note("Reply without profiles")
+            .tag(Tag::event(replied_event_id))
+            .sign_with_keys(&keys)?;
+
+        let text_note = TextNote::new(
+            event,
+            None,
+            vec![], // No mentioned profiles
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            Padding::new(0, 0, 0, 0),
+        );
+
+        let area = Rect::new(0, 0, 80, 20);
+        let mut buffer = Buffer::empty(area);
+
+        text_note.render(area, &mut buffer);
+
+        // Verify the reply text falls back to note1 format when no profiles available
+        let rendered_text: String = buffer.content().iter().map(|cell| cell.symbol()).collect();
+
+        assert!(
+            rendered_text.contains("Reply to note1"),
+            "Expected 'Reply to note1...' in rendered output when no profiles available"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_reply_with_single_mentioned_profile() -> Result<()> {
+        // Create an event with reply tag and one p-tag
+        let keys = Keys::generate();
+        let mentioned_key = Keys::generate();
+        let replied_event_id = EventId::all_zeros();
+
+        let event = EventBuilder::text_note("Reply to one person")
+            .tag(Tag::event(replied_event_id))
+            .tag(Tag::public_key(mentioned_key.public_key()))
+            .sign_with_keys(&keys)?;
+
+        // Create profile for mentioned user with only name (no display_name)
+        let profile = Profile::new(
+            mentioned_key.public_key(),
+            Timestamp::now(),
+            Metadata::new().name("charlie"),
+        );
+
+        let mentioned_profiles = vec![profile];
+
+        let text_note = TextNote::new(
+            event,
+            None,
+            mentioned_profiles,
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            Padding::new(0, 0, 0, 0),
+        );
+
+        let area = Rect::new(0, 0, 80, 20);
+        let mut buffer = Buffer::empty(area);
+
+        text_note.render(area, &mut buffer);
+
+        // Verify the reply text contains the mentioned user's handle
+        let rendered_text: String = buffer.content().iter().map(|cell| cell.symbol()).collect();
+
+        assert!(
+            rendered_text.contains("Reply to @charlie"),
+            "Expected 'Reply to @charlie' in rendered output, got: {rendered_text}"
         );
 
         Ok(())
