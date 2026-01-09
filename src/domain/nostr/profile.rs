@@ -1,7 +1,5 @@
 use nostr_sdk::prelude::*;
 
-use crate::domain::text::shorten_hex;
-
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Profile {
     pub pubkey: PublicKey,
@@ -18,16 +16,34 @@ impl Profile {
         }
     }
 
+    pub fn display_name(&self) -> Option<&String> {
+        if let Some(name) = &self.metadata.display_name {
+            if !name.is_empty() {
+                return Some(name);
+            }
+        }
+
+        None
+    }
+
+    pub fn handle(&self) -> Option<String> {
+        if let Some(name) = &self.metadata.name {
+            if !name.is_empty() {
+                return Some(format!("@{name}"));
+            }
+        }
+
+        None
+    }
+
     pub fn name(&self) -> String {
-        match (
-            self.metadata.display_name.clone(),
-            self.metadata.name.clone(),
-            self.pubkey.to_bech32(),
-        ) {
-            (Some(display_name), _, _) if !display_name.is_empty() => display_name,
-            (_, Some(name), _) if !name.is_empty() => format!("@{name}"),
-            (_, _, Ok(npub)) => npub,
-            _ => shorten_hex(&self.pubkey.to_string()),
+        if let Some(name) = self.display_name() {
+            name.clone()
+        } else if let Some(handle) = self.handle() {
+            handle
+        } else {
+            let Ok(npub) = self.pubkey.to_bech32();
+            npub
         }
     }
 }
@@ -36,6 +52,8 @@ impl Profile {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+    use rstest::*;
+    use std::str::FromStr;
 
     #[test]
     fn test_profile_new() {
@@ -49,6 +67,44 @@ mod tests {
         assert_eq!(profile.pubkey, pubkey);
         assert_eq!(profile.created_at, created_at);
         assert_eq!(profile.metadata, metadata);
+    }
+
+    #[rstest]
+    #[case(Metadata::new(), None)]
+    #[case(Metadata::new().name("foo"), None)]
+    #[case(Metadata::new().display_name("foo"), Some(&String::from("foo")))]
+    #[case(Metadata::new().display_name(""), None)]
+    #[case(Metadata::new().display_name("").name(""), None)]
+    #[case(Metadata::new().display_name("").name("hoge"), None)]
+    fn test_display_name(
+        #[case] metadata: Metadata,
+        #[case] expected: Option<&String>,
+    ) -> Result<()> {
+        let key = nostr_sdk::PublicKey::from_str(
+            "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
+        )?;
+        let profile = Profile::new(key, Timestamp::now(), metadata);
+
+        assert_eq!(profile.display_name(), expected);
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(Metadata::new(), None)]
+    #[case(Metadata::new().name("foo"), Some("@foo".to_owned()))]
+    #[case(Metadata::new().display_name("foo"), None)]
+    #[case(Metadata::new().name(""), None)]
+    #[case(Metadata::new().name("foo").display_name("foo"), Some("@foo".to_owned()))]
+    fn test_name(#[case] metadata: Metadata, #[case] expected: Option<String>) -> Result<()> {
+        let key = nostr_sdk::PublicKey::from_str(
+            "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
+        )?;
+        let profile = Profile::new(key, Timestamp::now(), metadata);
+
+        assert_eq!(profile.handle(), expected);
+
+        Ok(())
     }
 
     #[test]
