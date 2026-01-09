@@ -1,6 +1,6 @@
 use crate::domain::collections::EventSet;
 use crate::domain::nostr::Profile;
-use crate::presentation::widgets::{public_key::PublicKey, shrink_text::ShrinkText};
+use crate::presentation::widgets::{name_with_handle::NameWithHandle, shrink_text::ShrinkText};
 use chrono::{DateTime, Local};
 use nostr_sdk::nostr::{Alphabet, SingleLetterTag, TagKind, TagStandard};
 use nostr_sdk::prelude::*;
@@ -41,33 +41,6 @@ impl TextNote {
             highlight: false,
             top_truncated_height: None,
         }
-    }
-
-    pub fn display_name(&self) -> Option<String> {
-        if let Some(profile) = &self.profile {
-            if let Some(display_name) = &profile.metadata.display_name {
-                if !display_name.is_empty() {
-                    return Some(display_name.clone());
-                }
-            }
-        }
-
-        None
-    }
-
-    pub fn name(&self) -> Option<String> {
-        if let Some(profile) = &self.profile {
-            if let Some(name) = &profile.metadata.name {
-                if !name.is_empty() {
-                    match self.display_name() {
-                        Some(display_name) if *name == display_name => return None,
-                        _ => return Some(format!("@{name}")),
-                    }
-                }
-            }
-        }
-
-        None
     }
 
     pub fn created_at(&self) -> String {
@@ -161,37 +134,9 @@ impl Widget for TextNote {
             ));
         }
 
-        let display_name = self.display_name();
-        let name = self.name();
-
-        let display_name_style = if self.highlight {
-            Style::default().bold().reversed()
-        } else {
-            Style::default().bold()
-        };
-
-        let name_style = if display_name.is_none() && self.highlight {
-            Style::default().italic().reversed()
-        } else {
-            Style::default().italic().fg(Color::Gray)
-        };
-
-        let name_line: Text = match (display_name, name) {
-            (Some(display_name), Some(name)) => Line::from(vec![
-                Span::styled(display_name, display_name_style),
-                Span::raw(" "),
-                Span::styled(name, name_style),
-            ])
-            .into(),
-            (Some(display_name), _) => Span::styled(display_name, display_name_style).into(),
-            (_, Some(name)) => Span::styled(name, name_style).into(),
-            (_, _) => Span::styled(
-                PublicKey::new(self.event.pubkey).shortened(),
-                display_name_style,
-            )
-            .into(),
-        };
-        text.extend::<Text>(name_line);
+        let name_with_handle =
+            NameWithHandle::new(self.event.pubkey, &self.profile, self.highlight);
+        text.extend::<Text>(name_with_handle.into());
 
         let content: Text = ShrinkText::new(
             self.event.content.clone(),
@@ -242,8 +187,6 @@ impl Widget for TextNote {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use nostr_sdk::JsonUtil;
     use pretty_assertions::assert_eq;
     use rstest::*;
@@ -275,81 +218,6 @@ mod tests {
     #[fixture]
     fn padding() -> Padding {
         Padding::new(0, 0, 0, 0)
-    }
-
-    #[rstest]
-    #[case(None, None)]
-    #[case(Some(Metadata::new()), None)]
-    #[case(Some(Metadata::new().name("foo")), None)]
-    #[case(Some(Metadata::new().display_name("foo")), Some(String::from("foo")))]
-    #[case(Some(Metadata::new().display_name("")), None)]
-    #[case(Some(Metadata::new().display_name("").name("")), None)]
-    #[case(Some(Metadata::new().display_name("").name("hoge")), None)]
-    fn test_display_name(
-        #[case] metadata: Option<Metadata>,
-        #[case] expected: Option<String>,
-        event: Event,
-        area: Rect,
-        padding: Padding,
-    ) -> Result<()> {
-        let profile = metadata
-            .map(|metadata| {
-                nostr_sdk::PublicKey::from_str(
-                    "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
-                )
-                .map(|key| Profile::new(key, Timestamp::now(), metadata))
-            })
-            .transpose()?;
-
-        let note = TextNote::new(
-            event,
-            profile,
-            EventSet::new(),
-            EventSet::new(),
-            EventSet::new(),
-            area,
-            padding,
-        );
-        assert_eq!(note.display_name(), expected);
-
-        Ok(())
-    }
-
-    #[rstest]
-    #[case(None, None)]
-    #[case(Some(Metadata::new()), None)]
-    #[case(Some(Metadata::new().name("foo")), Some(String::from("@foo")))]
-    #[case(Some(Metadata::new().display_name("foo")), None)]
-    #[case(Some(Metadata::new().name("")), None)]
-    #[case(Some(Metadata::new().name("foo").display_name("foo")), None)]
-    fn test_name(
-        #[case] metadata: Option<Metadata>,
-        #[case] expected: Option<String>,
-        event: Event,
-        area: Rect,
-        padding: Padding,
-    ) -> Result<()> {
-        let profile = metadata
-            .map(|metadata| {
-                nostr_sdk::PublicKey::from_str(
-                    "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
-                )
-                .map(|key| Profile::new(key, Timestamp::now(), metadata))
-            })
-            .transpose()?;
-
-        let note = TextNote::new(
-            event,
-            profile,
-            EventSet::new(),
-            EventSet::new(),
-            EventSet::new(),
-            area,
-            padding,
-        );
-        assert_eq!(note.name(), expected);
-
-        Ok(())
     }
 
     #[rstest]
@@ -402,10 +270,34 @@ mod tests {
         text_note_highlighted.highlight = true;
 
         // Verify no profile exists (will show hex)
-        assert_eq!(text_note_normal.display_name(), None);
-        assert_eq!(text_note_normal.name(), None);
-        assert_eq!(text_note_highlighted.display_name(), None);
-        assert_eq!(text_note_highlighted.name(), None);
+        assert_eq!(
+            text_note_normal
+                .profile
+                .as_ref()
+                .and_then(|profile| profile.display_name()),
+            None
+        );
+        assert_eq!(
+            text_note_normal
+                .profile
+                .as_ref()
+                .and_then(|profile| profile.handle()),
+            None
+        );
+        assert_eq!(
+            text_note_highlighted
+                .profile
+                .as_ref()
+                .and_then(|profile| profile.display_name()),
+            None
+        );
+        assert_eq!(
+            text_note_highlighted
+                .profile
+                .as_ref()
+                .and_then(|profile| profile.handle()),
+            None
+        );
 
         // Render both and verify style differences
         let mut buffer_normal = Buffer::empty(area);
@@ -480,8 +372,16 @@ mod tests {
         text_note_highlighted.highlight = true;
 
         // Verify profile exists (will show name)
-        assert!(text_note_normal.display_name().is_some());
-        assert!(text_note_highlighted.display_name().is_some());
+        assert!(text_note_normal
+            .profile
+            .as_ref()
+            .and_then(|profile| profile.display_name())
+            .is_some());
+        assert!(text_note_highlighted
+            .profile
+            .as_ref()
+            .and_then(|profile| profile.handle())
+            .is_some());
 
         // Render and verify highlighting still works for named users
         let mut buffer_normal = Buffer::empty(area);
