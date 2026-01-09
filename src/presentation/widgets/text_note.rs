@@ -14,7 +14,6 @@ pub struct TextNote {
     pub reactions: EventSet,
     pub reposts: EventSet,
     pub zap_receipts: EventSet,
-    pub area: Rect,
     pub padding: Padding, // Only use to calc width/height
     pub highlight: bool,
     pub top_truncated_height: Option<usize>,
@@ -27,7 +26,6 @@ impl TextNote {
         reactions: EventSet,
         reposts: EventSet,
         zap_receipts: EventSet,
-        area: Rect,
         padding: Padding,
     ) -> Self {
         TextNote {
@@ -36,7 +34,6 @@ impl TextNote {
             reactions,
             reposts,
             zap_receipts,
-            area,
             padding,
             highlight: false,
             top_truncated_height: None,
@@ -88,26 +85,17 @@ impl TextNote {
         })
     }
 
-    fn content_width(&self) -> u16 {
-        self.area
+    pub fn calculate_height(&self, area: &Rect) -> u16 {
+        let width = area
             .width
-            .saturating_sub(self.padding.left + self.padding.right)
-    }
-
-    fn content_height(&self) -> u16 {
+            .saturating_sub(self.padding.left + self.padding.right);
         // NOTE: 5 = name + content + created_at + stats + separator
-        self.area
+        let height = area
             .height
-            .saturating_sub(self.padding.top + self.padding.bottom + 5)
-    }
+            .saturating_sub(self.padding.top + self.padding.bottom + 5);
 
-    pub fn calculate_height(&self) -> u16 {
-        let content: Text = ShrinkText::new(
-            self.event.content.clone(),
-            self.content_width() as usize,
-            self.content_height() as usize,
-        )
-        .into();
+        let content: Text =
+            ShrinkText::new(self.event.content.clone(), width as usize, height as usize).into();
 
         let height = if self.find_reply_tag().is_some() {
             // NOTE: 5 = annotation + name + created_at + stats + separator
@@ -139,9 +127,13 @@ impl Widget for TextNote {
         text.extend::<Text>(name_with_handle.into());
 
         let content: Text = ShrinkText::new(
+            // format!("area: {area} self.area: {}", self.area),
             self.event.content.clone(),
-            self.content_width() as usize,
-            self.content_height() as usize,
+            area.width as usize,
+            // self.content_width() as usize,
+            area.height as usize,
+            // self.content_height() as usize,
+            // 1,
         )
         .into();
         text.extend(content);
@@ -159,7 +151,7 @@ impl Widget for TextNote {
         text.extend::<Text>(stats.into());
 
         text.extend(Text::styled(
-            "─".repeat(self.content_width() as usize),
+            "─".repeat(area.width as usize),
             Style::default().fg(Color::Gray),
         ));
 
@@ -218,7 +210,6 @@ mod tests {
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
-            Rect::new(0, 0, 0, 0),
             Padding::new(0, 0, 0, 0),
         );
         assert_eq!(note.created_at(), "15:42:47");
@@ -242,7 +233,6 @@ mod tests {
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
-            area,
             Padding::new(1, 1, 1, 1),
         );
         text_note_normal.highlight = false;
@@ -254,7 +244,6 @@ mod tests {
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
-            area,
             Padding::new(1, 1, 1, 1),
         );
         text_note_highlighted.highlight = true;
@@ -345,7 +334,6 @@ mod tests {
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
-            area,
             Padding::new(1, 1, 1, 1),
         );
         text_note_normal.highlight = false;
@@ -356,7 +344,6 @@ mod tests {
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
-            area,
             Padding::new(1, 1, 1, 1),
         );
         text_note_highlighted.highlight = true;

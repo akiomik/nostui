@@ -67,11 +67,10 @@ impl HomeListComponent {
                     reactions,
                     reposts,
                     zap_receipts,
-                    area,
                     padding,
                 );
 
-                let height = text_note.calculate_height();
+                let height = text_note.calculate_height(&area);
                 (text_note, height)
             })
             .collect();
