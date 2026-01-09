@@ -15,17 +15,24 @@ pub fn wrap_text(s: &str, width: usize) -> String {
     })
 }
 
-pub fn truncate_text(s: &str, height: usize) -> String {
-    if height == 0 {
+pub fn truncate_text(s: &str, max_height: usize) -> String {
+    if max_height == 0 {
         return String::from("");
     }
 
     let lines: Vec<&str> = s.lines().collect();
-    if lines.len() > height {
-        if height == 1 {
+    if lines.len() > max_height {
+        if max_height == 1 {
             String::from("...")
         } else {
-            format!("{}\n...", lines[..height - 1].join("\n")) // TODO: support windows
+            #[cfg(windows)]
+            {
+                format!("{}\r\n...", lines[..max_height - 1].join("\r\n"))
+            }
+            #[cfg(not(windows))]
+            {
+                format!("{}\n...", lines[..max_height - 1].join("\n"))
+            }
         }
     } else {
         s.to_string()
