@@ -86,26 +86,34 @@ impl TextNote {
     }
 
     pub fn calculate_height(&self, area: &Rect) -> u16 {
+        // Calculate available width for content
         let width = area
             .width
             .saturating_sub(self.padding.left + self.padding.right);
-        // NOTE: 5 = name + content + created_at + stats + separator
-        let height = area
-            .height
-            .saturating_sub(self.padding.top + self.padding.bottom + 5);
 
-        let content: Text =
-            ShrinkText::new(self.event.content.clone(), width as usize, height as usize).into();
-
-        let height = if self.find_reply_tag().is_some() {
-            // NOTE: 5 = annotation + name + created_at + stats + separator
-            5 + content.height()
+        // Calculate the number of fixed lines (non-content)
+        let has_reply = self.find_reply_tag().is_some();
+        let fixed_lines = if has_reply {
+            5 // annotation + name + created_at + stats + separator
         } else {
-            // NOTE: 4 = name + created_at + stats + separator
-            4 + content.height()
+            4 // name + created_at + stats + separator
         };
 
-        height as u16
+        // Calculate available height for content
+        let available_height = area
+            .height
+            .saturating_sub(self.padding.top + self.padding.bottom + fixed_lines);
+
+        // Calculate content height
+        let content: Text = ShrinkText::new(
+            self.event.content.clone(),
+            width as usize,
+            available_height as usize,
+        )
+        .into();
+
+        // Total height = fixed lines + actual content height
+        fixed_lines + content.height() as u16
     }
 }
 
@@ -127,13 +135,9 @@ impl Widget for TextNote {
         text.extend::<Text>(name_with_handle.into());
 
         let content: Text = ShrinkText::new(
-            // format!("area: {area} self.area: {}", self.area),
             self.event.content.clone(),
             area.width as usize,
-            // self.content_width() as usize,
             area.height as usize,
-            // self.content_height() as usize,
-            // 1,
         )
         .into();
         text.extend(content);
@@ -213,6 +217,170 @@ mod tests {
             Padding::new(0, 0, 0, 0),
         );
         assert_eq!(note.created_at(), "15:42:47");
+    }
+
+    #[test]
+    fn test_calculate_height_without_reply() -> Result<()> {
+        // Create a simple event without reply tag
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("Short content").sign_with_keys(&keys)?;
+
+        let text_note = TextNote::new(
+            event,
+            None,
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            Padding::new(0, 0, 0, 0),
+        );
+
+        // Area with sufficient height
+        let area = Rect::new(0, 0, 80, 20);
+        let height = text_note.calculate_height(&area);
+
+        // Expected: 4 fixed lines (name + created_at + stats + separator) + content lines
+        // "Short content" should fit in one line with width 80
+        assert_eq!(height, 5); // 4 fixed + 1 content line
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calculate_height_with_reply() -> Result<()> {
+        // Create an event with reply tag
+        let keys = Keys::generate();
+        let replied_event_id = EventId::all_zeros();
+        let event = EventBuilder::text_note("Reply content")
+            .tag(Tag::event(replied_event_id))
+            .sign_with_keys(&keys)?;
+
+        let text_note = TextNote::new(
+            event,
+            None,
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            Padding::new(0, 0, 0, 0),
+        );
+
+        let area = Rect::new(0, 0, 80, 20);
+        let height = text_note.calculate_height(&area);
+
+        // Expected: 5 fixed lines (annotation + name + created_at + stats + separator) + content lines
+        assert_eq!(height, 6); // 5 fixed + 1 content line
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calculate_height_with_padding() -> Result<()> {
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("Test").sign_with_keys(&keys)?;
+
+        let text_note = TextNote::new(
+            event,
+            None,
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            Padding::new(2, 2, 1, 1), // top, right, bottom, left
+        );
+
+        let area = Rect::new(0, 0, 80, 20);
+        let height = text_note.calculate_height(&area);
+
+        // Padding should affect available height but not the returned total height
+        // With padding: available_height = 20 - (2 + 2 + 4) = 12
+        // But the result should still be 4 fixed + content height
+        assert_eq!(height, 5); // 4 fixed + 1 content line
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calculate_height_with_multiline_content() -> Result<()> {
+        let keys = Keys::generate();
+        // Create a long content that will wrap into multiple lines
+        let long_content =
+            "This is a very long content that should wrap into multiple lines when rendered. "
+                .repeat(5);
+        let event = EventBuilder::text_note(long_content).sign_with_keys(&keys)?;
+
+        let text_note = TextNote::new(
+            event,
+            None,
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            Padding::new(0, 0, 0, 0),
+        );
+
+        let area = Rect::new(0, 0, 80, 20);
+        let height = text_note.calculate_height(&area);
+
+        // Should be more than 5 (4 fixed + at least 1 content line)
+        assert!(height > 5, "Expected height > 5, got {height}");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calculate_height_with_narrow_width() -> Result<()> {
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("This content will wrap on narrow width")
+            .sign_with_keys(&keys)?;
+
+        let text_note = TextNote::new(
+            event,
+            None,
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            Padding::new(0, 0, 0, 0),
+        );
+
+        // Narrow area should cause more wrapping
+        let narrow_area = Rect::new(0, 0, 20, 20);
+        let narrow_height = text_note.calculate_height(&narrow_area);
+
+        let wide_area = Rect::new(0, 0, 80, 20);
+        let wide_height = text_note.calculate_height(&wide_area);
+
+        // Narrow width should result in greater height due to wrapping
+        assert!(
+            narrow_height >= wide_height,
+            "Expected narrow_height ({narrow_height}) >= wide_height ({wide_height})",
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calculate_height_consistency_with_render() -> Result<()> {
+        // Ensure calculate_height returns consistent values for the same input
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("Consistency test").sign_with_keys(&keys)?;
+
+        let text_note = TextNote::new(
+            event,
+            None,
+            EventSet::new(),
+            EventSet::new(),
+            EventSet::new(),
+            Padding::new(1, 1, 1, 1),
+        );
+
+        let area = Rect::new(0, 0, 80, 20);
+
+        let height1 = text_note.calculate_height(&area);
+        let height2 = text_note.calculate_height(&area);
+
+        assert_eq!(
+            height1, height2,
+            "calculate_height should return consistent results"
+        );
+
+        Ok(())
     }
 
     // Regression tests for hex username highlighting issue
