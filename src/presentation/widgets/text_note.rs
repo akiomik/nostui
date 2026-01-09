@@ -1,11 +1,11 @@
 use crate::domain::collections::EventSet;
 use crate::domain::nostr::Profile;
+use crate::presentation::widgets::text_note_stats::TextNoteStats;
 use crate::presentation::widgets::{name_with_handle::NameWithHandle, shrink_text::ShrinkText};
 use chrono::{DateTime, Local};
 use nostr_sdk::nostr::{Alphabet, SingleLetterTag, TagKind, TagStandard};
 use nostr_sdk::prelude::*;
 use ratatui::{prelude::*, widgets::*};
-use thousands::Separable;
 
 #[derive(Clone, Debug)]
 pub struct TextNote {
@@ -150,23 +150,13 @@ impl Widget for TextNote {
             self.created_at(),
             Style::default().fg(Color::Gray),
         ));
-        let line = Line::from(vec![
-            Span::styled(
-                format!("{}Likes", self.reactions_count().separate_with_commas()),
-                Style::default().fg(Color::LightRed),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                format!("{}Reposts", self.reposts_count().separate_with_commas()),
-                Style::default().fg(Color::LightGreen),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                format!("{}Sats", (self.zap_amount() / 1000).separate_with_commas()),
-                Style::default().fg(Color::LightYellow),
-            ),
-        ]);
-        text.extend::<Text>(line.into());
+
+        let stats = TextNoteStats::new(
+            self.reactions_count(),
+            self.reposts_count(),
+            self.zap_amount() / 1000,
+        );
+        text.extend::<Text>(stats.into());
 
         text.extend(Text::styled(
             "─".repeat(self.content_width() as usize),
