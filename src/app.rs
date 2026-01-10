@@ -371,7 +371,10 @@ impl<'a> TearsApp<'a> {
                 // Send the signed event
                 self.send_signed_event(
                     event_builder,
-                    "Note published".to_string(),
+                    format!(
+                        "[Posted] {}",
+                        content.lines().collect::<Vec<&str>>().join(" ")
+                    ),
                     "Failed to sign event",
                 );
 
@@ -383,11 +386,11 @@ impl<'a> TearsApp<'a> {
                 // React to the selected note
                 if let Some(note) = self.state.timeline.selected_note() {
                     let event_id = note.id;
-
-                    log::info!("Reacting to event: {event_id}");
+                    let Ok(note1) = event_id.to_bech32();
+                    log::info!("Reacting to event: {note1}");
 
                     let event_builder = EventBuilder::reaction(note, "+");
-                    let success_msg = format!("Reacted to note {}", &event_id.to_hex()[..8]);
+                    let success_msg = format!("[Reacted] note {note1}");
                     self.send_signed_event(event_builder, success_msg, "Failed to sign reaction");
                 } else {
                     self.state.system.set_status_message("No note selected");
@@ -397,11 +400,11 @@ impl<'a> TearsApp<'a> {
                 // Repost the selected note
                 if let Some(note) = self.state.timeline.selected_note() {
                     let event_id = note.id;
-
-                    log::info!("Reposting event: {event_id}");
+                    let Ok(note1) = event_id.to_bech32();
+                    log::info!("Reposting event: {note1}");
 
                     let event_builder = EventBuilder::repost(note, None);
-                    let success_msg = format!("Reposted note {}", &event_id.to_hex()[..8]);
+                    let success_msg = format!("[Reposted] {note1}");
                     self.send_signed_event(event_builder, success_msg, "Failed to sign repost");
                 } else {
                     self.state.system.set_status_message("No note selected");
