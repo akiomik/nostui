@@ -2,10 +2,13 @@
 //!
 //! Displays the timeline list of events.
 
+use nostr_sdk::ToBech32;
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::{ListBuilder, ListView};
 
-use crate::{core::state::AppState, presentation::widgets::text_note::TextNote};
+use crate::{
+    core::state::AppState, domain::text::shorten_npub, presentation::widgets::text_note::TextNote,
+};
 
 /// Home list component
 ///
@@ -56,10 +59,19 @@ impl HomeListComponent {
                 let profile = state.user.get_profile(&event.pubkey).cloned();
 
                 // Extract p-tags and get profiles for mentioned users
-                let mentioned_profiles: Vec<_> = event
+                let mentioned_names: Vec<_> = event
                     .tags
                     .public_keys()
-                    .filter_map(|pubkey| state.user.get_profile(pubkey).cloned())
+                    .map(|pubkey| {
+                        state
+                            .user
+                            .get_profile(pubkey)
+                            .map(|p| p.name())
+                            .unwrap_or_else(|| {
+                                let Ok(npub) = pubkey.to_bech32();
+                                shorten_npub(npub)
+                            })
+                    })
                     .collect();
 
                 // Get reactions, reposts, and zap receipts for this event
@@ -71,7 +83,7 @@ impl HomeListComponent {
                 let text_note = TextNote::new(
                     event.clone(),
                     profile,
-                    mentioned_profiles,
+                    mentioned_names,
                     reactions,
                     reposts,
                     zap_receipts,

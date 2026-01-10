@@ -11,7 +11,7 @@ use ratatui::{prelude::*, widgets::*};
 pub struct TextNote {
     pub event: Event,
     pub profile: Option<Profile>,
-    pub mentioned_profiles: Vec<Profile>,
+    pub mentioned_names: Vec<String>,
     pub reactions: EventSet,
     pub reposts: EventSet,
     pub zap_receipts: EventSet,
@@ -24,7 +24,7 @@ impl TextNote {
     pub fn new(
         event: Event,
         profile: Option<Profile>,
-        mentioned_profiles: Vec<Profile>,
+        mentioned_names: Vec<String>,
         reactions: EventSet,
         reposts: EventSet,
         zap_receipts: EventSet,
@@ -33,7 +33,7 @@ impl TextNote {
         TextNote {
             event,
             profile,
-            mentioned_profiles,
+            mentioned_names,
             reactions,
             reposts,
             zap_receipts,
@@ -129,17 +129,11 @@ impl Widget for TextNote {
         let mut text = Text::default();
 
         if let Some(TagStandard::Event { event_id, .. }) = self.find_reply_tag() {
-            let mentioned_names: Vec<String> = self
-                .mentioned_profiles
-                .iter()
-                .map(|profile| profile.name())
-                .collect();
-
-            let reply_text = if mentioned_names.is_empty() {
+            let reply_text = if self.mentioned_names.is_empty() {
                 let note1 = event_id.to_bech32().unwrap(); // Infallible
                 format!("Reply to {note1}")
             } else {
-                format!("Reply to {}", mentioned_names.join(", "))
+                format!("Reply to {}", self.mentioned_names.join(", "))
             };
 
             text.extend(Text::from(Line::styled(
@@ -596,25 +590,12 @@ mod tests {
             .tag(Tag::public_key(mentioned_key1.public_key()))
             .tag(Tag::public_key(mentioned_key2.public_key()))
             .sign_with_keys(&keys)?;
-
-        // Create profiles for mentioned users
-        let profile1 = Profile::new(
-            mentioned_key1.public_key(),
-            Timestamp::now(),
-            Metadata::new().display_name("Alice"),
-        );
-        let profile2 = Profile::new(
-            mentioned_key2.public_key(),
-            Timestamp::now(),
-            Metadata::new().name("bob"),
-        );
-
-        let mentioned_profiles = vec![profile1, profile2];
+        let mentioned_names = vec!["Alice".to_owned(), "@bob".to_owned()];
 
         let text_note = TextNote::new(
             event,
             None,
-            mentioned_profiles,
+            mentioned_names,
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
@@ -684,20 +665,12 @@ mod tests {
             .tag(Tag::event(replied_event_id))
             .tag(Tag::public_key(mentioned_key.public_key()))
             .sign_with_keys(&keys)?;
-
-        // Create profile for mentioned user with only name (no display_name)
-        let profile = Profile::new(
-            mentioned_key.public_key(),
-            Timestamp::now(),
-            Metadata::new().name("charlie"),
-        );
-
-        let mentioned_profiles = vec![profile];
+        let mentioned_names = vec!["@charlie".to_owned()];
 
         let text_note = TextNote::new(
             event,
             None,
-            mentioned_profiles,
+            mentioned_names,
             EventSet::new(),
             EventSet::new(),
             EventSet::new(),
