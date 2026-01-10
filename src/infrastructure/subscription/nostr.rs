@@ -7,9 +7,16 @@ use futures::{
 };
 use nostr_sdk::prelude::*;
 use tears::{SubscriptionId, SubscriptionSource};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, RwLock};
 
 const DEFAULT_CONTACT_LIST_TIMEOUT_SECS: u64 = 10;
+const DEFAULT_TIMELINE_LIMIT: usize = 50;
+const TIMELINE_KINDS: [Kind; 4] = [
+    Kind::TextNote,
+    Kind::Repost,
+    Kind::Reaction,
+    Kind::ZapReceipt,
+];
 
 /// Commands that can be sent to the Nostr subscription
 #[derive(Debug, Clone)]
@@ -20,6 +27,8 @@ pub enum NostrCommand {
     AddRelay { url: String },
     /// Remove a relay
     RemoveRelay { url: String },
+    /// Load more timeline events before the specified timestamp
+    LoadMoreTimeline { until: Timestamp },
     /// Shutdown the subscription and disconnect from all relays
     Shutdown,
 }
@@ -53,6 +62,9 @@ pub enum Message {
 #[derive(Debug, Clone)]
 pub struct NostrEvents {
     client: Arc<Client>,
+    /// Cached contact list (following) fetched during initialization
+    /// Shared across all instances via Arc<RwLock<>>
+    contact_list: Arc<RwLock<Option<Vec<PublicKey>>>>,
 }
 
 impl NostrEvents {
@@ -74,30 +86,44 @@ impl NostrEvents {
     /// ```
     #[must_use]
     pub fn new(client: Arc<Client>) -> Self {
-        Self { client }
+        Self {
+            client,
+            contact_list: Arc::new(RwLock::new(None)),
+        }
     }
 
     /// Initialize timeline subscription by fetching contact list and subscribing to filters
-    async fn initialize_timeline(client: &Client) -> broadcast::Receiver<RelayPoolNotification> {
+    /// Also caches the contact list for future use (e.g., loading more events)
+    async fn initialize_timeline(
+        client: &Client,
+        contact_list_cache: Arc<RwLock<Option<Vec<PublicKey>>>>,
+    ) -> broadcast::Receiver<RelayPoolNotification> {
         match client
             .get_contact_list_public_keys(Duration::from_secs(DEFAULT_CONTACT_LIST_TIMEOUT_SECS))
             .await
         {
             Ok(followings) => {
-                let timeline_filter = Filter::new()
+                // Cache the contact list for future use
+                {
+                    let mut cache = contact_list_cache.write().await;
+                    *cache = Some(followings.clone());
+                }
+
+                let timeline_backward_filter = Filter::new()
                     .authors(followings.clone())
-                    .kinds([
-                        Kind::TextNote,
-                        Kind::Repost,
-                        Kind::Reaction,
-                        Kind::ZapReceipt,
-                    ])
-                    .since(Timestamp::now() - Duration::new(60 * 5, 0)); // 5min
+                    .kinds(TIMELINE_KINDS)
+                    .until(Timestamp::now())
+                    .limit(DEFAULT_TIMELINE_LIMIT);
+                let timeline_forward_filter = Filter::new()
+                    .authors(followings.clone())
+                    .kinds(TIMELINE_KINDS)
+                    .since(Timestamp::now());
                 let profile_filter = Filter::new().authors(followings).kinds([Kind::Metadata]);
 
                 // Subscribe to both timeline and profile data concurrently
                 let _ = tokio::try_join!(
-                    client.subscribe(timeline_filter, None),
+                    client.subscribe(timeline_backward_filter, None),
+                    client.subscribe(timeline_forward_filter, None),
                     client.subscribe(profile_filter, None)
                 );
 
@@ -114,6 +140,7 @@ impl NostrEvents {
     async fn handle_command(
         cmd: NostrCommand,
         client: &Client,
+        contact_list_cache: Arc<RwLock<Option<Vec<PublicKey>>>>,
         msg_tx: &mpsc::UnboundedSender<Message>,
     ) {
         match cmd {
@@ -153,6 +180,28 @@ impl NostrEvents {
                     });
                 }
             }
+            NostrCommand::LoadMoreTimeline { until } => {
+                // Load more timeline events before the specified timestamp
+                // Use cached contact list from initialization
+                let followings = {
+                    let cache = contact_list_cache.read().await;
+                    match cache.as_ref() {
+                        Some(list) => list.clone(),
+                        None => {
+                            log::warn!("Contact list not cached, cannot load more events");
+                            return;
+                        }
+                    }
+                };
+
+                let filter = Filter::new()
+                    .authors(followings)
+                    .kinds(TIMELINE_KINDS)
+                    .until(until)
+                    .limit(DEFAULT_TIMELINE_LIMIT);
+
+                let _ = client.subscribe(filter, None).await;
+            }
             NostrCommand::Shutdown => {
                 // Shutdown is handled in the main loop
             }
@@ -162,11 +211,13 @@ impl NostrEvents {
     /// Main subscription loop that processes notifications and commands
     async fn run_subscription_loop(
         client: Client,
+        contact_list_cache: Arc<RwLock<Option<Vec<PublicKey>>>>,
         msg_tx: mpsc::UnboundedSender<Message>,
         mut cmd_rx: mpsc::UnboundedReceiver<NostrCommand>,
     ) {
         // Initialize timeline subscription
-        let mut notifications = Self::initialize_timeline(&client).await;
+        let mut notifications =
+            Self::initialize_timeline(&client, Arc::clone(&contact_list_cache)).await;
 
         loop {
             tokio::select! {
@@ -194,7 +245,7 @@ impl NostrEvents {
                             break;
                         }
                         Some(cmd) => {
-                            Self::handle_command(cmd, &client, &msg_tx).await;
+                            Self::handle_command(cmd, &client, Arc::clone(&contact_list_cache), &msg_tx).await;
                         }
                         None => {
                             // Command channel closed, exit loop
@@ -216,6 +267,7 @@ impl SubscriptionSource for NostrEvents {
 
         // Clone the Arc, not the Client itself
         let client = Arc::clone(&self.client);
+        let contact_list_cache = Arc::clone(&self.contact_list);
 
         tokio::spawn(async move {
             // Send Ready message with command sender
@@ -226,7 +278,8 @@ impl SubscriptionSource for NostrEvents {
 
             // Run the main subscription loop
             // Dereference Arc to get &Client for the function call
-            Self::run_subscription_loop((*client).clone(), msg_tx, cmd_rx).await;
+            Self::run_subscription_loop((*client).clone(), contact_list_cache, msg_tx, cmd_rx)
+                .await;
         });
 
         stream::unfold(msg_rx, |mut rx| async move {

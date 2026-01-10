@@ -304,23 +304,37 @@ impl<'a> TearsApp<'a> {
 
     /// Handle timeline messages
     fn handle_timeline_msg(&mut self, msg: TimelineMsg) -> Command<AppMsg> {
+        if self.state.system.is_loading() {
+            return Command::none();
+        }
+
+        //  Clear status message
+        self.state.system.clear_status_message();
+
         match msg {
             TimelineMsg::ScrollUp => self.state.timeline.scroll_up(),
-            TimelineMsg::ScrollDown => self.state.timeline.scroll_down(),
-            TimelineMsg::Select(index) => {
-                // Select the note and clear status message
-                self.state.timeline.select(index);
-                self.state.system.clear_status_message();
+            TimelineMsg::ScrollDown => {
+                // Check if at bottom before scrolling
+                let was_at_bottom = self.state.timeline.is_at_bottom();
+                self.state.timeline.scroll_down();
+
+                // If we were at bottom and still at bottom (can't scroll further), load more
+                if was_at_bottom && self.state.timeline.is_at_bottom() {
+                    return Command::message(AppMsg::Timeline(TimelineMsg::LoadMore));
+                }
             }
-            TimelineMsg::Deselect => {
-                // Deselect the current note and clear status message
-                self.state.timeline.deselect();
-                self.state.system.clear_status_message();
-            }
+            // Select the note
+            TimelineMsg::Select(index) => self.state.timeline.select(index),
+            // Deselect the current note
+            TimelineMsg::Deselect => self.state.timeline.deselect(),
             // Select the first note in the timeline
             TimelineMsg::SelectFirst => self.state.timeline.select_first(),
             // Select the last note in the timeline
             TimelineMsg::SelectLast => self.state.timeline.select_last(),
+            // Load more older events
+            TimelineMsg::LoadMore => {
+                return self.load_more_timeline_events();
+            }
         }
         Command::none()
     }
@@ -453,12 +467,13 @@ impl<'a> TearsApp<'a> {
             NostrSubscriptionMessage::Ready { sender } => {
                 log::info!("NostrEvents subscription ready");
                 self.state.nostr.command_sender = Some(sender);
+                self.state.system.set_status_message("[Home] Loading...");
             }
             NostrSubscriptionMessage::Notification(notif) => match *notif {
                 RelayPoolNotification::Event { event, .. } => {
                     log::debug!("Received event from relay: {}", event.id);
                     if self.state.system.is_loading() {
-                        self.state.system.set_status_message("Connected to Nostr");
+                        self.state.system.set_status_message("[Home] Loaded");
                         self.state.system.stop_loading();
                     }
                     self.process_nostr_event(*event);
@@ -488,8 +503,16 @@ impl<'a> TearsApp<'a> {
         match event.kind {
             Kind::TextNote => {
                 // Add text note to timeline
-                self.state.timeline.add_note(event);
-                log::debug!("Added text note to timeline");
+                let (was_inserted, loading_completed) = self.state.timeline.add_note(event);
+
+                if was_inserted {
+                    log::debug!("Added text note to timeline");
+                }
+
+                if loading_completed {
+                    log::info!("Load more completed");
+                    self.state.system.set_status_message("[Home] Loaded more");
+                }
             }
             Kind::Metadata => {
                 // Parse and store profile metadata
@@ -564,6 +587,41 @@ impl<'a> TearsApp<'a> {
             false
         }
     }
+
+    /// Load more older timeline events
+    fn load_more_timeline_events(&mut self) -> Command<AppMsg> {
+        log::info!("Loading more timeline events");
+
+        // Get the oldest timestamp from the timeline
+        let until_timestamp = match self.state.timeline.oldest_timestamp() {
+            Some(ts) => ts,
+            None => {
+                log::warn!("No oldest timestamp available, cannot load more");
+                return Command::none();
+            }
+        };
+
+        // Get the command sender
+        if let Some(sender) = &self.state.nostr.command_sender {
+            // Mark loading started
+            self.state.timeline.start_loading_more();
+
+            // Send command to NostrEvents to load more timeline events
+            let _ = sender.send(NostrCommand::LoadMoreTimeline {
+                until: until_timestamp,
+            });
+            self.state
+                .system
+                .set_status_message("[Home] Loading more ...");
+        } else {
+            log::warn!("No Nostr command sender available");
+            self.state
+                .system
+                .set_status_message("Not connected to Nostr");
+        }
+
+        Command::none()
+    }
 }
 
 #[cfg(test)]
@@ -592,6 +650,7 @@ mod tests {
     #[test]
     fn test_timeline_select_clears_status_message() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Set a status message
         app.state.system.set_status_message("Test message");
@@ -606,6 +665,7 @@ mod tests {
     #[test]
     fn test_timeline_select_invalid_index_clears_status_message() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Set a status message
         app.state.system.set_status_message("Test message");
@@ -620,8 +680,9 @@ mod tests {
     }
 
     #[test]
-    fn test_scroll_up_does_not_clear_status_message() {
+    fn test_scroll_up_clears_status_message() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Set a status message
         app.state.system.set_status_message("Test message");
@@ -629,16 +690,14 @@ mod tests {
         // Scroll up
         app.handle_timeline_msg(TimelineMsg::ScrollUp);
 
-        // Status message should remain
-        assert_eq!(
-            app.state.system.status_message(),
-            Some(&"Test message".to_string())
-        );
+        // Status message should be cleared
+        assert_eq!(app.state.system.status_message(), None);
     }
 
     #[test]
-    fn test_scroll_down_does_not_clear_status_message() {
+    fn test_scroll_down_clears_status_message() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Set a status message
         app.state.system.set_status_message("Test message");
@@ -646,16 +705,14 @@ mod tests {
         // Scroll down
         app.handle_timeline_msg(TimelineMsg::ScrollDown);
 
-        // Status message should remain
-        assert_eq!(
-            app.state.system.status_message(),
-            Some(&"Test message".to_string())
-        );
+        // Status message should be cleared
+        assert_eq!(app.state.system.status_message(), None);
     }
 
     #[test]
     fn test_unselect_action_delegates_to_deselect() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Set selection and status message
         app.state.timeline.select_first();
@@ -671,8 +728,27 @@ mod tests {
     }
 
     #[test]
+    fn test_timeline_message_should_be_ignored_when_loading() {
+        let mut app = create_test_app();
+        app.state.system.start_loading();
+
+        // Set selection and status message
+        app.state.system.set_status_message("Test message");
+
+        // Execute the TimelineMsg::Deselect
+        app.update(AppMsg::Timeline(TimelineMsg::Deselect));
+
+        // Status message should remain
+        assert_eq!(
+            app.state.system.status_message(),
+            Some(&"Test message".to_owned())
+        );
+    }
+
+    #[test]
     fn test_escape_key_triggers_deselect() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Set selection and status message
         app.state.timeline.select(5);
@@ -689,6 +765,7 @@ mod tests {
     #[test]
     fn test_timeline_deselect_clears_status_message() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Set selection and status message
         app.state.timeline.select(3);
@@ -705,6 +782,7 @@ mod tests {
     #[test]
     fn test_select_first_with_empty_timeline() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Timeline is empty
         assert!(app.state.timeline.is_empty());
@@ -719,6 +797,7 @@ mod tests {
     #[test]
     fn test_select_first_with_notes() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Add some notes to timeline
         let keys = Keys::generate();
@@ -744,6 +823,7 @@ mod tests {
     #[test]
     fn test_select_last_with_empty_timeline() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Timeline is empty
         assert!(app.state.timeline.is_empty());
@@ -758,6 +838,7 @@ mod tests {
     #[test]
     fn test_select_last_with_notes() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Add some notes to timeline
         let keys = Keys::generate();
@@ -784,6 +865,7 @@ mod tests {
     #[test]
     fn test_scroll_to_top_delegates() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Add some notes
         let keys = Keys::generate();
@@ -802,6 +884,7 @@ mod tests {
     #[test]
     fn test_scroll_to_bottom_delegates() {
         let mut app = create_test_app();
+        app.state.system.stop_loading();
 
         // Add some notes
         let keys = Keys::generate();

@@ -47,12 +47,8 @@ impl StatusBarComponent {
         frame.render_widget(status_line, layout[1]);
 
         // Render status message line
-        let message_line = if state.system.is_loading() {
-            Paragraph::new("Loading...")
-        } else {
-            let message = state.system.status_message().cloned().unwrap_or_default();
-            Paragraph::new(message)
-        };
+        let message = state.system.status_message().cloned().unwrap_or_default();
+        let message_line = Paragraph::new(message);
         frame.render_widget(message_line, layout[2]);
     }
 

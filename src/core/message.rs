@@ -52,6 +52,8 @@ pub enum TimelineMsg {
     SelectFirst,
     /// Select the last note in the timeline
     SelectLast,
+    /// Load more older events when reaching bottom
+    LoadMore,
 }
 
 /// UI messages
