@@ -544,7 +544,11 @@ impl<'a> TearsApp<'a> {
         if let Some(sender) = &self.state.nostr.command_sender {
             match event_builder.sign_with_keys(&self.keys) {
                 Ok(event) => {
-                    let _ = sender.send(NostrCommand::SendEvent { event });
+                    let _ = sender.send(NostrCommand::SendEvent {
+                        event: event.clone(),
+                    });
+                    // Process the sent event locally for optimistic update
+                    self.process_nostr_event(event);
                     self.state.system.set_status_message(success_message);
                     true
                 }
