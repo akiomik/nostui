@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use color_eyre::eyre::Result;
 use config::ConfigError;
+use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 
 use crate::utils;
@@ -28,7 +29,7 @@ pub struct Config {
     #[serde(default)]
     pub styles: styles::Styles,
     #[serde(default)]
-    pub privatekey: String,
+    pub privatekey: SecretString,
     #[serde(default)]
     pub relays: Vec<String>,
     #[serde(default)]
@@ -106,7 +107,7 @@ impl Config {
                 .or_insert_with(|| *style);
         }
 
-        if cfg.privatekey.is_empty() {
+        if cfg.privatekey.expose_secret().is_empty() {
             return Err(ConfigError::NotFound(String::from("privatekey")));
         }
 
@@ -131,7 +132,7 @@ mod tests {
                 // If config loads successfully, it should have required fields
                 println!("Config loaded successfully in test environment");
                 assert!(
-                    !cfg.privatekey.is_empty(),
+                    !cfg.privatekey.expose_secret().is_empty(),
                     "privatekey should not be empty if config loads"
                 );
                 assert!(!cfg.relays.is_empty(), "relays should not be empty");

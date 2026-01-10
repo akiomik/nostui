@@ -3,6 +3,7 @@
 use clap::Parser;
 use color_eyre::eyre::Result;
 use nostr_sdk::prelude::*;
+use secrecy::ExposeSecret;
 use tears::Runtime;
 
 use nostui::{
@@ -21,13 +22,8 @@ async fn tokio_main() -> Result<()> {
     let config = Config::new()?;
 
     // Load user keys from config
-    let keys = if config.privatekey.is_empty() {
-        return Err(color_eyre::eyre::eyre!("Private key not found in config"));
-    } else {
-        Keys::parse(&config.privatekey)?
-    };
+    let keys = Keys::parse(config.privatekey.expose_secret())?;
     let pubkey = keys.public_key();
-
     log::info!("Starting nostui with public key: {pubkey}");
 
     // Create Nostr client
