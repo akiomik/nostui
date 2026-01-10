@@ -453,12 +453,14 @@ impl<'a> TearsApp<'a> {
             NostrSubscriptionMessage::Ready { sender } => {
                 log::info!("NostrEvents subscription ready");
                 self.state.nostr.command_sender = Some(sender);
-                self.state.system.stop_loading();
-                self.state.system.set_status_message("Connected to Nostr");
             }
             NostrSubscriptionMessage::Notification(notif) => match *notif {
                 RelayPoolNotification::Event { event, .. } => {
                     log::debug!("Received event from relay: {}", event.id);
+                    if self.state.system.is_loading() {
+                        self.state.system.set_status_message("Connected to Nostr");
+                        self.state.system.stop_loading();
+                    }
                     self.process_nostr_event(*event);
                 }
                 RelayPoolNotification::Message { message, .. } => {
