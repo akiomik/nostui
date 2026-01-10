@@ -12,6 +12,10 @@ pub struct TimelineState {
     reposts: HashMap<EventId, EventSet>,
     zap_receipts: HashMap<EventId, EventSet>,
     selected_index: Option<usize>,
+    /// Timestamp of the oldest note in the timeline (for pagination)
+    oldest_timestamp: Option<Timestamp>,
+    /// Timestamp when LoadMore was triggered (for tracking completion)
+    loading_more_since: Option<Timestamp>,
 }
 
 impl Default for TimelineState {
@@ -22,6 +26,8 @@ impl Default for TimelineState {
             reposts: HashMap::new(),
             zap_receipts: HashMap::new(),
             selected_index: None,
+            oldest_timestamp: None,
+            loading_more_since: None,
         }
     }
 }
@@ -71,11 +77,37 @@ impl TimelineState {
     }
 
     /// Add a text note to the timeline
-    /// Returns `true` if the event was newly inserted, `false` if it already existed
+    ///
+    /// Returns a tuple of (was_inserted, loading_completed)
+    /// - was_inserted: `true` if the event was newly inserted, `false` if it already existed
+    /// - loading_completed: `true` if this event completed a LoadMore operation
+    ///
     /// Automatically adjusts the selected index if a new item is inserted before it
-    pub fn add_note(&mut self, event: Event) -> bool {
-        let wrapper = EventWrapper::new(event);
+    pub fn add_note(&mut self, event: Event) -> (bool, bool) {
+        let wrapper = EventWrapper::new(event.clone());
         let insert_result = self.notes.find_or_insert(Reverse(wrapper));
+
+        // Check if this event completes a LoadMore operation
+        let loading_completed = if let Some(loading_since) = self.loading_more_since {
+            if event.created_at < loading_since {
+                // An older event arrived - loading completed
+                self.loading_more_since = None;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        // Update oldest timestamp if this event is older
+        if let Some(oldest) = self.oldest_timestamp {
+            if event.created_at < oldest {
+                self.oldest_timestamp = Some(event.created_at);
+            }
+        } else {
+            self.oldest_timestamp = Some(event.created_at);
+        }
 
         // Adjust selected index if a new item was inserted before it
         // This prevents the selection from shifting when new events arrive
@@ -85,9 +117,9 @@ impl TimelineState {
                     self.selected_index = Some(selected + 1);
                 }
             }
-            true
+            (true, loading_completed)
         } else {
-            false
+            (false, loading_completed)
         }
     }
 
@@ -196,6 +228,30 @@ impl TimelineState {
     /// Clear the current selection
     pub fn deselect(&mut self) {
         self.selected_index = None;
+    }
+
+    /// Get the oldest timestamp in the timeline (for pagination)
+    pub fn oldest_timestamp(&self) -> Option<Timestamp> {
+        self.oldest_timestamp
+    }
+
+    /// Check if the user has scrolled to the bottom of the timeline
+    pub fn is_at_bottom(&self) -> bool {
+        if self.is_empty() {
+            return false;
+        }
+        let max_index = self.len().saturating_sub(1);
+        self.selected_index == Some(max_index)
+    }
+
+    /// Mark that a LoadMore operation has started
+    pub fn start_loading_more(&mut self) {
+        self.loading_more_since = self.oldest_timestamp;
+    }
+
+    /// Check if currently loading more events
+    pub fn is_loading_more(&self) -> bool {
+        self.loading_more_since.is_some()
     }
 }
 
@@ -427,12 +483,16 @@ mod tests {
             .custom_created_at(Timestamp::from(1000))
             .sign_with_keys(&keys)?;
 
-        // First insert should return true
-        assert!(state.add_note(event1.clone()));
+        // First insert should return (true, false)
+        let (was_inserted, loading_completed) = state.add_note(event1.clone());
+        assert!(was_inserted);
+        assert!(!loading_completed);
         assert_eq!(state.len(), 1);
 
-        // Duplicate insert should return false
-        assert!(!state.add_note(event1));
+        // Duplicate insert should return (false, false)
+        let (was_inserted, loading_completed) = state.add_note(event1);
+        assert!(!was_inserted);
+        assert!(!loading_completed);
         assert_eq!(state.len(), 1);
 
         Ok(())
@@ -800,6 +860,196 @@ mod tests {
         assert_eq!(state.reactions_for(&target_id).len(), 1);
         assert_eq!(state.reposts_for(&target_id).len(), 1);
         assert_eq!(state.zap_receipts_for(&target_id).len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_oldest_timestamp_tracking() -> Result<()> {
+        let mut state = TimelineState::default();
+        let keys = Keys::generate();
+
+        // Initially no oldest timestamp
+        assert_eq!(state.oldest_timestamp(), None);
+
+        // Add first note
+        let event1 = EventBuilder::text_note("note 1")
+            .custom_created_at(Timestamp::from(2000))
+            .sign_with_keys(&keys)?;
+        state.add_note(event1);
+        assert_eq!(state.oldest_timestamp(), Some(Timestamp::from(2000)));
+
+        // Add older note
+        let event2 = EventBuilder::text_note("note 2")
+            .custom_created_at(Timestamp::from(1000))
+            .sign_with_keys(&keys)?;
+        state.add_note(event2);
+        assert_eq!(state.oldest_timestamp(), Some(Timestamp::from(1000)));
+
+        // Add newer note (should not change oldest)
+        let event3 = EventBuilder::text_note("note 3")
+            .custom_created_at(Timestamp::from(3000))
+            .sign_with_keys(&keys)?;
+        state.add_note(event3);
+        assert_eq!(state.oldest_timestamp(), Some(Timestamp::from(1000)));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_at_bottom() -> Result<()> {
+        let mut state = TimelineState::default();
+
+        // Empty timeline - not at bottom
+        assert!(!state.is_at_bottom());
+
+        let keys = Keys::generate();
+
+        // Add notes
+        let event1 = EventBuilder::text_note("note 1")
+            .custom_created_at(Timestamp::from(1000))
+            .sign_with_keys(&keys)?;
+        state.add_note(event1);
+
+        let event2 = EventBuilder::text_note("note 2")
+            .custom_created_at(Timestamp::from(2000))
+            .sign_with_keys(&keys)?;
+        state.add_note(event2);
+
+        let event3 = EventBuilder::text_note("note 3")
+            .custom_created_at(Timestamp::from(3000))
+            .sign_with_keys(&keys)?;
+        state.add_note(event3);
+
+        // No selection - not at bottom
+        assert!(!state.is_at_bottom());
+
+        // Select first - not at bottom
+        state.select_first();
+        assert!(!state.is_at_bottom());
+
+        // Select last - at bottom
+        state.select_last();
+        assert!(state.is_at_bottom());
+
+        // Select middle - not at bottom
+        state.select(1);
+        assert!(!state.is_at_bottom());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_scroll_down_at_bottom() -> Result<()> {
+        let mut state = TimelineState::default();
+        let keys = Keys::generate();
+
+        // Add notes
+        for i in 1..=3 {
+            let event = EventBuilder::text_note(format!("note {i}"))
+                .custom_created_at(Timestamp::from(i * 1000))
+                .sign_with_keys(&keys)?;
+            state.add_note(event);
+        }
+
+        // Select last
+        state.select_last();
+        assert!(state.is_at_bottom());
+
+        // Try to scroll down (should stay at bottom)
+        state.scroll_down();
+        assert!(state.is_at_bottom());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_loading_more_tracking() -> Result<()> {
+        let mut state = TimelineState::default();
+        let keys = Keys::generate();
+
+        // Add initial notes
+        let event1 = EventBuilder::text_note("note 1")
+            .custom_created_at(Timestamp::from(1000))
+            .sign_with_keys(&keys)?;
+        state.add_note(event1);
+
+        let event2 = EventBuilder::text_note("note 2")
+            .custom_created_at(Timestamp::from(2000))
+            .sign_with_keys(&keys)?;
+        state.add_note(event2);
+
+        // Not loading initially
+        assert!(!state.is_loading_more());
+
+        // Start loading more
+        state.start_loading_more();
+        assert!(state.is_loading_more());
+        assert_eq!(state.loading_more_since, Some(Timestamp::from(1000)));
+
+        // Add a newer event (should not complete loading)
+        let event3 = EventBuilder::text_note("note 3")
+            .custom_created_at(Timestamp::from(3000))
+            .sign_with_keys(&keys)?;
+        let (_, loading_completed) = state.add_note(event3);
+        assert!(!loading_completed);
+        assert!(state.is_loading_more());
+
+        // Add an older event (should complete loading)
+        let event0 = EventBuilder::text_note("note 0")
+            .custom_created_at(Timestamp::from(500))
+            .sign_with_keys(&keys)?;
+        let (was_inserted, loading_completed) = state.add_note(event0);
+        assert!(was_inserted);
+        assert!(loading_completed);
+        assert!(!state.is_loading_more());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_loading_completion_with_exact_boundary() -> Result<()> {
+        let mut state = TimelineState::default();
+        let keys = Keys::generate();
+
+        // Add initial note
+        let event1 = EventBuilder::text_note("note 1")
+            .custom_created_at(Timestamp::from(1000))
+            .sign_with_keys(&keys)?;
+        state.add_note(event1);
+
+        // Start loading more (loading_more_since = 1000)
+        state.start_loading_more();
+
+        // Add event with same timestamp (should NOT complete loading)
+        let event_same = EventBuilder::text_note("note same")
+            .custom_created_at(Timestamp::from(1000))
+            .sign_with_keys(&keys)?;
+        let (_, loading_completed) = state.add_note(event_same);
+        assert!(!loading_completed);
+        assert!(state.is_loading_more());
+
+        // Add event with older timestamp (should complete loading)
+        let event_older = EventBuilder::text_note("note older")
+            .custom_created_at(Timestamp::from(999))
+            .sign_with_keys(&keys)?;
+        let (_, loading_completed) = state.add_note(event_older);
+        assert!(loading_completed);
+        assert!(!state.is_loading_more());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_loading_more_without_events() -> Result<()> {
+        let mut state = TimelineState::default();
+
+        // Empty timeline
+        assert!(!state.is_loading_more());
+
+        // Try to start loading more (should set to None since oldest_timestamp is None)
+        state.start_loading_more();
+        assert!(!state.is_loading_more());
 
         Ok(())
     }
