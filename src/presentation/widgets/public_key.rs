@@ -1,6 +1,7 @@
+use nostr_sdk::ToBech32;
 use ratatui::prelude::*;
 
-use crate::domain::text::shorten_hex;
+use crate::domain::text::shorten_npub;
 
 pub struct PublicKey {
     key: nostr_sdk::PublicKey,
@@ -12,7 +13,8 @@ impl PublicKey {
     }
 
     pub fn shortened(&self) -> String {
-        shorten_hex(&self.key.to_string())
+        let Ok(npub) = self.key.to_bech32();
+        shorten_npub(npub)
     }
 }
 
@@ -51,7 +53,7 @@ mod tests {
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )?;
         let publickey = PublicKey::new(key);
-        assert_eq!(publickey.shortened(), "4d39c:aae25");
+        assert_eq!(publickey.shortened(), "f5uuy:mjmug");
 
         Ok(())
     }
@@ -65,7 +67,7 @@ mod tests {
 
         let text: Text = publickey.into();
 
-        assert_eq!(text.to_string(), "4d39c:aae25");
+        assert_eq!(text.to_string(), "f5uuy:mjmug");
 
         Ok(())
     }
@@ -94,7 +96,7 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert_eq!(rendered_text, "4d39c:aae25");
+        assert_eq!(rendered_text, "f5uuy:mjmug");
 
         Ok(())
     }

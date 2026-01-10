@@ -39,12 +39,17 @@ pub fn truncate_text(s: &str, max_height: usize) -> String {
     }
 }
 
-pub fn shorten_hex(hex: &str) -> String {
-    let pubkey = hex.to_string();
-    let len = pubkey.len();
-    let heading = &pubkey[0..5];
-    let trail = &pubkey[(len - 5)..len];
-    format!("{heading}:{trail}")
+pub fn shorten_npub(npub: impl Into<String>) -> String {
+    let npub_string: String = npub.into();
+    match npub_string.strip_prefix("npub1") {
+        Some(stripped) => {
+            let len = stripped.len();
+            let heading = &stripped[0..5];
+            let trail = &stripped[(len - 5)..len];
+            format!("{heading}:{trail}")
+        }
+        None => npub_string,
+    }
 }
 
 #[cfg(test)]
@@ -131,10 +136,15 @@ mod tests {
     }
 
     #[test]
-    fn test_shortened() {
+    fn test_shorten_npub() {
         assert_eq!(
-            shorten_hex("4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25"),
-            "4d39c:aae25"
+            shorten_npub("npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug"),
+            "f5uuy:mjmug"
+        );
+
+        assert_eq!(
+            shorten_npub("4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25"),
+            "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25"
         );
     }
 }
