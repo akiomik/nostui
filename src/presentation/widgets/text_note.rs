@@ -68,14 +68,17 @@ impl TextNote {
             .cloned()
     }
 
-    fn find_reply_tag(&self) -> Option<TagStandard> {
+    fn find_reply_tag(&self) -> Option<&TagStandard> {
         self.event
             .tags
             .filter_standardized(TagKind::SingleLetter(SingleLetterTag::lowercase(
                 Alphabet::E,
             )))
             .last()
-            .cloned()
+    }
+
+    fn find_client_tag(&self) -> Option<&TagStandard> {
+        self.event.tags.find_standardized(TagKind::Client)
     }
 
     pub fn zap_amount(&self) -> u64 {
@@ -157,10 +160,14 @@ impl Widget for TextNote {
         .into();
         text.extend(content);
 
-        text.extend(Text::styled(
-            self.created_at(),
+        let meta = match self.find_client_tag() {
+            Some(TagStandard::Client { name, .. }) => format!("{} | via {name}", self.created_at()),
+            _ => self.created_at(),
+        };
+        text.extend(Text::from(Line::styled(
+            meta,
             Style::default().fg(Color::Gray),
-        ));
+        )));
 
         let stats = TextNoteStats::new(
             self.reactions_count(),
