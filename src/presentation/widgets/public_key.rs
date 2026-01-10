@@ -1,6 +1,7 @@
+use nostr_sdk::prelude::*;
 use ratatui::prelude::*;
 
-use crate::domain::text::shorten_hex;
+use crate::domain::text::shorten_npub;
 
 pub struct PublicKey {
     key: nostr_sdk::PublicKey,
@@ -12,7 +13,8 @@ impl PublicKey {
     }
 
     pub fn shortened(&self) -> String {
-        shorten_hex(&self.key.to_string())
+        let Ok(npub) = self.key.to_bech32();
+        shorten_npub(npub)
     }
 }
 

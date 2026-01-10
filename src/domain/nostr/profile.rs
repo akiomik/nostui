@@ -1,5 +1,7 @@
 use nostr_sdk::prelude::*;
 
+use crate::domain::text::shorten_npub;
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Profile {
     pub pubkey: PublicKey,
@@ -43,7 +45,7 @@ impl Profile {
             handle
         } else {
             let Ok(npub) = self.pubkey.to_bech32();
-            npub
+            shorten_npub(npub)
         }
     }
 }
