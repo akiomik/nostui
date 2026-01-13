@@ -4,6 +4,7 @@
 //! These are independent from the existing core::msg system.
 
 use crossterm::event::KeyEvent;
+use nowhear::{MediaEvent, MediaSourceError};
 
 use crate::infrastructure::subscription::nostr::Message as NostrSubscriptionMessage;
 
@@ -18,6 +19,8 @@ pub enum AppMsg {
     Editor(EditorMsg),
     /// Nostr-related messages
     Nostr(NostrMsg),
+    /// Media-related messages
+    Media(Result<MediaEvent, MediaSourceError>),
 }
 
 /// System messages
