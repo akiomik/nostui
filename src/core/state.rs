@@ -2,25 +2,25 @@ use nostr_sdk::prelude::*;
 
 use crate::infrastructure::config::Config;
 
+pub mod editor;
 pub mod fps;
 pub mod nostr;
 pub mod system;
 pub mod timeline;
-pub mod ui;
 pub mod user;
 
+pub use editor::EditorState;
 pub use fps::FpsState;
 pub use nostr::NostrState;
 pub use system::SystemState;
 pub use timeline::TimelineState;
-pub use ui::UiState;
 pub use user::UserState;
 
 /// Unified application state
 #[derive(Debug, Default)]
 pub struct AppState {
     pub timeline: TimelineState,
-    pub ui: UiState,
+    pub editor: EditorState,
     pub user: UserState,
     pub system: SystemState,
     pub nostr: NostrState,
@@ -63,7 +63,7 @@ mod tests {
         let state = AppState::default();
 
         assert_eq!(state.timeline.len(), 0);
-        assert!(!state.ui.is_composing());
+        assert!(!state.editor.is_composing());
         assert!(state.system.is_loading());
     }
 

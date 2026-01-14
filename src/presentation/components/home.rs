@@ -58,7 +58,7 @@ impl<'a> HomeComponent<'a> {
         self.list.view(state, frame, chunks[1]);
 
         // Render input area as overlay if composing (matching old architecture)
-        if state.ui.is_composing() {
+        if state.editor.is_composing() {
             // Calculate overlay input area (take bottom half of the screen)
             let mut input_area = chunks[1];
             input_area.height /= 2;
