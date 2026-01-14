@@ -32,7 +32,7 @@ impl HomeListComponent {
 
         if item_count == 0 {
             // Render empty state
-            let empty_block = Block::default().title("Timeline").padding(padding);
+            let empty_block = Block::default().padding(padding);
             let empty_text = Paragraph::new("No notes to display")
                 .style(Style::default().fg(Color::DarkGray))
                 .alignment(Alignment::Center);
@@ -104,7 +104,7 @@ impl HomeListComponent {
         list_state.select(selected_index);
 
         let list = ListView::new(builder, item_count)
-            .block(Block::default().title("Timeline").padding(padding))
+            .block(Block::default().padding(padding))
             .style(Style::default().fg(Color::White));
 
         frame.render_stateful_widget(list, area, &mut list_state);
