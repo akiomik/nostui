@@ -10,12 +10,12 @@ pub enum UiMode {
 
 /// UI-related state
 #[derive(Debug, Clone, Default)]
-pub struct UiState {
+pub struct EditorState {
     reply_to: Option<Event>,
     current_mode: UiMode,
 }
 
-impl UiState {
+impl EditorState {
     /// Returns true if the UI is in composing mode
     pub fn is_composing(&self) -> bool {
         self.current_mode == UiMode::Composing
@@ -74,7 +74,7 @@ mod tests {
 
     #[test]
     fn test_is_composing() {
-        let state = UiState {
+        let state = EditorState {
             current_mode: UiMode::Composing,
             ..Default::default()
         };
@@ -85,7 +85,7 @@ mod tests {
 
     #[test]
     fn test_is_normal() {
-        let state = UiState::default();
+        let state = EditorState::default();
 
         assert!(state.is_normal());
         assert!(!state.is_composing());
@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn test_is_reply_none() {
-        let state = UiState::default();
+        let state = EditorState::default();
 
         assert!(!state.is_reply());
     }
@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn test_is_reply_some() {
         let event = create_test_event();
-        let state = UiState {
+        let state = EditorState {
             reply_to: Some(event),
             ..Default::default()
         };
@@ -111,7 +111,7 @@ mod tests {
 
     #[test]
     fn test_start_composing() {
-        let mut state = UiState::default();
+        let mut state = EditorState::default();
         state.start_composing();
 
         assert!(state.is_composing());
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn test_start_reply() {
         let event = create_test_event();
-        let mut state = UiState::default();
+        let mut state = EditorState::default();
         state.start_reply(event);
 
         assert!(state.is_composing());
@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn test_cancel_composing() {
-        let mut state = UiState::default();
+        let mut state = EditorState::default();
         state.cancel_composing();
 
         assert!(!state.is_composing());

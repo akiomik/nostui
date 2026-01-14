@@ -37,7 +37,7 @@ impl<'a> HomeInputComponent<'a> {
     ///
     /// This syncs the internal TextArea with AppState and renders it.
     pub fn view(&mut self, state: &AppState, frame: &mut Frame, area: Rect) {
-        if !state.ui.is_composing() {
+        if !state.editor.is_composing() {
             return;
         }
 
@@ -45,7 +45,7 @@ impl<'a> HomeInputComponent<'a> {
         frame.render_widget(Clear, area);
 
         // Set block based on reply state
-        let block = if let Some(reply_to) = state.ui.reply_target() {
+        let block = if let Some(reply_to) = state.editor.reply_target() {
             let name = self.get_reply_target_name(state, reply_to);
             Block::default()
                 .borders(Borders::ALL)
