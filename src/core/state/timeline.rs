@@ -4,6 +4,12 @@ use std::{cmp::Reverse, collections::HashMap, slice::Iter};
 
 use crate::domain::{collections::EventSet, nostr::EventWrapper};
 
+mod pagination;
+mod selection;
+
+pub use pagination::PaginationState;
+pub use selection::SelectionState;
+
 /// Timeline-related state
 #[derive(Debug, Clone)]
 pub struct TimelineState {
@@ -11,11 +17,8 @@ pub struct TimelineState {
     reactions: HashMap<EventId, EventSet>,
     reposts: HashMap<EventId, EventSet>,
     zap_receipts: HashMap<EventId, EventSet>,
-    selected_index: Option<usize>,
-    /// Timestamp of the oldest note in the timeline (for pagination)
-    oldest_timestamp: Option<Timestamp>,
-    /// Timestamp when LoadMore was triggered (for tracking completion)
-    loading_more_since: Option<Timestamp>,
+    selection: SelectionState,
+    pagination: PaginationState,
 }
 
 impl Default for TimelineState {
@@ -25,9 +28,8 @@ impl Default for TimelineState {
             reactions: HashMap::new(),
             reposts: HashMap::new(),
             zap_receipts: HashMap::new(),
-            selected_index: None,
-            oldest_timestamp: None,
-            loading_more_since: None,
+            selection: SelectionState::new(),
+            pagination: PaginationState::new(),
         }
     }
 }
@@ -49,7 +51,7 @@ impl TimelineState {
 
     /// Get the index of currently selected note
     pub fn selected_index(&self) -> Option<usize> {
-        self.selected_index
+        self.selection.selected_index()
     }
 
     /// Get reactions for the specified event
@@ -88,10 +90,10 @@ impl TimelineState {
         let insert_result = self.notes.find_or_insert(Reverse(wrapper));
 
         // Check if this event completes a LoadMore operation
-        let loading_completed = if let Some(loading_since) = self.loading_more_since {
+        let loading_completed = if let Some(loading_since) = self.pagination.loading_more_since() {
             if event.created_at < loading_since {
                 // An older event arrived - loading completed
-                self.loading_more_since = None;
+                self.pagination.finish_loading_more();
                 true
             } else {
                 false
@@ -101,20 +103,14 @@ impl TimelineState {
         };
 
         // Update oldest timestamp if this event is older
-        if let Some(oldest) = self.oldest_timestamp {
-            if event.created_at < oldest {
-                self.oldest_timestamp = Some(event.created_at);
-            }
-        } else {
-            self.oldest_timestamp = Some(event.created_at);
-        }
+        self.pagination.update_oldest(event.created_at);
 
         // Adjust selected index if a new item was inserted before it
         // This prevents the selection from shifting when new events arrive
         if let sorted_vec::FindOrInsert::Inserted(inserted_at) = insert_result {
-            if let Some(selected) = self.selected_index {
+            if let Some(selected) = self.selection.selected_index() {
                 if inserted_at <= selected {
-                    self.selected_index = Some(selected + 1);
+                    self.selection.select(selected + 1);
                 }
             }
             (true, loading_completed)
@@ -171,9 +167,9 @@ impl TimelineState {
     /// Move selection up by one item
     /// If no item is selected, selects the first item
     pub fn scroll_up(&mut self) {
-        if let Some(current) = self.selected_index {
+        if let Some(current) = self.selection.selected_index() {
             if current > 0 {
-                self.selected_index = Some(current - 1);
+                self.selection.select(current - 1);
             }
         } else if !self.is_empty() {
             self.select_first();
@@ -184,18 +180,16 @@ impl TimelineState {
     /// If no item is selected, selects the first item
     pub fn scroll_down(&mut self) {
         let max_index = self.len().saturating_sub(1);
-        if let Some(current) = self.selected_index {
-            if current < max_index {
-                self.selected_index = Some(current + 1);
-            }
-        } else if !self.is_empty() {
+        self.selection.scroll_down(max_index);
+        if self.selection.selected_index().is_none() && !self.is_empty() {
             self.select_first();
         }
     }
 
     /// Get the currently selected note
     pub fn selected_note(&self) -> Option<&Event> {
-        self.selected_index
+        self.selection
+            .selected_index()
             .and_then(|i| self.notes.get(i))
             .map(|sortable| &sortable.0.event)
     }
@@ -204,7 +198,7 @@ impl TimelineState {
     /// If the index is out of bounds, deselects the current selection
     pub fn select(&mut self, index: usize) {
         if index < self.len() {
-            self.selected_index = Some(index);
+            self.selection.select(index);
         } else {
             self.deselect();
         }
@@ -213,7 +207,7 @@ impl TimelineState {
     /// Select the first note in the timeline
     pub fn select_first(&mut self) {
         if !self.is_empty() {
-            self.selected_index = Some(0);
+            self.selection.select_first();
         }
     }
 
@@ -221,18 +215,18 @@ impl TimelineState {
     pub fn select_last(&mut self) {
         if !self.is_empty() {
             let max_index = self.len().saturating_sub(1);
-            self.selected_index = Some(max_index);
+            self.selection.select_last(max_index);
         }
     }
 
     /// Clear the current selection
     pub fn deselect(&mut self) {
-        self.selected_index = None;
+        self.selection.deselect();
     }
 
     /// Get the oldest timestamp in the timeline (for pagination)
     pub fn oldest_timestamp(&self) -> Option<Timestamp> {
-        self.oldest_timestamp
+        self.pagination.oldest_timestamp()
     }
 
     /// Check if the user has scrolled to the bottom of the timeline
@@ -241,17 +235,19 @@ impl TimelineState {
             return false;
         }
         let max_index = self.len().saturating_sub(1);
-        self.selected_index == Some(max_index)
+        self.selection.selected_index() == Some(max_index)
     }
 
     /// Mark that a LoadMore operation has started
     pub fn start_loading_more(&mut self) {
-        self.loading_more_since = self.oldest_timestamp;
+        if let Some(oldest) = self.pagination.oldest_timestamp() {
+            self.pagination.start_loading_more(oldest);
+        }
     }
 
     /// Check if currently loading more events
     pub fn is_loading_more(&self) -> bool {
-        self.loading_more_since.is_some()
+        self.pagination.is_loading_more()
     }
 }
 
@@ -292,7 +288,7 @@ mod tests {
         assert!(state.selected_note().is_none());
 
         // Returns None if the index is set, but the timeline is empty
-        state.selected_index = Some(0);
+        state.selection.select(0);
         assert_eq!(state.selected_note(), None);
     }
 
@@ -307,15 +303,15 @@ mod tests {
 
         // Select a valid index
         state.select(1);
-        assert_eq!(state.selected_index, Some(1));
+        assert_eq!(state.selected_index(), Some(1));
 
         // Select another valid index
         state.select(2);
-        assert_eq!(state.selected_index, Some(2));
+        assert_eq!(state.selected_index(), Some(2));
 
         // Select an invalid index should deselect
         state.select(10);
-        assert_eq!(state.selected_index, None);
+        assert_eq!(state.selected_index(), None);
     }
 
     #[test]
@@ -324,13 +320,13 @@ mod tests {
 
         // select_first on empty timeline should do nothing
         state.select_first();
-        assert_eq!(state.selected_index, None);
+        assert_eq!(state.selected_index(), None);
 
         // Add notes and select first
         insert_test_event(&mut state, 1000);
         insert_test_event(&mut state, 2000);
         state.select_first();
-        assert_eq!(state.selected_index, Some(0));
+        assert_eq!(state.selected_index(), Some(0));
     }
 
     #[test]
@@ -339,14 +335,14 @@ mod tests {
 
         // select_last on empty timeline should do nothing
         state.select_last();
-        assert_eq!(state.selected_index, None);
+        assert_eq!(state.selected_index(), None);
 
         // Add notes and select last
         insert_test_event(&mut state, 1000);
         insert_test_event(&mut state, 2000);
         insert_test_event(&mut state, 3000);
         state.select_last();
-        assert_eq!(state.selected_index, Some(2));
+        assert_eq!(state.selected_index(), Some(2));
     }
 
     #[test]
@@ -354,10 +350,10 @@ mod tests {
         let mut state = TimelineState::default();
         insert_test_event(&mut state, 1000);
         state.select(0);
-        assert_eq!(state.selected_index, Some(0));
+        assert_eq!(state.selected_index(), Some(0));
 
         state.deselect();
-        assert_eq!(state.selected_index, None);
+        assert_eq!(state.selected_index(), None);
     }
 
     #[test]
@@ -366,7 +362,7 @@ mod tests {
 
         // scroll_up on empty timeline should do nothing
         state.scroll_up();
-        assert_eq!(state.selected_index, None);
+        assert_eq!(state.selected_index(), None);
 
         // Add notes
         insert_test_event(&mut state, 1000);
@@ -375,16 +371,16 @@ mod tests {
 
         // scroll_up with no selection should select first
         state.scroll_up();
-        assert_eq!(state.selected_index, Some(0));
+        assert_eq!(state.selected_index(), Some(0));
 
         // scroll_up at the top should stay at the top
         state.scroll_up();
-        assert_eq!(state.selected_index, Some(0));
+        assert_eq!(state.selected_index(), Some(0));
 
         // Move to middle and scroll up
         state.select(2);
         state.scroll_up();
-        assert_eq!(state.selected_index, Some(1));
+        assert_eq!(state.selected_index(), Some(1));
     }
 
     #[test]
@@ -393,7 +389,7 @@ mod tests {
 
         // scroll_down on empty timeline should do nothing
         state.scroll_down();
-        assert_eq!(state.selected_index, None);
+        assert_eq!(state.selected_index(), None);
 
         // Add notes
         insert_test_event(&mut state, 1000);
@@ -402,18 +398,18 @@ mod tests {
 
         // scroll_down with no selection should select first
         state.scroll_down();
-        assert_eq!(state.selected_index, Some(0));
+        assert_eq!(state.selected_index(), Some(0));
 
         // scroll_down should move down
         state.scroll_down();
-        assert_eq!(state.selected_index, Some(1));
+        assert_eq!(state.selected_index(), Some(1));
 
         state.scroll_down();
-        assert_eq!(state.selected_index, Some(2));
+        assert_eq!(state.selected_index(), Some(2));
 
         // scroll_down at the bottom should stay at the bottom
         state.scroll_down();
-        assert_eq!(state.selected_index, Some(2));
+        assert_eq!(state.selected_index(), Some(2));
     }
 
     #[test]
@@ -426,23 +422,23 @@ mod tests {
         insert_test_event(&mut state, 3000);
 
         // Start with no selection
-        assert_eq!(state.selected_index, None);
+        assert_eq!(state.selected_index(), None);
 
         // First scroll down selects first item
         state.scroll_down();
-        assert_eq!(state.selected_index, Some(0));
+        assert_eq!(state.selected_index(), Some(0));
 
         // Continue scrolling down
         state.scroll_down();
-        assert_eq!(state.selected_index, Some(1));
+        assert_eq!(state.selected_index(), Some(1));
 
         // Scroll up
         state.scroll_up();
-        assert_eq!(state.selected_index, Some(0));
+        assert_eq!(state.selected_index(), Some(0));
 
         // Scroll up at top stays at top
         state.scroll_up();
-        assert_eq!(state.selected_index, Some(0));
+        assert_eq!(state.selected_index(), Some(0));
     }
 
     #[test]
@@ -511,7 +507,7 @@ mod tests {
         state.add_note(event1);
 
         // Selection should remain None
-        assert_eq!(state.selected_index, None);
+        assert_eq!(state.selected_index(), None);
 
         // Add second note (newer, will be inserted at index 0)
         let event2 = EventBuilder::text_note("test 2")
@@ -520,7 +516,7 @@ mod tests {
         state.add_note(event2);
 
         // Selection should still be None
-        assert_eq!(state.selected_index, None);
+        assert_eq!(state.selected_index(), None);
         assert_eq!(state.len(), 2);
 
         Ok(())
@@ -553,7 +549,7 @@ mod tests {
 
         // Select the middle item (2000 at index 1)
         state.select(1);
-        assert_eq!(state.selected_index, Some(1));
+        assert_eq!(state.selected_index(), Some(1));
 
         // Add a newer note (4000) - will be inserted at index 0
         let event4 = EventBuilder::text_note("test 4")
@@ -563,7 +559,7 @@ mod tests {
 
         // Selection should be adjusted to index 2 to keep pointing to the same note
         // Timeline: [4000, 3000, 2000, 1000] (indices: 0, 1, 2, 3)
-        assert_eq!(state.selected_index, Some(2));
+        assert_eq!(state.selected_index(), Some(2));
         assert_eq!(state.len(), 4);
 
         Ok(())
@@ -591,7 +587,7 @@ mod tests {
 
         // Select the first item (3000 at index 0)
         state.select(0);
-        assert_eq!(state.selected_index, Some(0));
+        assert_eq!(state.selected_index(), Some(0));
 
         // Add an older note (2000) - will be inserted at index 1
         let event3 = EventBuilder::text_note("test 3")
@@ -601,7 +597,7 @@ mod tests {
 
         // Selection should remain at index 0
         // Timeline: [3000, 2000, 1000] (indices: 0, 1, 2)
-        assert_eq!(state.selected_index, Some(0));
+        assert_eq!(state.selected_index(), Some(0));
         assert_eq!(state.len(), 3);
 
         Ok(())
@@ -627,7 +623,7 @@ mod tests {
         // Timeline: [3000, 1000] (indices: 0, 1)
         // Select the second item (1000 at index 1)
         state.select(1);
-        assert_eq!(state.selected_index, Some(1));
+        assert_eq!(state.selected_index(), Some(1));
 
         // Add a note with timestamp 2000 - will be inserted at index 1
         let event3 = EventBuilder::text_note("test 3")
@@ -637,7 +633,7 @@ mod tests {
 
         // Since inserted_at (1) <= selected (1), selection should be adjusted
         // Timeline: [3000, 2000, 1000] (indices: 0, 1, 2)
-        assert_eq!(state.selected_index, Some(2));
+        assert_eq!(state.selected_index(), Some(2));
         assert_eq!(state.len(), 3);
 
         Ok(())
@@ -985,7 +981,10 @@ mod tests {
         // Start loading more
         state.start_loading_more();
         assert!(state.is_loading_more());
-        assert_eq!(state.loading_more_since, Some(Timestamp::from(1000)));
+        assert_eq!(
+            state.pagination.loading_more_since(),
+            Some(Timestamp::from(1000))
+        );
 
         // Add a newer event (should not complete loading)
         let event3 = EventBuilder::text_note("note 3")
