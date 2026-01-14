@@ -13,6 +13,8 @@ pub enum UiMode {
 pub struct UiState {
     reply_to: Option<Event>,
     current_mode: UiMode,
+    /// Current tab index (0-based)
+    current_tab_index: usize,
 }
 
 impl UiState {
@@ -57,6 +59,40 @@ impl UiState {
     pub fn cancel_composing(&mut self) {
         self.current_mode = UiMode::Normal;
         self.reply_to = None;
+    }
+
+    /// Returns the current tab index
+    pub fn current_tab_index(&self) -> usize {
+        self.current_tab_index
+    }
+
+    /// Sets the current tab index
+    pub fn set_tab_index(&mut self, index: usize) {
+        self.current_tab_index = index;
+    }
+
+    /// Select a specific tab by index
+    /// Clamps the index to the valid range [0, max_tab_index]
+    pub fn select_tab(&mut self, index: usize, max_tab_index: usize) {
+        self.current_tab_index = index.min(max_tab_index);
+    }
+
+    /// Switch to the next tab (wraps around to 0 if at the end)
+    pub fn next_tab(&mut self, max_tab_index: usize) {
+        self.current_tab_index = if self.current_tab_index >= max_tab_index {
+            0
+        } else {
+            self.current_tab_index + 1
+        };
+    }
+
+    /// Switch to the previous tab (wraps around to max if at 0)
+    pub fn prev_tab(&mut self, max_tab_index: usize) {
+        self.current_tab_index = if self.current_tab_index == 0 {
+            max_tab_index
+        } else {
+            self.current_tab_index - 1
+        };
     }
 }
 
@@ -135,5 +171,87 @@ mod tests {
 
         assert!(!state.is_composing());
         assert!(!state.is_reply());
+    }
+
+    #[test]
+    fn test_default_tab_index() {
+        let state = UiState::default();
+        assert_eq!(state.current_tab_index(), 0);
+    }
+
+    #[test]
+    fn test_set_tab_index() {
+        let mut state = UiState::default();
+        state.set_tab_index(1);
+        assert_eq!(state.current_tab_index(), 1);
+    }
+
+    #[test]
+    fn test_select_tab() {
+        let mut state = UiState::default();
+
+        // Select tab within range
+        state.select_tab(0, 2);
+        assert_eq!(state.current_tab_index(), 0);
+
+        // Select tab at max
+        state.select_tab(2, 2);
+        assert_eq!(state.current_tab_index(), 2);
+
+        // Select tab beyond max (should clamp)
+        state.select_tab(5, 2);
+        assert_eq!(state.current_tab_index(), 2);
+    }
+
+    #[test]
+    fn test_next_tab() {
+        let mut state = UiState::default();
+
+        // Move to next tab
+        state.next_tab(2);
+        assert_eq!(state.current_tab_index(), 1);
+
+        // Move to next tab again
+        state.next_tab(2);
+        assert_eq!(state.current_tab_index(), 2);
+
+        // Wrap around to 0
+        state.next_tab(2);
+        assert_eq!(state.current_tab_index(), 0);
+    }
+
+    #[test]
+    fn test_prev_tab() {
+        let mut state = UiState::default();
+
+        // Wrap around to max from 0
+        state.prev_tab(2);
+        assert_eq!(state.current_tab_index(), 2);
+
+        // Move to previous tab
+        state.prev_tab(2);
+        assert_eq!(state.current_tab_index(), 1);
+
+        // Move to previous tab again
+        state.prev_tab(2);
+        assert_eq!(state.current_tab_index(), 0);
+    }
+
+    #[test]
+    fn test_next_tab_with_single_tab() {
+        let mut state = UiState::default();
+
+        // With only one tab (max_tab_index = 0), should stay at 0
+        state.next_tab(0);
+        assert_eq!(state.current_tab_index(), 0);
+    }
+
+    #[test]
+    fn test_prev_tab_with_single_tab() {
+        let mut state = UiState::default();
+
+        // With only one tab (max_tab_index = 0), should stay at 0
+        state.prev_tab(0);
+        assert_eq!(state.current_tab_index(), 0);
     }
 }
