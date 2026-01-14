@@ -1,29 +1,21 @@
 use nostr_sdk::prelude::*;
 
-/// High-level UI mode for keybindings and view switching
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum UiMode {
-    #[default]
-    Normal,
-    Composing,
-}
-
-/// UI-related state
+/// Editor-related state
 #[derive(Debug, Clone, Default)]
 pub struct EditorState {
     reply_to: Option<Event>,
-    current_mode: UiMode,
+    is_active: bool,
 }
 
 impl EditorState {
-    /// Returns true if the UI is in composing mode
+    /// Returns true if the editor is active (composing mode)
     pub fn is_composing(&self) -> bool {
-        self.current_mode == UiMode::Composing
+        self.is_active
     }
 
-    /// Returns true if the UI is in normal mode
+    /// Returns true if the editor is inactive (normal mode)
     pub fn is_normal(&self) -> bool {
-        self.current_mode == UiMode::Normal
+        !self.is_active
     }
 
     /// Returns true if currently composing a reply
@@ -36,26 +28,26 @@ impl EditorState {
         self.reply_to.as_ref()
     }
 
-    /// Returns the current UI mode
-    pub fn current_mode(&self) -> UiMode {
-        self.current_mode
+    /// Check if editor is active
+    pub fn is_active(&self) -> bool {
+        self.is_active
     }
 
     /// Starts composing a new post (not a reply)
     pub fn start_composing(&mut self) {
-        self.current_mode = UiMode::Composing;
+        self.is_active = true;
         self.reply_to = None;
     }
 
     /// Starts composing a reply to the given event
     pub fn start_reply(&mut self, to: Event) {
-        self.current_mode = UiMode::Composing;
+        self.is_active = true;
         self.reply_to = Some(to);
     }
 
     /// Cancels composing and returns to normal mode
     pub fn cancel_composing(&mut self) {
-        self.current_mode = UiMode::Normal;
+        self.is_active = false;
         self.reply_to = None;
     }
 }
@@ -75,7 +67,7 @@ mod tests {
     #[test]
     fn test_is_composing() {
         let state = EditorState {
-            current_mode: UiMode::Composing,
+            is_active: true,
             ..Default::default()
         };
 

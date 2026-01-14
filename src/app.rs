@@ -11,7 +11,7 @@ use tears::subscription::terminal::TerminalEvents;
 use tears::subscription::time::{Message as TimerMessage, Timer};
 
 use crate::core::message::{AppMsg, NostrMsg, SystemMsg, TimelineMsg, UiMsg};
-use crate::core::state::{editor::UiMode, AppState};
+use crate::core::state::AppState;
 use crate::domain::nostr::Profile;
 use crate::infrastructure::config::Config;
 use crate::infrastructure::subscription::nostr::{
@@ -209,16 +209,17 @@ impl<'a> TearsApp<'a> {
         Command::none()
     }
 
-    /// Handle key input based on current UI mode
+    /// Handle key input based on current editor state
     fn handle_key_input(&mut self, key: KeyEvent) -> Command<AppMsg> {
         // Note: Ctrl+C is now handled by signal subscription, not as keyboard input
         // This ensures it works reliably across different terminal emulators and
         // properly separates OS signals from application keybindings
 
         // Mode-specific keybindings
-        match self.state.editor.current_mode() {
-            UiMode::Normal => self.handle_normal_mode_key(key),
-            UiMode::Composing => self.handle_composing_mode_key(key),
+        if self.state.editor.is_composing() {
+            self.handle_composing_mode_key(key)
+        } else {
+            self.handle_normal_mode_key(key)
         }
     }
 
@@ -964,7 +965,7 @@ mod tests {
 
         // Should produce ProcessTextAreaInput command
         // The application should still be in composing mode
-        assert_eq!(app.state.editor.current_mode(), UiMode::Composing);
+        assert!(app.state.editor.is_composing());
 
         // The textarea should contain 'q' after processing
         app.update(AppMsg::Ui(UiMsg::ProcessTextAreaInput(q_key)));
@@ -991,7 +992,7 @@ mod tests {
 
         // Should return to normal mode
         app.update(AppMsg::Ui(UiMsg::CancelComposing));
-        assert_eq!(app.state.editor.current_mode(), UiMode::Normal);
+        assert!(app.state.editor.is_normal());
         assert!(app.components.borrow().home.input.get_content().is_empty());
     }
 
