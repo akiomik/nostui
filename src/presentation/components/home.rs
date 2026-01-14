@@ -49,7 +49,7 @@ impl<'a> HomeComponent<'a> {
 
         // Render tabs
         let tabs = Tabs::new(vec!["Timeline"])
-            .select(state.ui.current_tab_index())
+            .select(state.timeline.active_tab_index())
             .style(Style::default().bg(Color::Black))
             .highlight_style(Style::default().reversed());
         frame.render_widget(tabs, chunks[0]);

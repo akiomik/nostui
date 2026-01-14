@@ -249,6 +249,30 @@ impl TimelineState {
     pub fn is_loading_more(&self) -> bool {
         self.pagination.is_loading_more()
     }
+
+    // ===== Tab Management Methods =====
+    // NOTE: These are stub implementations for Phase 0
+    // They will be properly implemented in Phase 4 when tab structure is introduced
+
+    /// Get the active tab index
+    pub fn active_tab_index(&self) -> usize {
+        0 // Stub: always return 0 (single tab)
+    }
+
+    /// Select a specific tab by index
+    pub fn select_tab(&mut self, _index: usize) {
+        // Stub: do nothing (single tab)
+    }
+
+    /// Switch to the next tab
+    pub fn next_tab(&mut self) {
+        // Stub: do nothing (single tab)
+    }
+
+    /// Switch to the previous tab
+    pub fn prev_tab(&mut self) {
+        // Stub: do nothing (single tab)
+    }
 }
 
 #[cfg(test)]

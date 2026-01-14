@@ -435,27 +435,29 @@ impl<'a> TearsApp<'a> {
             }
             UiMsg::SelectTab(index) => {
                 // Select a specific tab by index
-                // For now, we only have one tab (index 0)
-                let max_tab_index = 0; // Only "Timeline" tab exists
-                self.state.ui.select_tab(index, max_tab_index);
-                log::debug!("Selected tab index: {}", self.state.ui.current_tab_index());
+                // Delegate to TimelineState
+                self.state.timeline.select_tab(index);
+                log::debug!(
+                    "Selected tab index: {}",
+                    self.state.timeline.active_tab_index()
+                );
             }
             UiMsg::NextTab => {
                 // Switch to the next tab (wraps around)
-                let max_tab_index = 0; // Only "Timeline" tab exists
-                self.state.ui.next_tab(max_tab_index);
+                // Delegate to TimelineState
+                self.state.timeline.next_tab();
                 log::debug!(
                     "Switched to next tab: {}",
-                    self.state.ui.current_tab_index()
+                    self.state.timeline.active_tab_index()
                 );
             }
             UiMsg::PrevTab => {
                 // Switch to the previous tab (wraps around)
-                let max_tab_index = 0; // Only "Timeline" tab exists
-                self.state.ui.prev_tab(max_tab_index);
+                // Delegate to TimelineState
+                self.state.timeline.prev_tab();
                 log::debug!(
                     "Switched to previous tab: {}",
-                    self.state.ui.current_tab_index()
+                    self.state.timeline.active_tab_index()
                 );
             }
         }
@@ -1148,34 +1150,34 @@ mod tests {
         let mut app = create_test_app();
 
         // Default tab should be 0
-        assert_eq!(app.state.ui.current_tab_index(), 0);
+        assert_eq!(app.state.timeline.active_tab_index(), 0);
 
         // Select tab 0 (only tab available)
         app.handle_ui_msg(UiMsg::SelectTab(0));
-        assert_eq!(app.state.ui.current_tab_index(), 0);
+        assert_eq!(app.state.timeline.active_tab_index(), 0);
 
-        // Try to select tab beyond max (should clamp to 0)
+        // Try to select tab beyond max (stub does nothing)
         app.handle_ui_msg(UiMsg::SelectTab(5));
-        assert_eq!(app.state.ui.current_tab_index(), 0);
+        assert_eq!(app.state.timeline.active_tab_index(), 0);
     }
 
     #[test]
     fn test_next_tab_with_single_tab() {
         let mut app = create_test_app();
 
-        // With only one tab, NextTab should stay at 0
-        assert_eq!(app.state.ui.current_tab_index(), 0);
+        // With only one tab, NextTab should stay at 0 (stub does nothing)
+        assert_eq!(app.state.timeline.active_tab_index(), 0);
         app.handle_ui_msg(UiMsg::NextTab);
-        assert_eq!(app.state.ui.current_tab_index(), 0);
+        assert_eq!(app.state.timeline.active_tab_index(), 0);
     }
 
     #[test]
     fn test_prev_tab_with_single_tab() {
         let mut app = create_test_app();
 
-        // With only one tab, PrevTab should stay at 0
-        assert_eq!(app.state.ui.current_tab_index(), 0);
+        // With only one tab, PrevTab should stay at 0 (stub does nothing)
+        assert_eq!(app.state.timeline.active_tab_index(), 0);
         app.handle_ui_msg(UiMsg::PrevTab);
-        assert_eq!(app.state.ui.current_tab_index(), 0);
+        assert_eq!(app.state.timeline.active_tab_index(), 0);
     }
 }
