@@ -14,8 +14,8 @@ pub enum AppMsg {
     System(SystemMsg),
     /// Timeline-related messages
     Timeline(TimelineMsg),
-    /// UI-related messages
-    Ui(UiMsg),
+    /// Editor-related messages
+    Editor(EditorMsg),
     /// Nostr-related messages
     Nostr(NostrMsg),
 }
@@ -56,9 +56,9 @@ pub enum TimelineMsg {
     LoadMore,
 }
 
-/// UI messages
+/// Editor messages
 #[derive(Debug, Clone)]
-pub enum UiMsg {
+pub enum EditorMsg {
     /// Start composing a new note
     StartComposing,
     /// Start replying to the selected note
