@@ -180,8 +180,41 @@ impl<'a> TearsApp<'a> {
         match msg {
             SystemMsg::Quit => {
                 log::info!("Quit requested - initiating graceful shutdown");
-                // TODO: Add cleanup logic here in the future (e.g., save state, close connections)
-                // For now, directly trigger the quit action
+
+                // Graceful shutdown: unsubscribe from all timeline subscriptions
+                if let Some(sender) = &self.state.nostr.command_sender {
+                    // Clone sender to avoid borrow conflicts
+                    let sender = sender.clone();
+
+                    // Collect all subscription IDs from all tabs
+                    let all_subscription_ids: Vec<nostr_sdk::SubscriptionId> = self
+                        .state
+                        .timeline
+                        .tabs()
+                        .iter()
+                        .flat_map(|tab| {
+                            self.state.nostr.remove_timeline_subscription(&tab.tab_type)
+                        })
+                        .collect();
+
+                    if !all_subscription_ids.is_empty() {
+                        log::info!(
+                            "Unsubscribing from {} subscriptions before shutdown",
+                            all_subscription_ids.len()
+                        );
+                        let _ = sender.send(NostrCommand::Unsubscribe {
+                            subscription_ids: all_subscription_ids,
+                        });
+                    }
+
+                    // Send shutdown command to disconnect from relays
+                    log::info!("Sending shutdown command to Nostr client");
+                    let _ = sender.send(NostrCommand::Shutdown);
+                } else {
+                    log::warn!("No Nostr command sender available during shutdown");
+                }
+
+                // Trigger the quit action
                 return Command::effect(Action::Quit);
             }
             SystemMsg::Resize(width, height) => {
