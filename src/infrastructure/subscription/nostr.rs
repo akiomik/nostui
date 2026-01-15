@@ -29,8 +29,11 @@ pub enum NostrCommand {
     AddRelay { url: String },
     /// Remove a relay
     RemoveRelay { url: String },
-    /// Load more timeline events before the specified timestamp
-    LoadMoreTimeline { until: Timestamp },
+    /// Load more timeline events before the specified timestamp for a specific tab
+    LoadMoreTimeline {
+        tab_type: TimelineTabType,
+        until: Timestamp,
+    },
     /// Subscribe to a specific timeline tab
     SubscribeTimeline { tab_type: TimelineTabType },
     /// Unsubscribe from multiple subscriptions
@@ -212,58 +215,101 @@ impl NostrEvents {
                     });
                 }
             }
-            NostrCommand::LoadMoreTimeline { until } => {
+            NostrCommand::LoadMoreTimeline { tab_type, until } => {
                 // Load more timeline events before the specified timestamp
-                // Use cached contact list from initialization
-                let followings = {
-                    let cache = contact_list_cache.read().await;
-                    match cache.as_ref() {
-                        Some(list) => list.clone(),
-                        None => {
-                            log::warn!("Contact list not cached, cannot load more events");
-                            return;
-                        }
-                    }
-                };
-
-                let filter = Filter::new()
-                    .authors(followings)
-                    .kinds(TIMELINE_KINDS)
-                    .until(until)
-                    .limit(DEFAULT_TIMELINE_LIMIT);
-
-                let _ = client.subscribe(filter, None).await;
-            }
-            NostrCommand::SubscribeTimeline { tab_type } => {
                 let filter = match &tab_type {
                     TimelineTabType::Home => {
-                        log::warn!(
-                            "Home timeline should be initialized, not subscribed via command"
-                        );
-                        return;
+                        // Use cached contact list from initialization
+                        let followings = {
+                            let cache = contact_list_cache.read().await;
+                            match cache.as_ref() {
+                                Some(list) => list.clone(),
+                                None => {
+                                    log::warn!("Contact list not cached, cannot load more events");
+                                    return;
+                                }
+                            }
+                        };
+
+                        Filter::new()
+                            .authors(followings)
+                            .kinds(TIMELINE_KINDS)
+                            .until(until)
+                            .limit(DEFAULT_TIMELINE_LIMIT)
                     }
                     TimelineTabType::UserTimeline { pubkey } => Filter::new()
                         .authors(vec![*pubkey])
                         .kinds(vec![Kind::TextNote, Kind::Repost])
-                        .limit(50),
+                        .until(until)
+                        .limit(DEFAULT_TIMELINE_LIMIT),
                 };
 
                 match client.subscribe(filter, None).await {
                     Ok(sub_id) => {
+                        // Send SubscriptionCreated to track this load-more subscription
                         let _ = msg_tx.send(Message::SubscriptionCreated {
                             tab_type,
                             subscription_id: sub_id.val,
                         });
                     }
                     Err(e) => {
-                        log::error!("Failed to subscribe to timeline: {e}");
+                        log::error!("Failed to load more events: {e}");
+                    }
+                }
+            }
+            NostrCommand::SubscribeTimeline { tab_type } => {
+                match &tab_type {
+                    TimelineTabType::Home => {
+                        log::warn!(
+                            "Home timeline should be initialized, not subscribed via command"
+                        );
+                    }
+                    TimelineTabType::UserTimeline { pubkey } => {
+                        // Subscribe to both backward (historical) and forward (real-time) events
+                        let backward_filter = Filter::new()
+                            .authors(vec![*pubkey])
+                            .kinds(vec![Kind::TextNote, Kind::Repost])
+                            .until(Timestamp::now())
+                            .limit(DEFAULT_TIMELINE_LIMIT);
+
+                        let forward_filter = Filter::new()
+                            .authors(vec![*pubkey])
+                            .kinds(vec![Kind::TextNote, Kind::Repost])
+                            .since(Timestamp::now());
+
+                        // Subscribe to both filters concurrently
+                        let result = tokio::try_join!(
+                            client.subscribe(backward_filter, None),
+                            client.subscribe(forward_filter, None)
+                        );
+
+                        match result {
+                            Ok((sub_id1, sub_id2)) => {
+                                // Send SubscriptionCreated messages for both subscriptions
+                                let _ = msg_tx.send(Message::SubscriptionCreated {
+                                    tab_type: tab_type.clone(),
+                                    subscription_id: sub_id1.val,
+                                });
+                                let _ = msg_tx.send(Message::SubscriptionCreated {
+                                    tab_type,
+                                    subscription_id: sub_id2.val,
+                                });
+                            }
+                            Err(e) => {
+                                log::error!("Failed to subscribe to user timeline: {e}");
+                            }
+                        }
                     }
                 }
             }
             NostrCommand::Unsubscribe { subscription_ids } => {
+                log::info!(
+                    "Unsubscribing from {} subscriptions",
+                    subscription_ids.len()
+                );
                 for sub_id in subscription_ids {
                     client.unsubscribe(&sub_id).await;
-                    log::debug!("Unsubscribed from {sub_id:?}");
+                    log::info!("Unsubscribed from {sub_id:?}");
                 }
             }
             NostrCommand::Shutdown => {

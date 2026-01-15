@@ -199,8 +199,8 @@ impl TimelineState {
 
     /// Add a text note to the Home timeline
     ///
-    /// NOTE: Currently, all events are added to the Home tab (index 0) regardless of the active tab.
-    /// Proper event routing to appropriate tabs (e.g., UserTimeline) will be implemented in a later phase.
+    /// NOTE: This is a convenience method that always adds to the Home tab (index 0).
+    /// For routing events to specific tabs, use `add_note_to_tab()` instead.
     ///
     /// Returns a tuple of (was_inserted, loading_completed)
     /// - was_inserted: `true` if the event was newly inserted, `false` if it already existed
@@ -208,38 +208,57 @@ impl TimelineState {
     ///
     /// Automatically adjusts the selected index if a new item is inserted before it (only for Home tab)
     pub fn add_note(&mut self, event: Event) -> (bool, bool) {
-        // TODO: In future phases, route events to appropriate tabs based on tab type
-        // For now, always insert into Home tab (index 0)
-        let home_tab = &mut self.tabs[0];
+        self.add_note_to_tab(event, &TimelineTabType::Home)
+    }
 
+    /// Add a text note to a specific timeline tab
+    ///
+    /// Returns a tuple of (was_inserted, loading_completed)
+    /// - was_inserted: `true` if the event was newly inserted, `false` if it already existed
+    /// - loading_completed: `true` if this event completed a LoadMore operation
+    ///
+    /// Automatically adjusts the selected index if a new item is inserted before it (only for active tab)
+    pub fn add_note_to_tab(&mut self, event: Event, tab_type: &TimelineTabType) -> (bool, bool) {
+        // Find the tab index for the specified tab type
+        let tab_index = match self.find_tab_by_type(tab_type) {
+            Some(index) => index,
+            None => {
+                // Tab not found - cannot add note
+                log::warn!("Cannot add note: tab {tab_type:?} not found");
+                return (false, false);
+            }
+        };
+
+        let tab = &mut self.tabs[tab_index];
         let wrapper = EventWrapper::new(event.clone());
-        let insert_result = home_tab.notes.find_or_insert(Reverse(wrapper));
+        let insert_result = tab.notes.find_or_insert(Reverse(wrapper));
 
         // Check if this event completes a LoadMore operation
-        let loading_completed =
-            if let Some(loading_since) = home_tab.pagination.loading_more_since() {
-                if event.created_at < loading_since {
-                    // An older event arrived - loading completed
-                    home_tab.pagination.finish_loading_more();
-                    true
-                } else {
-                    false
-                }
+        let loading_completed = if let Some(loading_since) = tab.pagination.loading_more_since() {
+            if event.created_at < loading_since {
+                // An older event arrived - loading completed
+                tab.pagination.finish_loading_more();
+                true
             } else {
                 false
-            };
+            }
+        } else {
+            false
+        };
 
         // Update oldest timestamp if this event is older
-        home_tab.pagination.update_oldest(event.created_at);
+        tab.pagination.update_oldest(event.created_at);
 
         // Adjust selected index if a new item was inserted before it
         // This prevents the selection from shifting when new events arrive
-        // NOTE: Only adjust if Home tab is currently active
+        // NOTE: Only adjust if this tab is currently active
         if let sorted_vec::FindOrInsert::Inserted(inserted_at) = insert_result {
-            if self.active_tab_index == 0 {
-                if let Some(selected) = home_tab.selection.selected_index() {
+            if self.active_tab_index == tab_index {
+                // Re-borrow tab mutably for selection adjustment
+                let tab = &mut self.tabs[tab_index];
+                if let Some(selected) = tab.selection.selected_index() {
                     if inserted_at <= selected {
-                        home_tab.selection.select(selected + 1);
+                        tab.selection.select(selected + 1);
                     }
                 }
             }
@@ -1641,5 +1660,206 @@ mod tests {
         // Prev tab at the start -> should stay at tab 0
         state.prev_tab();
         assert_eq!(state.active_tab_index(), 0);
+    }
+
+    #[test]
+    fn test_add_note_to_tab_home() -> Result<()> {
+        let mut state = TimelineState::default();
+        let keys = Keys::generate();
+
+        let event = EventBuilder::text_note("test note for home")
+            .custom_created_at(Timestamp::from(1000))
+            .sign_with_keys(&keys)?;
+
+        // Add note to Home tab
+        let (was_inserted, _) = state.add_note_to_tab(event, &TimelineTabType::Home);
+        assert!(was_inserted);
+
+        // Verify it's in the Home tab
+        state.select_tab(0);
+        assert_eq!(state.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_note_to_tab_user_timeline() -> Result<()> {
+        let mut state = TimelineState::default();
+        let keys = Keys::generate();
+        let pubkey = keys.public_key();
+
+        // Add a UserTimeline tab
+        let tab_type = TimelineTabType::UserTimeline { pubkey };
+        let _ = state.add_tab(tab_type.clone());
+
+        // Create and add a note to the user timeline
+        let event = EventBuilder::text_note("test note for user timeline")
+            .custom_created_at(Timestamp::from(1000))
+            .sign_with_keys(&keys)?;
+
+        let (was_inserted, _) = state.add_note_to_tab(event, &tab_type);
+        assert!(was_inserted);
+
+        // Verify it's in the user timeline tab
+        state.select_tab(1); // UserTimeline is at index 1
+        assert_eq!(state.len(), 1);
+
+        // Verify Home tab is still empty
+        state.select_tab(0);
+        assert_eq!(state.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_note_to_tab_nonexistent() -> Result<()> {
+        let mut state = TimelineState::default();
+        let keys = Keys::generate();
+        let pubkey = keys.public_key();
+
+        // Try to add a note to a tab that doesn't exist
+        let event = EventBuilder::text_note("test note")
+            .custom_created_at(Timestamp::from(1000))
+            .sign_with_keys(&keys)?;
+
+        let tab_type = TimelineTabType::UserTimeline { pubkey };
+        let (was_inserted, _) = state.add_note_to_tab(event, &tab_type);
+
+        // Should return false since tab doesn't exist
+        assert!(!was_inserted);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_note_to_tab_multiple_tabs_independence() -> Result<()> {
+        let mut state = TimelineState::default();
+        let keys1 = Keys::generate();
+        let keys2 = Keys::generate();
+
+        let pubkey1 = keys1.public_key();
+        let pubkey2 = keys2.public_key();
+
+        // Add two UserTimeline tabs
+        let tab_type1 = TimelineTabType::UserTimeline { pubkey: pubkey1 };
+        let tab_type2 = TimelineTabType::UserTimeline { pubkey: pubkey2 };
+
+        let _ = state.add_tab(tab_type1.clone());
+        let _ = state.add_tab(tab_type2.clone());
+
+        // Add notes to different tabs
+        let event1 = EventBuilder::text_note("note for user 1")
+            .custom_created_at(Timestamp::from(1000))
+            .sign_with_keys(&keys1)?;
+
+        let event2 = EventBuilder::text_note("note for user 2")
+            .custom_created_at(Timestamp::from(2000))
+            .sign_with_keys(&keys2)?;
+
+        let event_home = EventBuilder::text_note("note for home")
+            .custom_created_at(Timestamp::from(3000))
+            .sign_with_keys(&keys1)?;
+
+        state.add_note_to_tab(event1, &tab_type1);
+        state.add_note_to_tab(event2, &tab_type2);
+        state.add_note_to_tab(event_home, &TimelineTabType::Home);
+
+        // Verify each tab has only its own notes
+        state.select_tab(0); // Home
+        assert_eq!(state.len(), 1);
+
+        state.select_tab(1); // User 1
+        assert_eq!(state.len(), 1);
+
+        state.select_tab(2); // User 2
+        assert_eq!(state.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_note_to_tab_adjusts_selection_when_active() -> Result<()> {
+        let mut state = TimelineState::default();
+        let keys = Keys::generate();
+        let pubkey = keys.public_key();
+
+        // Add a UserTimeline tab
+        let tab_type = TimelineTabType::UserTimeline { pubkey };
+        let _ = state.add_tab(tab_type.clone());
+
+        // Switch to the user timeline tab
+        state.select_tab(1);
+
+        // Add initial notes
+        let event1 = EventBuilder::text_note("note 1")
+            .custom_created_at(Timestamp::from(1000))
+            .sign_with_keys(&keys)?;
+        state.add_note_to_tab(event1, &tab_type);
+
+        let event2 = EventBuilder::text_note("note 2")
+            .custom_created_at(Timestamp::from(2000))
+            .sign_with_keys(&keys)?;
+        state.add_note_to_tab(event2, &tab_type);
+
+        // Select the second note (index 1, older note)
+        state.select(1);
+        assert_eq!(state.selected_index(), Some(1));
+
+        // Add a newer note (will be inserted at index 0)
+        let event3 = EventBuilder::text_note("note 3")
+            .custom_created_at(Timestamp::from(3000))
+            .sign_with_keys(&keys)?;
+        state.add_note_to_tab(event3, &tab_type);
+
+        // Selection should be adjusted to index 2
+        assert_eq!(state.selected_index(), Some(2));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_note_to_tab_does_not_adjust_selection_when_inactive() -> Result<()> {
+        let mut state = TimelineState::default();
+        let keys = Keys::generate();
+        let pubkey = keys.public_key();
+
+        // Add a UserTimeline tab
+        let tab_type = TimelineTabType::UserTimeline { pubkey };
+        let _ = state.add_tab(tab_type.clone());
+
+        // Switch to the user timeline tab
+        state.select_tab(1);
+
+        // Add initial notes
+        let event1 = EventBuilder::text_note("note 1")
+            .custom_created_at(Timestamp::from(1000))
+            .sign_with_keys(&keys)?;
+        state.add_note_to_tab(event1, &tab_type);
+
+        let event2 = EventBuilder::text_note("note 2")
+            .custom_created_at(Timestamp::from(2000))
+            .sign_with_keys(&keys)?;
+        state.add_note_to_tab(event2, &tab_type);
+
+        // Select the second note
+        state.select(1);
+        assert_eq!(state.selected_index(), Some(1));
+
+        // Switch to Home tab
+        state.select_tab(0);
+
+        // Add a newer note to user timeline (while Home tab is active)
+        let event3 = EventBuilder::text_note("note 3")
+            .custom_created_at(Timestamp::from(3000))
+            .sign_with_keys(&keys)?;
+        state.add_note_to_tab(event3, &tab_type);
+
+        // Switch back to user timeline
+        state.select_tab(1);
+
+        // Selection should NOT be adjusted (still at index 1, but now points to a different note)
+        assert_eq!(state.selected_index(), Some(1));
+
+        Ok(())
     }
 }
