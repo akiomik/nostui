@@ -54,6 +54,16 @@ pub enum TimelineMsg {
     SelectLast,
     /// Load more older events when reaching bottom
     LoadMore,
+    /// React to the selected note
+    ReactToSelected,
+    /// Repost the selected note
+    RepostSelected,
+    /// Select a specific tab by index
+    SelectTab(usize),
+    /// Switch to the next tab
+    NextTab,
+    /// Switch to the previous tab
+    PrevTab,
 }
 
 /// Editor messages
@@ -69,16 +79,6 @@ pub enum EditorMsg {
     SubmitNote,
     /// Process textarea input
     ProcessTextAreaInput(KeyEvent),
-    /// React to the selected note
-    ReactToSelected,
-    /// Repost the selected note
-    RepostSelected,
-    /// Select a specific tab by index
-    SelectTab(usize),
-    /// Switch to the next tab
-    NextTab,
-    /// Switch to the previous tab
-    PrevTab,
 }
 
 /// Nostr messages
