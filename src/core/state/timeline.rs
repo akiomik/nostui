@@ -13,8 +13,10 @@ pub use selection::SelectionState;
 /// Represents the type of timeline tab
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TimelineTabType {
+    /// Home timeline (global feed)
     Home,
-    // UserTimeline will be added in Phase 6
+    /// User timeline (specific author's posts)
+    UserTimeline { pubkey: PublicKey },
 }
 
 /// Represents a single timeline tab with its own state
@@ -195,41 +197,50 @@ impl TimelineState {
             .unwrap_or_else(EventSet::new)
     }
 
-    /// Add a text note to the active timeline
+    /// Add a text note to the Home timeline
+    ///
+    /// NOTE: Currently, all events are added to the Home tab (index 0) regardless of the active tab.
+    /// Proper event routing to appropriate tabs (e.g., UserTimeline) will be implemented in a later phase.
     ///
     /// Returns a tuple of (was_inserted, loading_completed)
     /// - was_inserted: `true` if the event was newly inserted, `false` if it already existed
     /// - loading_completed: `true` if this event completed a LoadMore operation
     ///
-    /// Automatically adjusts the selected index if a new item is inserted before it
+    /// Automatically adjusts the selected index if a new item is inserted before it (only for Home tab)
     pub fn add_note(&mut self, event: Event) -> (bool, bool) {
-        let tab = self.active_tab_mut();
+        // TODO: In future phases, route events to appropriate tabs based on tab type
+        // For now, always insert into Home tab (index 0)
+        let home_tab = &mut self.tabs[0];
 
         let wrapper = EventWrapper::new(event.clone());
-        let insert_result = tab.notes.find_or_insert(Reverse(wrapper));
+        let insert_result = home_tab.notes.find_or_insert(Reverse(wrapper));
 
         // Check if this event completes a LoadMore operation
-        let loading_completed = if let Some(loading_since) = tab.pagination.loading_more_since() {
-            if event.created_at < loading_since {
-                // An older event arrived - loading completed
-                tab.pagination.finish_loading_more();
-                true
+        let loading_completed =
+            if let Some(loading_since) = home_tab.pagination.loading_more_since() {
+                if event.created_at < loading_since {
+                    // An older event arrived - loading completed
+                    home_tab.pagination.finish_loading_more();
+                    true
+                } else {
+                    false
+                }
             } else {
                 false
-            }
-        } else {
-            false
-        };
+            };
 
         // Update oldest timestamp if this event is older
-        tab.pagination.update_oldest(event.created_at);
+        home_tab.pagination.update_oldest(event.created_at);
 
         // Adjust selected index if a new item was inserted before it
         // This prevents the selection from shifting when new events arrive
+        // NOTE: Only adjust if Home tab is currently active
         if let sorted_vec::FindOrInsert::Inserted(inserted_at) = insert_result {
-            if let Some(selected) = tab.selection.selected_index() {
-                if inserted_at <= selected {
-                    tab.selection.select(selected + 1);
+            if self.active_tab_index == 0 {
+                if let Some(selected) = home_tab.selection.selected_index() {
+                    if inserted_at <= selected {
+                        home_tab.selection.select(selected + 1);
+                    }
                 }
             }
             (true, loading_completed)
@@ -377,27 +388,98 @@ impl TimelineState {
     }
 
     // ===== Tab Management Methods =====
-    // NOTE: These are stub implementations for Phase 0
-    // They will be properly implemented in Phase 4 when tab structure is introduced
+
+    /// Get the number of tabs
+    pub fn tab_count(&self) -> usize {
+        self.tabs.len()
+    }
+
+    /// Get all tabs
+    pub fn tabs(&self) -> &[TimelineTab] {
+        &self.tabs
+    }
 
     /// Get the active tab index
     pub fn active_tab_index(&self) -> usize {
-        0 // Stub: always return 0 (single tab)
+        self.active_tab_index
+    }
+
+    /// Add a new tab with the specified type
+    /// Returns the index of the newly added tab, or an error if the tab already exists
+    pub fn add_tab(&mut self, tab_type: TimelineTabType) -> Result<usize, String> {
+        // Check if a tab with the same type already exists
+        if self.find_tab_by_type(&tab_type).is_some() {
+            return Err("Tab with this type already exists".to_string());
+        }
+
+        // Create and add the new tab
+        let new_tab = TimelineTab::new(tab_type);
+        self.tabs.push(new_tab);
+        let new_index = self.tabs.len() - 1;
+
+        Ok(new_index)
+    }
+
+    /// Remove a tab at the specified index
+    /// Returns an error if trying to remove the Home tab or if the index is out of bounds
+    pub fn remove_tab(&mut self, index: usize) -> Result<(), String> {
+        // Validate index
+        if index >= self.tabs.len() {
+            return Err("Tab index out of bounds".to_string());
+        }
+
+        // Cannot remove the Home tab
+        if matches!(self.tabs[index].tab_type, TimelineTabType::Home) {
+            return Err("Cannot remove the Home tab".to_string());
+        }
+
+        // Remove the tab
+        self.tabs.remove(index);
+
+        // Adjust active_tab_index if necessary
+        if self.active_tab_index >= self.tabs.len() {
+            // If we removed the last tab and it was active, move to the previous tab
+            self.active_tab_index = self.tabs.len().saturating_sub(1);
+        } else if index < self.active_tab_index {
+            // If we removed a tab before the active one, adjust the index
+            self.active_tab_index -= 1;
+        } else if index == self.active_tab_index {
+            // If we removed the active tab, stay at the same index (which now points to the next tab)
+            // or move to the last tab if we removed the last one
+            if self.active_tab_index >= self.tabs.len() {
+                self.active_tab_index = self.tabs.len().saturating_sub(1);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Find a tab by its type
+    /// Returns the index of the tab if found, or None if not found
+    pub fn find_tab_by_type(&self, tab_type: &TimelineTabType) -> Option<usize> {
+        self.tabs.iter().position(|tab| &tab.tab_type == tab_type)
     }
 
     /// Select a specific tab by index
-    pub fn select_tab(&mut self, _index: usize) {
-        // Stub: do nothing (single tab)
+    /// If the index is out of bounds, this method does nothing
+    pub fn select_tab(&mut self, index: usize) {
+        if index < self.tabs.len() {
+            self.active_tab_index = index;
+        }
     }
 
-    /// Switch to the next tab
+    /// Switch to the next tab (stops at the last tab, does not wrap around)
     pub fn next_tab(&mut self) {
-        // Stub: do nothing (single tab)
+        if !self.tabs.is_empty() && self.active_tab_index < self.tabs.len() - 1 {
+            self.active_tab_index += 1;
+        }
     }
 
-    /// Switch to the previous tab
+    /// Switch to the previous tab (stops at the first tab, does not wrap around)
     pub fn prev_tab(&mut self) {
-        // Stub: do nothing (single tab)
+        if self.active_tab_index > 0 {
+            self.active_tab_index -= 1;
+        }
     }
 }
 
@@ -1201,5 +1283,363 @@ mod tests {
         assert!(!state.is_loading_more());
 
         Ok(())
+    }
+
+    #[test]
+    fn test_add_tab_success() {
+        let mut state = TimelineState::default();
+
+        // Initial state: only Home tab
+        assert_eq!(state.tab_count(), 1);
+        assert_eq!(state.active_tab_index(), 0);
+
+        // Add a new UserTimeline tab
+        let keys = Keys::generate();
+        let pubkey = keys.public_key();
+        let tab_type = TimelineTabType::UserTimeline { pubkey };
+
+        let result = state.add_tab(tab_type.clone());
+        assert_eq!(result, Ok(1)); // New tab should be at index 1
+
+        // Verify tab was added
+        assert_eq!(state.tab_count(), 2);
+        assert_eq!(state.tabs()[1].tab_type, tab_type);
+    }
+
+    #[test]
+    fn test_add_tab_duplicate_rejection() {
+        let mut state = TimelineState::default();
+
+        let keys = Keys::generate();
+        let pubkey = keys.public_key();
+        let tab_type = TimelineTabType::UserTimeline { pubkey };
+
+        // Add the tab first time - should succeed
+        let result1 = state.add_tab(tab_type.clone());
+        assert_eq!(result1, Ok(1));
+
+        // Try to add the same tab again - should fail
+        let result2 = state.add_tab(tab_type);
+        assert_eq!(
+            result2,
+            Err("Tab with this type already exists".to_string())
+        );
+
+        // Tab count should remain 2
+        assert_eq!(state.tab_count(), 2);
+    }
+
+    #[test]
+    fn test_add_tab_home_duplicate() {
+        let mut state = TimelineState::default();
+
+        // Try to add another Home tab - should fail
+        let result = state.add_tab(TimelineTabType::Home);
+        assert_eq!(result, Err("Tab with this type already exists".to_string()));
+
+        // Tab count should remain 1
+        assert_eq!(state.tab_count(), 1);
+    }
+
+    #[test]
+    fn test_add_multiple_user_timeline_tabs() {
+        let mut state = TimelineState::default();
+
+        // Add multiple UserTimeline tabs with different pubkeys
+        let pubkey1 = Keys::generate().public_key();
+        let pubkey2 = Keys::generate().public_key();
+        let pubkey3 = Keys::generate().public_key();
+
+        let result1 = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey1 });
+        let result2 = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey2 });
+        let result3 = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey3 });
+
+        assert!(result1.is_ok());
+        assert!(result2.is_ok());
+        assert!(result3.is_ok());
+
+        assert_eq!(state.tab_count(), 4); // Home + 3 user timelines
+    }
+
+    #[test]
+    fn test_remove_tab_success() {
+        let mut state = TimelineState::default();
+
+        // Add a UserTimeline tab
+        let pubkey = Keys::generate().public_key();
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey });
+        assert_eq!(state.tab_count(), 2);
+
+        // Remove the UserTimeline tab
+        let result = state.remove_tab(1);
+        assert!(result.is_ok());
+        assert_eq!(state.tab_count(), 1);
+    }
+
+    #[test]
+    fn test_remove_tab_home_rejection() {
+        let mut state = TimelineState::default();
+
+        // Try to remove the Home tab - should fail
+        let result = state.remove_tab(0);
+        assert_eq!(result, Err("Cannot remove the Home tab".to_string()));
+
+        // Tab count should remain 1
+        assert_eq!(state.tab_count(), 1);
+    }
+
+    #[test]
+    fn test_remove_tab_out_of_bounds() {
+        let mut state = TimelineState::default();
+
+        // Try to remove a non-existent tab
+        let result = state.remove_tab(5);
+        assert_eq!(result, Err("Tab index out of bounds".to_string()));
+
+        // Tab count should remain 1
+        assert_eq!(state.tab_count(), 1);
+    }
+
+    #[test]
+    fn test_remove_tab_adjusts_active_index_when_before() {
+        let mut state = TimelineState::default();
+
+        // Add two UserTimeline tabs
+        let pubkey1 = Keys::generate().public_key();
+        let pubkey2 = Keys::generate().public_key();
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey1 });
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey2 });
+
+        // Tabs: [Home(0), User1(1), User2(2)]
+        assert_eq!(state.tab_count(), 3);
+
+        // Select the third tab
+        state.select_tab(2);
+        assert_eq!(state.active_tab_index(), 2);
+
+        // Remove the second tab (index 1) - should adjust active index
+        let result = state.remove_tab(1);
+        assert!(result.is_ok());
+
+        // Active tab should now be at index 1 (previously at index 2)
+        assert_eq!(state.active_tab_index(), 1);
+        assert_eq!(state.tab_count(), 2);
+    }
+
+    #[test]
+    fn test_remove_tab_adjusts_active_index_when_same() {
+        let mut state = TimelineState::default();
+
+        // Add two UserTimeline tabs
+        let pubkey1 = Keys::generate().public_key();
+        let pubkey2 = Keys::generate().public_key();
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey1 });
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey2 });
+
+        // Tabs: [Home(0), User1(1), User2(2)]
+        state.select_tab(1);
+        assert_eq!(state.active_tab_index(), 1);
+
+        // Remove the active tab (index 1)
+        let result = state.remove_tab(1);
+        assert!(result.is_ok());
+
+        // Active tab should remain at index 1 (now points to what was User2)
+        assert_eq!(state.active_tab_index(), 1);
+        assert_eq!(state.tab_count(), 2);
+    }
+
+    #[test]
+    fn test_remove_tab_adjusts_active_index_when_last() {
+        let mut state = TimelineState::default();
+
+        // Add two UserTimeline tabs
+        let pubkey1 = Keys::generate().public_key();
+        let pubkey2 = Keys::generate().public_key();
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey1 });
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey2 });
+
+        // Tabs: [Home(0), User1(1), User2(2)]
+        state.select_tab(2);
+        assert_eq!(state.active_tab_index(), 2);
+
+        // Remove the last tab (index 2)
+        let result = state.remove_tab(2);
+        assert!(result.is_ok());
+
+        // Active tab should move to index 1 (the new last tab)
+        assert_eq!(state.active_tab_index(), 1);
+        assert_eq!(state.tab_count(), 2);
+    }
+
+    #[test]
+    fn test_remove_tab_does_not_adjust_active_index_when_after() {
+        let mut state = TimelineState::default();
+
+        // Add two UserTimeline tabs
+        let pubkey1 = Keys::generate().public_key();
+        let pubkey2 = Keys::generate().public_key();
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey1 });
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey2 });
+
+        // Tabs: [Home(0), User1(1), User2(2)]
+        state.select_tab(0);
+        assert_eq!(state.active_tab_index(), 0);
+
+        // Remove a tab after the active one
+        let result = state.remove_tab(2);
+        assert!(result.is_ok());
+
+        // Active tab should remain at index 0
+        assert_eq!(state.active_tab_index(), 0);
+        assert_eq!(state.tab_count(), 2);
+    }
+
+    #[test]
+    fn test_find_tab_by_type_home() {
+        let state = TimelineState::default();
+
+        let result = state.find_tab_by_type(&TimelineTabType::Home);
+        assert_eq!(result, Some(0));
+    }
+
+    #[test]
+    fn test_find_tab_by_type_user_timeline() {
+        let mut state = TimelineState::default();
+
+        let pubkey = Keys::generate().public_key();
+        let tab_type = TimelineTabType::UserTimeline { pubkey };
+
+        // Not found initially
+        assert_eq!(state.find_tab_by_type(&tab_type), None);
+
+        // Add the tab
+        let _ = state.add_tab(tab_type.clone());
+
+        // Now it should be found
+        assert_eq!(state.find_tab_by_type(&tab_type), Some(1));
+    }
+
+    #[test]
+    fn test_find_tab_by_type_multiple_tabs() {
+        let mut state = TimelineState::default();
+
+        let pubkey1 = Keys::generate().public_key();
+        let pubkey2 = Keys::generate().public_key();
+        let pubkey3 = Keys::generate().public_key();
+
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey1 });
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey2 });
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey3 });
+
+        // Find each tab
+        assert_eq!(
+            state.find_tab_by_type(&TimelineTabType::UserTimeline { pubkey: pubkey1 }),
+            Some(1)
+        );
+        assert_eq!(
+            state.find_tab_by_type(&TimelineTabType::UserTimeline { pubkey: pubkey2 }),
+            Some(2)
+        );
+        assert_eq!(
+            state.find_tab_by_type(&TimelineTabType::UserTimeline { pubkey: pubkey3 }),
+            Some(3)
+        );
+
+        // Non-existent pubkey should return None
+        let pubkey_nonexistent = Keys::generate().public_key();
+        assert_eq!(
+            state.find_tab_by_type(&TimelineTabType::UserTimeline {
+                pubkey: pubkey_nonexistent
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn test_next_tab_with_single_tab() {
+        let mut state = TimelineState::default();
+
+        // With only one tab, next_tab should stay at 0 (no wrap around)
+        assert_eq!(state.active_tab_index(), 0);
+        state.next_tab();
+        assert_eq!(state.active_tab_index(), 0);
+    }
+
+    #[test]
+    fn test_prev_tab_with_single_tab() {
+        let mut state = TimelineState::default();
+
+        // With only one tab, prev_tab should stay at 0 (no wrap around)
+        assert_eq!(state.active_tab_index(), 0);
+        state.prev_tab();
+        assert_eq!(state.active_tab_index(), 0);
+    }
+
+    #[test]
+    fn test_next_tab_with_multiple_tabs() {
+        let mut state = TimelineState::default();
+
+        // Add two more tabs (total 3 tabs: Home, User1, User2)
+        let pubkey1 = Keys::generate().public_key();
+        let pubkey2 = Keys::generate().public_key();
+
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey1 });
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey2 });
+
+        // Verify we have 3 tabs
+        assert_eq!(state.tab_count(), 3);
+
+        // Start at tab 0
+        state.select_tab(0);
+        assert_eq!(state.active_tab_index(), 0);
+
+        // Next tab -> tab 1
+        state.next_tab();
+        assert_eq!(state.active_tab_index(), 1);
+
+        // Next tab -> tab 2
+        state.next_tab();
+        assert_eq!(state.active_tab_index(), 2);
+
+        // Next tab at the end -> should stay at tab 2 (no wrap around)
+        state.next_tab();
+        assert_eq!(state.active_tab_index(), 2);
+    }
+
+    #[test]
+    fn test_prev_tab_with_multiple_tabs() {
+        let mut state = TimelineState::default();
+
+        // Add two more tabs (total 3 tabs)
+        let pubkey1 = Keys::generate().public_key();
+        let pubkey2 = Keys::generate().public_key();
+
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey1 });
+        let _ = state.add_tab(TimelineTabType::UserTimeline { pubkey: pubkey2 });
+
+        // Start at tab 0
+        state.select_tab(0);
+        assert_eq!(state.active_tab_index(), 0);
+
+        // Prev tab at the start -> should stay at tab 0 (no wrap around)
+        state.prev_tab();
+        assert_eq!(state.active_tab_index(), 0);
+
+        // Move to tab 2
+        state.select_tab(2);
+        assert_eq!(state.active_tab_index(), 2);
+
+        // Prev tab -> tab 1
+        state.prev_tab();
+        assert_eq!(state.active_tab_index(), 1);
+
+        // Prev tab -> tab 0
+        state.prev_tab();
+        assert_eq!(state.active_tab_index(), 0);
+
+        // Prev tab at the start -> should stay at tab 0
+        state.prev_tab();
+        assert_eq!(state.active_tab_index(), 0);
     }
 }

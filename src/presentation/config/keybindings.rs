@@ -36,6 +36,12 @@ pub enum Action {
     React,
     Repost,
 
+    // Tab management
+    OpenAuthorTimeline,
+    CloseCurrentTab,
+    PrevTab,
+    NextTab,
+
     // System
     Quit,
     SubmitTextNote,

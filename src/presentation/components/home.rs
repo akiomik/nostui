@@ -3,15 +3,16 @@
 //! Main view component that displays the timeline and handles user input.
 
 use ratatui::prelude::*;
-use ratatui::widgets::Tabs;
 
 use crate::core::state::AppState;
 
 pub mod input;
 pub mod list;
+pub mod tab_bar;
 
 pub use input::HomeInputComponent;
 pub use list::HomeListComponent;
+pub use tab_bar::TabBarComponent;
 
 /// Home component
 ///
@@ -23,6 +24,8 @@ pub struct HomeComponent<'a> {
     pub(crate) input: HomeInputComponent<'a>,
     /// Timeline list component
     list: HomeListComponent,
+    /// Tab bar component
+    tab_bar: TabBarComponent,
 }
 
 impl<'a> HomeComponent<'a> {
@@ -31,6 +34,7 @@ impl<'a> HomeComponent<'a> {
         Self {
             input: HomeInputComponent::new(),
             list: HomeListComponent::new(),
+            tab_bar: TabBarComponent::new(),
         }
     }
 
@@ -47,12 +51,8 @@ impl<'a> HomeComponent<'a> {
             ])
             .split(area);
 
-        // Render tabs
-        let tabs = Tabs::new(vec!["Timeline"])
-            .select(state.timeline.active_tab_index())
-            .style(Style::default().bg(Color::Black))
-            .highlight_style(Style::default().reversed());
-        frame.render_widget(tabs, chunks[0]);
+        // Render tabs using the tab bar component
+        self.tab_bar.view(state, frame, chunks[0]);
 
         // Render timeline in the content area
         self.list.view(state, frame, chunks[1]);
