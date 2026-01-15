@@ -291,8 +291,8 @@ impl<'a> TearsApp<'a> {
             // Compose/interactions
             KeyAction::NewTextNote => Command::message(AppMsg::Editor(EditorMsg::StartComposing)),
             KeyAction::ReplyTextNote => Command::message(AppMsg::Editor(EditorMsg::StartReply)),
-            KeyAction::React => Command::message(AppMsg::Editor(EditorMsg::ReactToSelected)),
-            KeyAction::Repost => Command::message(AppMsg::Editor(EditorMsg::RepostSelected)),
+            KeyAction::React => Command::message(AppMsg::Timeline(TimelineMsg::ReactToSelected)),
+            KeyAction::Repost => Command::message(AppMsg::Timeline(TimelineMsg::RepostSelected)),
 
             // System
             KeyAction::Quit => Command::message(AppMsg::System(SystemMsg::Quit)),
@@ -335,6 +335,61 @@ impl<'a> TearsApp<'a> {
             // Load more older events
             TimelineMsg::LoadMore => {
                 return self.load_more_timeline_events();
+            }
+            TimelineMsg::ReactToSelected => {
+                // React to the selected note
+                if let Some(note) = self.state.timeline.selected_note() {
+                    let event_id = note.id;
+                    let Ok(note1) = event_id.to_bech32();
+                    log::info!("Reacting to event: {note1}");
+
+                    let event_builder = EventBuilder::reaction(note, "+");
+                    let success_msg = format!("[Reacted] note {note1}");
+                    self.send_signed_event(event_builder, success_msg, "Failed to sign reaction");
+                } else {
+                    self.state.system.set_status_message("No note selected");
+                }
+            }
+            TimelineMsg::RepostSelected => {
+                // Repost the selected note
+                if let Some(note) = self.state.timeline.selected_note() {
+                    let event_id = note.id;
+                    let Ok(note1) = event_id.to_bech32();
+                    log::info!("Reposting event: {note1}");
+
+                    let event_builder = EventBuilder::repost(note, None);
+                    let success_msg = format!("[Reposted] {note1}");
+                    self.send_signed_event(event_builder, success_msg, "Failed to sign repost");
+                } else {
+                    self.state.system.set_status_message("No note selected");
+                }
+            }
+            TimelineMsg::SelectTab(index) => {
+                // Select a specific tab by index
+                // Delegate to TimelineState
+                self.state.timeline.select_tab(index);
+                log::debug!(
+                    "Selected tab index: {}",
+                    self.state.timeline.active_tab_index()
+                );
+            }
+            TimelineMsg::NextTab => {
+                // Switch to the next tab (wraps around)
+                // Delegate to TimelineState
+                self.state.timeline.next_tab();
+                log::debug!(
+                    "Switched to next tab: {}",
+                    self.state.timeline.active_tab_index()
+                );
+            }
+            TimelineMsg::PrevTab => {
+                // Switch to the previous tab (wraps around)
+                // Delegate to TimelineState
+                self.state.timeline.prev_tab();
+                log::debug!(
+                    "Switched to previous tab: {}",
+                    self.state.timeline.active_tab_index()
+                );
             }
         }
         Command::none()
@@ -397,34 +452,6 @@ impl<'a> TearsApp<'a> {
                 self.state.editor.cancel_composing();
                 self.components.borrow_mut().home.input.clear();
             }
-            EditorMsg::ReactToSelected => {
-                // React to the selected note
-                if let Some(note) = self.state.timeline.selected_note() {
-                    let event_id = note.id;
-                    let Ok(note1) = event_id.to_bech32();
-                    log::info!("Reacting to event: {note1}");
-
-                    let event_builder = EventBuilder::reaction(note, "+");
-                    let success_msg = format!("[Reacted] note {note1}");
-                    self.send_signed_event(event_builder, success_msg, "Failed to sign reaction");
-                } else {
-                    self.state.system.set_status_message("No note selected");
-                }
-            }
-            EditorMsg::RepostSelected => {
-                // Repost the selected note
-                if let Some(note) = self.state.timeline.selected_note() {
-                    let event_id = note.id;
-                    let Ok(note1) = event_id.to_bech32();
-                    log::info!("Reposting event: {note1}");
-
-                    let event_builder = EventBuilder::repost(note, None);
-                    let success_msg = format!("[Reposted] {note1}");
-                    self.send_signed_event(event_builder, success_msg, "Failed to sign repost");
-                } else {
-                    self.state.system.set_status_message("No note selected");
-                }
-            }
             EditorMsg::ProcessTextAreaInput(key_event) => {
                 // Process key input directly on the Component's TextArea
                 // This avoids the expensive State → TextArea → State round-trip
@@ -433,33 +460,6 @@ impl<'a> TearsApp<'a> {
                     .home
                     .input
                     .process_input(key_event);
-            }
-            EditorMsg::SelectTab(index) => {
-                // Select a specific tab by index
-                // Delegate to TimelineState
-                self.state.timeline.select_tab(index);
-                log::debug!(
-                    "Selected tab index: {}",
-                    self.state.timeline.active_tab_index()
-                );
-            }
-            EditorMsg::NextTab => {
-                // Switch to the next tab (wraps around)
-                // Delegate to TimelineState
-                self.state.timeline.next_tab();
-                log::debug!(
-                    "Switched to next tab: {}",
-                    self.state.timeline.active_tab_index()
-                );
-            }
-            EditorMsg::PrevTab => {
-                // Switch to the previous tab (wraps around)
-                // Delegate to TimelineState
-                self.state.timeline.prev_tab();
-                log::debug!(
-                    "Switched to previous tab: {}",
-                    self.state.timeline.active_tab_index()
-                );
             }
         }
         Command::none()
@@ -1154,11 +1154,11 @@ mod tests {
         assert_eq!(app.state.timeline.active_tab_index(), 0);
 
         // Select tab 0 (only tab available)
-        app.handle_editor_msg(EditorMsg::SelectTab(0));
+        app.handle_timeline_msg(TimelineMsg::SelectTab(0));
         assert_eq!(app.state.timeline.active_tab_index(), 0);
 
         // Try to select tab beyond max (stub does nothing)
-        app.handle_editor_msg(EditorMsg::SelectTab(5));
+        app.handle_timeline_msg(TimelineMsg::SelectTab(5));
         assert_eq!(app.state.timeline.active_tab_index(), 0);
     }
 
@@ -1168,7 +1168,7 @@ mod tests {
 
         // With only one tab, NextTab should stay at 0 (stub does nothing)
         assert_eq!(app.state.timeline.active_tab_index(), 0);
-        app.handle_editor_msg(EditorMsg::NextTab);
+        app.handle_timeline_msg(TimelineMsg::NextTab);
         assert_eq!(app.state.timeline.active_tab_index(), 0);
     }
 
@@ -1178,7 +1178,7 @@ mod tests {
 
         // With only one tab, PrevTab should stay at 0 (stub does nothing)
         assert_eq!(app.state.timeline.active_tab_index(), 0);
-        app.handle_editor_msg(EditorMsg::PrevTab);
+        app.handle_timeline_msg(TimelineMsg::PrevTab);
         assert_eq!(app.state.timeline.active_tab_index(), 0);
     }
 }
