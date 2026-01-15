@@ -20,3 +20,7 @@ fmt:
 
 run:
   cargo run
+
+[macos]
+log-tailf:
+  tail -f ~/Library/Application\ Support/io.0m1.nostui/nostui.log
