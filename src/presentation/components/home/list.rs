@@ -48,7 +48,7 @@ impl HomeListComponent {
             .timeline
             .iter()
             .map(|sortable_event| {
-                let event = &sortable_event.0.event;
+                let event = &sortable_event.event;
                 let event_id = event.id;
 
                 // Get author profile if available
