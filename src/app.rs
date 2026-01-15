@@ -10,7 +10,7 @@ use tears::prelude::*;
 use tears::subscription::terminal::TerminalEvents;
 use tears::subscription::time::{Message as TimerMessage, Timer};
 
-use crate::core::message::{AppMsg, NostrMsg, SystemMsg, TimelineMsg, UiMsg};
+use crate::core::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
 use crate::core::state::AppState;
 use crate::domain::nostr::Profile;
 use crate::infrastructure::config::Config;
@@ -96,7 +96,7 @@ impl<'a> Application for TearsApp<'a> {
         match msg {
             AppMsg::System(system_msg) => self.handle_system_msg(system_msg),
             AppMsg::Timeline(timeline_msg) => self.handle_timeline_msg(timeline_msg),
-            AppMsg::Ui(ui_msg) => self.handle_ui_msg(ui_msg),
+            AppMsg::Editor(editor_msg) => self.handle_editor_msg(editor_msg),
             AppMsg::Nostr(nostr_msg) => self.handle_nostr_msg(nostr_msg),
         }
     }
@@ -259,13 +259,13 @@ impl<'a> TearsApp<'a> {
         // not a quit command. Only hardcoded special keys are processed.
         match (key.code, key.modifiers) {
             // Escape: cancel composing
-            (KeyCode::Esc, _) => Command::message(AppMsg::Ui(UiMsg::CancelComposing)),
+            (KeyCode::Esc, _) => Command::message(AppMsg::Editor(EditorMsg::CancelComposing)),
             // Ctrl+P: submit note (hardcoded for safety)
             (KeyCode::Char('p'), KeyModifiers::CONTROL) => {
-                Command::message(AppMsg::Ui(UiMsg::SubmitNote))
+                Command::message(AppMsg::Editor(EditorMsg::SubmitNote))
             }
             // All other keys are passed to textarea for input
-            _ => Command::message(AppMsg::Ui(UiMsg::ProcessTextAreaInput(key))),
+            _ => Command::message(AppMsg::Editor(EditorMsg::ProcessTextAreaInput(key))),
         }
     }
 
@@ -289,10 +289,10 @@ impl<'a> TearsApp<'a> {
             }
 
             // Compose/interactions
-            KeyAction::NewTextNote => Command::message(AppMsg::Ui(UiMsg::StartComposing)),
-            KeyAction::ReplyTextNote => Command::message(AppMsg::Ui(UiMsg::StartReply)),
-            KeyAction::React => Command::message(AppMsg::Ui(UiMsg::ReactToSelected)),
-            KeyAction::Repost => Command::message(AppMsg::Ui(UiMsg::RepostSelected)),
+            KeyAction::NewTextNote => Command::message(AppMsg::Editor(EditorMsg::StartComposing)),
+            KeyAction::ReplyTextNote => Command::message(AppMsg::Editor(EditorMsg::StartReply)),
+            KeyAction::React => Command::message(AppMsg::Editor(EditorMsg::ReactToSelected)),
+            KeyAction::Repost => Command::message(AppMsg::Editor(EditorMsg::RepostSelected)),
 
             // System
             KeyAction::Quit => Command::message(AppMsg::System(SystemMsg::Quit)),
@@ -340,11 +340,11 @@ impl<'a> TearsApp<'a> {
         Command::none()
     }
 
-    /// Handle UI messages
-    fn handle_ui_msg(&mut self, msg: UiMsg) -> Command<AppMsg> {
+    /// Handle editor messages
+    fn handle_editor_msg(&mut self, msg: EditorMsg) -> Command<AppMsg> {
         match msg {
-            UiMsg::StartComposing => self.state.editor.start_composing(),
-            UiMsg::StartReply => {
+            EditorMsg::StartComposing => self.state.editor.start_composing(),
+            EditorMsg::StartReply => {
                 // Get the selected note
                 if let Some(note) = self.state.timeline.selected_note() {
                     let event_id = note.id;
@@ -363,11 +363,11 @@ impl<'a> TearsApp<'a> {
                     self.state.system.set_status_message("No note selected");
                 }
             }
-            UiMsg::CancelComposing => {
+            EditorMsg::CancelComposing => {
                 self.state.editor.cancel_composing();
                 self.components.borrow_mut().home.input.clear();
             }
-            UiMsg::SubmitNote => {
+            EditorMsg::SubmitNote => {
                 // Get content from Component's TextArea
                 let content = self.components.borrow().home.input.get_content();
 
@@ -397,7 +397,7 @@ impl<'a> TearsApp<'a> {
                 self.state.editor.cancel_composing();
                 self.components.borrow_mut().home.input.clear();
             }
-            UiMsg::ReactToSelected => {
+            EditorMsg::ReactToSelected => {
                 // React to the selected note
                 if let Some(note) = self.state.timeline.selected_note() {
                     let event_id = note.id;
@@ -411,7 +411,7 @@ impl<'a> TearsApp<'a> {
                     self.state.system.set_status_message("No note selected");
                 }
             }
-            UiMsg::RepostSelected => {
+            EditorMsg::RepostSelected => {
                 // Repost the selected note
                 if let Some(note) = self.state.timeline.selected_note() {
                     let event_id = note.id;
@@ -425,7 +425,7 @@ impl<'a> TearsApp<'a> {
                     self.state.system.set_status_message("No note selected");
                 }
             }
-            UiMsg::ProcessTextAreaInput(key_event) => {
+            EditorMsg::ProcessTextAreaInput(key_event) => {
                 // Process key input directly on the Component's TextArea
                 // This avoids the expensive State → TextArea → State round-trip
                 self.components
@@ -434,7 +434,7 @@ impl<'a> TearsApp<'a> {
                     .input
                     .process_input(key_event);
             }
-            UiMsg::SelectTab(index) => {
+            EditorMsg::SelectTab(index) => {
                 // Select a specific tab by index
                 // Delegate to TimelineState
                 self.state.timeline.select_tab(index);
@@ -443,7 +443,7 @@ impl<'a> TearsApp<'a> {
                     self.state.timeline.active_tab_index()
                 );
             }
-            UiMsg::NextTab => {
+            EditorMsg::NextTab => {
                 // Switch to the next tab (wraps around)
                 // Delegate to TimelineState
                 self.state.timeline.next_tab();
@@ -452,7 +452,7 @@ impl<'a> TearsApp<'a> {
                     self.state.timeline.active_tab_index()
                 );
             }
-            UiMsg::PrevTab => {
+            EditorMsg::PrevTab => {
                 // Switch to the previous tab (wraps around)
                 // Delegate to TimelineState
                 self.state.timeline.prev_tab();
@@ -968,7 +968,7 @@ mod tests {
         assert!(app.state.editor.is_composing());
 
         // The textarea should contain 'q' after processing
-        app.update(AppMsg::Ui(UiMsg::ProcessTextAreaInput(q_key)));
+        app.update(AppMsg::Editor(EditorMsg::ProcessTextAreaInput(q_key)));
         assert_eq!(app.components.borrow().home.input.get_content(), "q");
     }
 
@@ -991,7 +991,7 @@ mod tests {
         let _cmd = app.handle_key_input(esc_key);
 
         // Should return to normal mode
-        app.update(AppMsg::Ui(UiMsg::CancelComposing));
+        app.update(AppMsg::Editor(EditorMsg::CancelComposing));
         assert!(app.state.editor.is_normal());
         assert!(app.components.borrow().home.input.get_content().is_empty());
     }
@@ -1154,11 +1154,11 @@ mod tests {
         assert_eq!(app.state.timeline.active_tab_index(), 0);
 
         // Select tab 0 (only tab available)
-        app.handle_ui_msg(UiMsg::SelectTab(0));
+        app.handle_editor_msg(EditorMsg::SelectTab(0));
         assert_eq!(app.state.timeline.active_tab_index(), 0);
 
         // Try to select tab beyond max (stub does nothing)
-        app.handle_ui_msg(UiMsg::SelectTab(5));
+        app.handle_editor_msg(EditorMsg::SelectTab(5));
         assert_eq!(app.state.timeline.active_tab_index(), 0);
     }
 
@@ -1168,7 +1168,7 @@ mod tests {
 
         // With only one tab, NextTab should stay at 0 (stub does nothing)
         assert_eq!(app.state.timeline.active_tab_index(), 0);
-        app.handle_ui_msg(UiMsg::NextTab);
+        app.handle_editor_msg(EditorMsg::NextTab);
         assert_eq!(app.state.timeline.active_tab_index(), 0);
     }
 
@@ -1178,7 +1178,7 @@ mod tests {
 
         // With only one tab, PrevTab should stay at 0 (stub does nothing)
         assert_eq!(app.state.timeline.active_tab_index(), 0);
-        app.handle_ui_msg(UiMsg::PrevTab);
+        app.handle_editor_msg(EditorMsg::PrevTab);
         assert_eq!(app.state.timeline.active_tab_index(), 0);
     }
 }
