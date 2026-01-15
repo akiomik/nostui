@@ -13,7 +13,6 @@ use tears::subscription::time::{Message as TimerMessage, Timer};
 use crate::core::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
 use crate::core::state::timeline::TimelineTabType;
 use crate::core::state::AppState;
-use crate::domain::nostr::Profile;
 use crate::infrastructure::config::Config;
 use crate::infrastructure::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrCommand, NostrEvents,
@@ -617,10 +616,6 @@ impl<'a> TearsApp<'a> {
                     let _ = sender.send(NostrCommand::Shutdown);
                 }
             }
-            NostrMsg::EventReceived(event) => {
-                log::debug!("Received event: {}", event.id);
-                self.process_nostr_event(*event);
-            }
             NostrMsg::SubscriptionMessage(sub_msg) => {
                 self.handle_nostr_subscription_message(sub_msg);
             }
@@ -691,13 +686,8 @@ impl<'a> TearsApp<'a> {
                                 event.id,
                                 event.kind
                             );
-                            self.process_nostr_event_for_tab(event.into_owned(), &tab_type);
-                        } else {
-                            // Fallback: use default processing (for backward compatibility)
-                            log::debug!(
-                            "Subscription {subscription_id:?} not found, using default processing"
-                        );
-                            self.process_nostr_event(event.into_owned());
+                            self.state
+                                .process_nostr_event_for_tab(event.into_owned(), &tab_type);
                         }
                     }
                 }
@@ -718,126 +708,6 @@ impl<'a> TearsApp<'a> {
         }
     }
 
-    /// Process a received Nostr event for a specific tab
-    fn process_nostr_event_for_tab(&mut self, event: nostr_sdk::Event, tab_type: &TimelineTabType) {
-        match event.kind {
-            Kind::TextNote => {
-                // Add note to the specific tab
-                let (was_inserted, loading_completed) =
-                    self.state.timeline.add_note_to_tab(event.clone(), tab_type);
-
-                if was_inserted {
-                    log::info!(
-                        "Added event {} (created_at: {}) to tab {tab_type:?}",
-                        event.id,
-                        event.created_at
-                    );
-                } else {
-                    log::debug!("Skipped duplicate event {} for tab {tab_type:?}", event.id);
-                }
-                if loading_completed {
-                    log::info!("Load more completed for tab {tab_type:?}");
-                    match tab_type {
-                        TimelineTabType::Home => {
-                            self.state.system.set_status_message("[Home] Loaded more");
-                        }
-                        TimelineTabType::UserTimeline { .. } => {
-                            self.state.system.set_status_message("[User] Loaded more");
-                        }
-                    }
-                }
-            }
-            Kind::Metadata => {
-                // Metadata is shared across all tabs
-                if let Ok(metadata) = Metadata::from_json(event.content.clone()) {
-                    let profile = Profile::new(event.pubkey, event.created_at, metadata);
-                    if self.state.user.insert_newer_profile(profile) {
-                        log::debug!("Updated profile for pubkey: {}", event.pubkey);
-                    }
-                }
-            }
-            Kind::Repost => {
-                // Reactions are shared (global_reactions)
-                if let Some(event_id) = self.state.timeline.add_repost(event) {
-                    log::debug!("Added repost for event: {event_id}");
-                }
-            }
-            Kind::Reaction => {
-                // Reactions are shared (global_reactions)
-                if let Some(event_id) = self.state.timeline.add_reaction(event) {
-                    log::debug!("Added reaction for event: {event_id}");
-                }
-            }
-            Kind::ZapReceipt => {
-                // Zap receipts are shared (global_zap_receipts)
-                if let Some(event_id) = self.state.timeline.add_zap_receipt(event) {
-                    log::debug!("Added zap receipt for event: {event_id}");
-                }
-            }
-            _ => {
-                log::debug!("Received unknown event type: {:?}", event.kind);
-            }
-        }
-    }
-
-    /// Process a received Nostr event
-    fn process_nostr_event(&mut self, event: nostr_sdk::Event) {
-        match event.kind {
-            Kind::TextNote => {
-                // Add text note to timeline
-                let (was_inserted, loading_completed) = self.state.timeline.add_note(event);
-
-                if was_inserted {
-                    log::debug!("Added text note to timeline");
-                }
-
-                if loading_completed {
-                    log::info!("Load more completed");
-                    self.state.system.set_status_message("[Home] Loaded more");
-                }
-            }
-            Kind::Metadata => {
-                // Parse and store profile metadata
-                if let Ok(metadata) = Metadata::from_json(event.content.clone()) {
-                    let profile = Profile::new(event.pubkey, event.created_at, metadata);
-                    if self.state.user.insert_newer_profile(profile) {
-                        log::debug!("Updated profile for pubkey: {}", event.pubkey);
-                    }
-                } else {
-                    log::warn!("Failed to parse metadata for pubkey: {}", event.pubkey);
-                    self.state
-                        .system
-                        .set_status_message("Failed to parse profile metadata");
-                }
-            }
-            Kind::Reaction => {
-                // Add reaction to timeline engagement data
-                if let Some(event_id) = self.state.timeline.add_reaction(event) {
-                    log::debug!("Added reaction for event: {event_id}");
-                }
-            }
-            Kind::Repost => {
-                // Add repost to timeline engagement data
-                if let Some(event_id) = self.state.timeline.add_repost(event) {
-                    log::debug!("Added repost for event: {event_id}");
-                }
-            }
-            Kind::ZapReceipt => {
-                // Add zap receipt to timeline engagement data
-                if let Some(event_id) = self.state.timeline.add_zap_receipt(event) {
-                    log::debug!("Added zap receipt for event: {event_id}");
-                }
-            }
-            _ => {
-                // Unknown event types are logged but not processed
-                log::debug!("Received unknown event type: {:?}", event.kind);
-                self.state
-                    .system
-                    .set_status_message(format!("Received unknown event type: {}", event.kind));
-            }
-        }
-    }
-
     /// Send a signed Nostr event through the command sender
     /// Returns true if the event was sent successfully, false otherwise
     fn send_signed_event(
@@ -849,11 +719,7 @@ impl<'a> TearsApp<'a> {
         if let Some(sender) = &self.state.nostr.command_sender {
             match event_builder.sign_with_keys(&self.keys) {
                 Ok(event) => {
-                    let _ = sender.send(NostrCommand::SendEvent {
-                        event: event.clone(),
-                    });
-                    // Process the sent event locally for optimistic update
-                    self.process_nostr_event(event);
+                    let _ = sender.send(NostrCommand::SendEvent { event });
                     self.state.system.set_status_message(success_message);
                     true
                 }
@@ -1102,8 +968,10 @@ mod tests {
         let event2 = EventBuilder::text_note("test note 2")
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
-        app.process_nostr_event(event1);
-        app.process_nostr_event(event2);
+        app.state
+            .process_nostr_event_for_tab(event1, &TimelineTabType::Home);
+        app.state
+            .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         // Select somewhere in the middle
         app.state.timeline.select(1);
@@ -1143,8 +1011,10 @@ mod tests {
         let event2 = EventBuilder::text_note("test note 2")
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
-        app.process_nostr_event(event1);
-        app.process_nostr_event(event2);
+        app.state
+            .process_nostr_event_for_tab(event1, &TimelineTabType::Home);
+        app.state
+            .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         // Start with no selection
         app.state.timeline.deselect();
@@ -1167,7 +1037,8 @@ mod tests {
         let event = EventBuilder::text_note("test note")
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
-        app.process_nostr_event(event);
+        app.state
+            .process_nostr_event_for_tab(event, &TimelineTabType::Home);
 
         // Directly test the delegation by calling SelectFirst
         app.update(AppMsg::Timeline(TimelineMsg::SelectFirst));
@@ -1189,8 +1060,10 @@ mod tests {
         let event2 = EventBuilder::text_note("test note 2")
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
-        app.process_nostr_event(event1);
-        app.process_nostr_event(event2);
+        app.state
+            .process_nostr_event_for_tab(event1, &TimelineTabType::Home);
+        app.state
+            .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         // Directly test the delegation by calling SelectLast
         app.update(AppMsg::Timeline(TimelineMsg::SelectLast));
@@ -1308,9 +1181,12 @@ mod tests {
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
 
-        app.process_nostr_event(event1);
-        app.process_nostr_event(event2.clone());
-        app.process_nostr_event(event3);
+        app.state
+            .process_nostr_event_for_tab(event1, &TimelineTabType::Home);
+        app.state
+            .process_nostr_event_for_tab(event2.clone(), &TimelineTabType::Home);
+        app.state
+            .process_nostr_event_for_tab(event3, &TimelineTabType::Home);
 
         // Timeline should be: [event3 (newest), event2 (middle), event1 (oldest)]
         // User selects index 1 (middle note - event2)
@@ -1330,7 +1206,8 @@ mod tests {
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
 
-        app.process_nostr_event(new_event);
+        app.state
+            .process_nostr_event_for_tab(new_event, &TimelineTabType::Home);
 
         // Timeline should now be: [event3, new_event, event2, event1]
         // Selection index should be adjusted from 1 to 2 to still point to event2
@@ -1361,8 +1238,10 @@ mod tests {
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
 
-        app.process_nostr_event(event1);
-        app.process_nostr_event(event2.clone());
+        app.state
+            .process_nostr_event_for_tab(event1, &TimelineTabType::Home);
+        app.state
+            .process_nostr_event_for_tab(event2.clone(), &TimelineTabType::Home);
 
         // Timeline should be: [event2 (newest), event1 (oldest)]
         // User selects index 0 (newest note - event2)
@@ -1381,7 +1260,8 @@ mod tests {
             .sign_with_keys(&Keys::generate())
             .expect("Failed to sign test event");
 
-        app.process_nostr_event(old_event);
+        app.state
+            .process_nostr_event_for_tab(old_event, &TimelineTabType::Home);
 
         // Timeline should now be: [event2, event1, old_event]
         // Selection should remain at index 0, still pointing to the newest note
@@ -1407,7 +1287,8 @@ mod tests {
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
 
-        app.process_nostr_event(event);
+        app.state
+            .process_nostr_event_for_tab(event, &TimelineTabType::Home);
 
         // Selection should remain None
         assert_eq!(app.state.timeline.selected_note(), None);

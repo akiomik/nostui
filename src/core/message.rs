@@ -92,8 +92,6 @@ pub enum NostrMsg {
     Connect,
     /// Disconnect from relays
     Disconnect,
-    /// Received an event (boxed to reduce enum size)
-    EventReceived(Box<nostr_sdk::Event>),
     /// NostrEvents subscription message
     SubscriptionMessage(NostrSubscriptionMessage),
 }
