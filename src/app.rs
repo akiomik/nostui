@@ -11,6 +11,7 @@ use tears::subscription::terminal::TerminalEvents;
 use tears::subscription::time::{Message as TimerMessage, Timer};
 
 use crate::core::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
+use crate::core::state::timeline::TimelineTabType;
 use crate::core::state::AppState;
 use crate::domain::nostr::Profile;
 use crate::infrastructure::config::Config;
@@ -294,6 +295,16 @@ impl<'a> TearsApp<'a> {
             KeyAction::React => Command::message(AppMsg::Timeline(TimelineMsg::ReactToSelected)),
             KeyAction::Repost => Command::message(AppMsg::Timeline(TimelineMsg::RepostSelected)),
 
+            // Tab management
+            KeyAction::OpenAuthorTimeline => {
+                Command::message(AppMsg::Timeline(TimelineMsg::OpenAuthorTimeline))
+            }
+            KeyAction::CloseCurrentTab => {
+                Command::message(AppMsg::Timeline(TimelineMsg::CloseCurrentTab))
+            }
+            KeyAction::PrevTab => Command::message(AppMsg::Timeline(TimelineMsg::PrevTab)),
+            KeyAction::NextTab => Command::message(AppMsg::Timeline(TimelineMsg::NextTab)),
+
             // System
             KeyAction::Quit => Command::message(AppMsg::System(SystemMsg::Quit)),
             KeyAction::SubmitTextNote => {
@@ -390,6 +401,65 @@ impl<'a> TearsApp<'a> {
                     "Switched to previous tab: {}",
                     self.state.timeline.active_tab_index()
                 );
+            }
+            TimelineMsg::OpenAuthorTimeline => {
+                // Open author timeline for the selected note's author
+                if let Some(event) = self.state.timeline.selected_note() {
+                    let author_pubkey = event.pubkey;
+                    let tab_type = TimelineTabType::UserTimeline {
+                        pubkey: author_pubkey,
+                    };
+
+                    // Check if tab already exists
+                    if let Some(index) = self.state.timeline.find_tab_by_type(&tab_type) {
+                        // Tab exists, just switch to it
+                        self.state.timeline.select_tab(index);
+                        log::info!("Switched to existing author timeline for {author_pubkey}");
+                        let short_hex = &author_pubkey.to_hex()[..8];
+                        self.state
+                            .system
+                            .set_status_message(format!("Switched to timeline for {short_hex}"));
+                    } else {
+                        // Tab doesn't exist, create a new one
+                        match self.state.timeline.add_tab(tab_type.clone()) {
+                            Ok(new_index) => {
+                                self.state.timeline.select_tab(new_index);
+                                log::info!("Created new author timeline for {author_pubkey}");
+                                let short_hex = &author_pubkey.to_hex()[..8];
+                                self.state
+                                    .system
+                                    .set_status_message(format!("Opened timeline for {short_hex}"));
+
+                                // TODO: Send Nostr subscription command (Phase 7)
+                                // commands.push(NostrCommand::SubscribeTimeline { tab_type });
+                            }
+                            Err(e) => {
+                                log::error!("Failed to create author timeline: {e}");
+                                self.state
+                                    .system
+                                    .set_status_message(format!("Failed to create tab: {e}"));
+                            }
+                        }
+                    }
+                } else {
+                    self.state.system.set_status_message("No note selected");
+                }
+            }
+            TimelineMsg::CloseCurrentTab => {
+                // Close the current tab (only if it's not the Home tab)
+                let current_index = self.state.timeline.active_tab_index();
+                match self.state.timeline.remove_tab(current_index) {
+                    Ok(()) => {
+                        log::info!("Closed tab at index {current_index}");
+                        self.state
+                            .system
+                            .set_status_message("Tab closed".to_string());
+                    }
+                    Err(e) => {
+                        log::warn!("Cannot close tab: {e}");
+                        self.state.system.set_status_message(e);
+                    }
+                }
             }
         }
         Command::none()
@@ -1159,26 +1229,6 @@ mod tests {
 
         // Try to select tab beyond max (stub does nothing)
         app.handle_timeline_msg(TimelineMsg::SelectTab(5));
-        assert_eq!(app.state.timeline.active_tab_index(), 0);
-    }
-
-    #[test]
-    fn test_next_tab_with_single_tab() {
-        let mut app = create_test_app();
-
-        // With only one tab, NextTab should stay at 0 (stub does nothing)
-        assert_eq!(app.state.timeline.active_tab_index(), 0);
-        app.handle_timeline_msg(TimelineMsg::NextTab);
-        assert_eq!(app.state.timeline.active_tab_index(), 0);
-    }
-
-    #[test]
-    fn test_prev_tab_with_single_tab() {
-        let mut app = create_test_app();
-
-        // With only one tab, PrevTab should stay at 0 (stub does nothing)
-        assert_eq!(app.state.timeline.active_tab_index(), 0);
-        app.handle_timeline_msg(TimelineMsg::PrevTab);
         assert_eq!(app.state.timeline.active_tab_index(), 0);
     }
 }

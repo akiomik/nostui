@@ -64,6 +64,10 @@ pub enum TimelineMsg {
     NextTab,
     /// Switch to the previous tab
     PrevTab,
+    /// Open author timeline for the selected note's author
+    OpenAuthorTimeline,
+    /// Close the current tab
+    CloseCurrentTab,
 }
 
 /// Editor messages

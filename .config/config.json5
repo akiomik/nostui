@@ -11,6 +11,12 @@
       "<Shift-g>": "ScrollToBottom", // Scroll to bottom of the page
       "<f>": "React",                // React to the post
       "<t>": "Repost",               // Repost the post
+      "<i>": "OpenAuthorTimeline",   // Open author timeline
+      "<Ctrl-w>": "CloseCurrentTab", // Close current tab
+      "<h>": "PrevTab",              // Switch to previous tab
+      "<left>": "PrevTab",           // Switch to previous tab
+      "<l>": "NextTab",              // Switch to next tab
+      "<right>": "NextTab",          // Switch to next tab
       "<esc>": "Unselect",           // Unselect the posts
       "<q>": "Quit",                 // Quit the application
       "<Ctrl-d>": "Quit",            // Another way to quit
