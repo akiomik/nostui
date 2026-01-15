@@ -426,12 +426,24 @@ impl<'a> TearsApp<'a> {
                                 self.state.timeline.select_tab(new_index);
                                 log::info!("Created new author timeline for {author_pubkey}");
                                 let short_hex = &author_pubkey.to_hex()[..8];
-                                self.state
-                                    .system
-                                    .set_status_message(format!("Opened timeline for {short_hex}"));
 
-                                // TODO: Send Nostr subscription command (Phase 7)
-                                // commands.push(NostrCommand::SubscribeTimeline { tab_type });
+                                // Send subscription command
+                                if let Some(sender) = &self.state.nostr.command_sender {
+                                    let _ = sender.send(NostrCommand::SubscribeTimeline {
+                                        tab_type: tab_type.clone(),
+                                    });
+                                    log::info!("Subscribing to timeline for user: {author_pubkey}");
+                                    self.state.system.set_status_message(format!(
+                                        "Opening timeline for {short_hex}"
+                                    ));
+                                } else {
+                                    log::warn!(
+                                        "Cannot subscribe: Nostr command sender not available"
+                                    );
+                                    self.state.system.set_status_message(format!(
+                                        "Opened timeline for {short_hex}"
+                                    ));
+                                }
                             }
                             Err(e) => {
                                 log::error!("Failed to create author timeline: {e}");
@@ -448,12 +460,31 @@ impl<'a> TearsApp<'a> {
             TimelineMsg::CloseCurrentTab => {
                 // Close the current tab (only if it's not the Home tab)
                 let current_index = self.state.timeline.active_tab_index();
+
+                // Get the tab type before closing
+                let tab_type = self.state.timeline.tabs()[current_index].tab_type.clone();
+
+                // Try to close the tab
                 match self.state.timeline.remove_tab(current_index) {
                     Ok(()) => {
+                        // Get all subscription IDs for this tab
+                        let sub_ids = self.state.nostr.remove_timeline_subscription(&tab_type);
+
+                        // Unsubscribe from all subscriptions
+                        if !sub_ids.is_empty() {
+                            if let Some(sender) = &self.state.nostr.command_sender {
+                                let _ = sender.send(NostrCommand::Unsubscribe {
+                                    subscription_ids: sub_ids.clone(),
+                                });
+                                log::info!(
+                                    "Unsubscribed from {} subscriptions for tab {tab_type:?}",
+                                    sub_ids.len()
+                                );
+                            }
+                        }
+
                         log::info!("Closed tab at index {current_index}");
-                        self.state
-                            .system
-                            .set_status_message("Tab closed".to_string());
+                        self.state.system.set_status_message("Tab closed");
                     }
                     Err(e) => {
                         log::warn!("Cannot close tab: {e}");
@@ -567,14 +598,45 @@ impl<'a> TearsApp<'a> {
                 self.state.nostr.command_sender = Some(sender);
                 self.state.system.set_status_message("[Home] Loading...");
             }
+            NostrSubscriptionMessage::SubscriptionCreated {
+                tab_type,
+                subscription_id,
+            } => {
+                log::info!("Subscription created for {tab_type:?}: {subscription_id:?}");
+                self.state
+                    .nostr
+                    .add_timeline_subscription(tab_type, subscription_id);
+            }
             NostrSubscriptionMessage::Notification(notif) => match *notif {
-                RelayPoolNotification::Event { event, .. } => {
-                    log::debug!("Received event from relay: {}", event.id);
+                RelayPoolNotification::Event {
+                    event,
+                    subscription_id,
+                    ..
+                } => {
+                    log::debug!(
+                        "Received event {} from subscription {subscription_id:?}",
+                        event.id
+                    );
                     if self.state.system.is_loading() {
                         self.state.system.set_status_message("[Home] Loaded");
                         self.state.system.stop_loading();
                     }
-                    self.process_nostr_event(*event);
+
+                    // Find the tab that owns this subscription
+                    if let Some(tab_type) = self
+                        .state
+                        .nostr
+                        .find_tab_by_subscription(&subscription_id)
+                        .cloned()
+                    {
+                        self.process_nostr_event_for_tab(*event, &tab_type);
+                    } else {
+                        // Fallback: use default processing (for backward compatibility)
+                        log::debug!(
+                            "Subscription {subscription_id:?} not found, using default processing"
+                        );
+                        self.process_nostr_event(*event);
+                    }
                 }
                 RelayPoolNotification::Message { message, .. } => {
                     log::debug!("Received relay message: {message:?}");
@@ -592,6 +654,66 @@ impl<'a> TearsApp<'a> {
                 self.state
                     .system
                     .set_status_message(format!("Nostr error: {error:?}"));
+            }
+        }
+    }
+
+    /// Process a received Nostr event for a specific tab
+    fn process_nostr_event_for_tab(&mut self, event: nostr_sdk::Event, tab_type: &TimelineTabType) {
+        match event.kind {
+            Kind::TextNote => {
+                // Add note to the specific tab
+                // TODO: Implement add_note_to_tab in TimelineState (will be done in next phase)
+                // For now, only add events to Home tab to avoid breaking existing functionality
+                match tab_type {
+                    TimelineTabType::Home => {
+                        let (was_inserted, loading_completed) = self.state.timeline.add_note(event);
+
+                        if was_inserted {
+                            log::debug!("Added text note to Home tab");
+                        }
+                        if loading_completed {
+                            log::info!("Load more completed for Home tab");
+                            self.state.system.set_status_message("[Home] Loaded more");
+                        }
+                    }
+                    TimelineTabType::UserTimeline { .. } => {
+                        // Skip adding events to user timelines for now
+                        log::debug!(
+                            "Skipping event for {tab_type:?} (user timeline event routing not yet implemented)"
+                        );
+                    }
+                }
+            }
+            Kind::Metadata => {
+                // Metadata is shared across all tabs
+                if let Ok(metadata) = Metadata::from_json(event.content.clone()) {
+                    let profile = Profile::new(event.pubkey, event.created_at, metadata);
+                    if self.state.user.insert_newer_profile(profile) {
+                        log::debug!("Updated profile for pubkey: {}", event.pubkey);
+                    }
+                }
+            }
+            Kind::Reaction => {
+                // Reactions are shared (global_reactions)
+                if let Some(event_id) = self.state.timeline.add_reaction(event) {
+                    log::debug!("Added reaction for event: {event_id}");
+                }
+            }
+            Kind::Repost => {
+                // Reposts are shared (global_reposts)
+                if let Some(event_id) = self.state.timeline.add_repost(event) {
+                    log::debug!("Added repost for event: {event_id}");
+                }
+            }
+            Kind::ZapReceipt => {
+                // Zap receipts are shared (global_zap_receipts)
+                if let Some(event_id) = self.state.timeline.add_zap_receipt(event) {
+                    log::debug!("Added zap receipt for event: {event_id}");
+                }
+            }
+            _ => {
+                log::debug!("Received unknown event type: {:?}", event.kind);
             }
         }
     }

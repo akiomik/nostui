@@ -9,6 +9,8 @@ use nostr_sdk::prelude::*;
 use tears::{SubscriptionId, SubscriptionSource};
 use tokio::sync::{broadcast, mpsc, RwLock};
 
+use crate::core::state::timeline::TimelineTabType;
+
 const DEFAULT_CONTACT_LIST_TIMEOUT_SECS: u64 = 10;
 const DEFAULT_TIMELINE_LIMIT: usize = 50;
 const TIMELINE_KINDS: [Kind; 4] = [
@@ -29,6 +31,12 @@ pub enum NostrCommand {
     RemoveRelay { url: String },
     /// Load more timeline events before the specified timestamp
     LoadMoreTimeline { until: Timestamp },
+    /// Subscribe to a specific timeline tab
+    SubscribeTimeline { tab_type: TimelineTabType },
+    /// Unsubscribe from multiple subscriptions
+    Unsubscribe {
+        subscription_ids: Vec<nostr_sdk::SubscriptionId>,
+    },
     /// Shutdown the subscription and disconnect from all relays
     Shutdown,
 }
@@ -57,6 +65,11 @@ pub enum Message {
     Notification(Box<RelayPoolNotification>),
     /// An error occurred during command execution
     Error { error: CommandError },
+    /// A subscription was created for a specific tab
+    SubscriptionCreated {
+        tab_type: TimelineTabType,
+        subscription_id: nostr_sdk::SubscriptionId,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -94,9 +107,11 @@ impl NostrEvents {
 
     /// Initialize timeline subscription by fetching contact list and subscribing to filters
     /// Also caches the contact list for future use (e.g., loading more events)
+    /// Sends SubscriptionCreated messages for NostrState to track
     async fn initialize_timeline(
         client: &Client,
         contact_list_cache: Arc<RwLock<Option<Vec<PublicKey>>>>,
+        msg_tx: &mpsc::UnboundedSender<Message>,
     ) -> broadcast::Receiver<RelayPoolNotification> {
         match client
             .get_contact_list_public_keys(Duration::from_secs(DEFAULT_CONTACT_LIST_TIMEOUT_SECS))
@@ -121,11 +136,28 @@ impl NostrEvents {
                 let profile_filter = Filter::new().authors(followings).kinds([Kind::Metadata]);
 
                 // Subscribe to both timeline and profile data concurrently
-                let _ = tokio::try_join!(
+                let result = tokio::try_join!(
                     client.subscribe(timeline_backward_filter, None),
                     client.subscribe(timeline_forward_filter, None),
                     client.subscribe(profile_filter, None)
                 );
+
+                if let Ok((sub_id1, sub_id2, sub_id3)) = result {
+                    // Send SubscriptionCreated messages for NostrState to track
+                    let tab_type = TimelineTabType::Home;
+                    let _ = msg_tx.send(Message::SubscriptionCreated {
+                        tab_type: tab_type.clone(),
+                        subscription_id: sub_id1.val,
+                    });
+                    let _ = msg_tx.send(Message::SubscriptionCreated {
+                        tab_type: tab_type.clone(),
+                        subscription_id: sub_id2.val,
+                    });
+                    let _ = msg_tx.send(Message::SubscriptionCreated {
+                        tab_type,
+                        subscription_id: sub_id3.val,
+                    });
+                }
 
                 client.notifications()
             }
@@ -202,6 +234,38 @@ impl NostrEvents {
 
                 let _ = client.subscribe(filter, None).await;
             }
+            NostrCommand::SubscribeTimeline { tab_type } => {
+                let filter = match &tab_type {
+                    TimelineTabType::Home => {
+                        log::warn!(
+                            "Home timeline should be initialized, not subscribed via command"
+                        );
+                        return;
+                    }
+                    TimelineTabType::UserTimeline { pubkey } => Filter::new()
+                        .authors(vec![*pubkey])
+                        .kinds(vec![Kind::TextNote, Kind::Repost])
+                        .limit(50),
+                };
+
+                match client.subscribe(filter, None).await {
+                    Ok(sub_id) => {
+                        let _ = msg_tx.send(Message::SubscriptionCreated {
+                            tab_type,
+                            subscription_id: sub_id.val,
+                        });
+                    }
+                    Err(e) => {
+                        log::error!("Failed to subscribe to timeline: {e}");
+                    }
+                }
+            }
+            NostrCommand::Unsubscribe { subscription_ids } => {
+                for sub_id in subscription_ids {
+                    client.unsubscribe(&sub_id).await;
+                    log::debug!("Unsubscribed from {sub_id:?}");
+                }
+            }
             NostrCommand::Shutdown => {
                 // Shutdown is handled in the main loop
             }
@@ -217,7 +281,7 @@ impl NostrEvents {
     ) {
         // Initialize timeline subscription
         let mut notifications =
-            Self::initialize_timeline(&client, Arc::clone(&contact_list_cache)).await;
+            Self::initialize_timeline(&client, Arc::clone(&contact_list_cache), &msg_tx).await;
 
         loop {
             tokio::select! {
