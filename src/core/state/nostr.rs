@@ -1,3 +1,4 @@
+use nostr_sdk::prelude::*;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
@@ -30,10 +31,7 @@ impl NostrState {
     }
 
     /// Remove and return all subscription IDs for a specific tab type
-    pub fn remove_timeline_subscription(
-        &mut self,
-        tab_type: &TimelineTabType,
-    ) -> Vec<nostr_sdk::SubscriptionId> {
+    fn remove_timeline_subscription(&mut self, tab_type: &TimelineTabType) -> Vec<SubscriptionId> {
         self.timeline_subscriptions
             .remove(tab_type)
             .unwrap_or_default()
@@ -42,12 +40,64 @@ impl NostrState {
     /// Find the tab type that owns a specific subscription ID
     pub fn find_tab_by_subscription(
         &self,
-        subscription_id: &nostr_sdk::SubscriptionId,
+        subscription_id: &SubscriptionId,
     ) -> Option<&TimelineTabType> {
         self.timeline_subscriptions
             .iter()
             .find(|(_, sub_ids)| sub_ids.contains(subscription_id))
             .map(|(tab_type, _)| tab_type)
+    }
+
+    /// Unsubscribe subscriptions associated with a specific tab.
+    ///
+    /// This always removes the local subscription tracking for the tab.
+    /// If `command_sender` is available, it also sends an `Unsubscribe` command.
+    pub fn unsubscribe_tab(&mut self, tab_type: &TimelineTabType) {
+        let subscription_ids = self.remove_timeline_subscription(tab_type);
+
+        if subscription_ids.is_empty() {
+            return;
+        }
+
+        if let Some(sender) = self.command_sender.as_ref() {
+            let _ = sender.send(NostrCommand::Unsubscribe { subscription_ids });
+        }
+    }
+
+    /// Unsubscribe all subscriptions associated with all tabs.
+    ///
+    /// This drains the local subscription tracking map to ensure the state is
+    /// consistent even if we are already disconnected.
+    pub fn unsubscribe_all_tabs(&mut self) {
+        let all_subscription_ids: Vec<SubscriptionId> = self
+            .timeline_subscriptions
+            .drain()
+            .flat_map(|(_, ids)| ids)
+            .collect();
+
+        if all_subscription_ids.is_empty() {
+            return;
+        }
+
+        if let Some(sender) = self.command_sender.as_ref() {
+            let _ = sender.send(NostrCommand::Unsubscribe {
+                subscription_ids: all_subscription_ids,
+            });
+        }
+    }
+
+    /// Gracefully shutdown Nostr connection.
+    ///
+    /// This unsubscribes all timeline subscriptions, then sends `Shutdown`.
+    /// After calling this, `command_sender` is cleared to avoid sending further commands.
+    pub fn shutdown(&mut self) {
+        self.unsubscribe_all_tabs();
+
+        if let Some(sender) = self.command_sender.as_ref() {
+            let _ = sender.send(NostrCommand::Shutdown);
+        }
+
+        self.command_sender = None;
     }
 }
 
@@ -190,5 +240,155 @@ mod tests {
 
         // Should still find the original
         assert_eq!(state.find_tab_by_subscription(&sub_id), Some(&user_tab1));
+    }
+
+    #[test]
+    fn test_unsubscribe_tab_without_sender_removes_tracking() {
+        let mut state = NostrState::default();
+        let sub_id1 = nostr_sdk::SubscriptionId::new("sub1");
+        let sub_id2 = nostr_sdk::SubscriptionId::new("sub2");
+
+        state.add_timeline_subscription(TimelineTabType::Home, sub_id1.clone());
+        state.add_timeline_subscription(TimelineTabType::Home, sub_id2.clone());
+
+        state.unsubscribe_tab(&TimelineTabType::Home);
+
+        assert_eq!(state.find_tab_by_subscription(&sub_id1), None);
+        assert_eq!(state.find_tab_by_subscription(&sub_id2), None);
+    }
+
+    #[tokio::test]
+    async fn test_unsubscribe_tab_with_sender_sends_command() -> color_eyre::Result<()> {
+        let mut state = NostrState::default();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        state.command_sender = Some(tx);
+
+        let sub_id1 = nostr_sdk::SubscriptionId::new("sub1");
+        let sub_id2 = nostr_sdk::SubscriptionId::new("sub2");
+
+        state.add_timeline_subscription(TimelineTabType::Home, sub_id1.clone());
+        state.add_timeline_subscription(TimelineTabType::Home, sub_id2.clone());
+
+        state.unsubscribe_tab(&TimelineTabType::Home);
+
+        let cmd = rx.recv().await.expect("should receive command");
+        match cmd {
+            NostrCommand::Unsubscribe { subscription_ids } => {
+                assert_eq!(subscription_ids.len(), 2);
+                assert!(subscription_ids.contains(&sub_id1));
+                assert!(subscription_ids.contains(&sub_id2));
+            }
+            other => {
+                return Err(color_eyre::eyre::eyre!(format!(
+                    "unexpected command: {other:?}"
+                )))
+            }
+        }
+
+        // Local tracking must be cleared.
+        assert_eq!(state.find_tab_by_subscription(&sub_id1), None);
+        assert_eq!(state.find_tab_by_subscription(&sub_id2), None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_unsubscribe_all_tabs_without_sender_drains_tracking() {
+        let mut state = NostrState::default();
+        let sub_home = nostr_sdk::SubscriptionId::new("home");
+        let sub_user = nostr_sdk::SubscriptionId::new("user");
+
+        let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("valid pubkey");
+        let user_tab = TimelineTabType::UserTimeline { pubkey };
+
+        state.add_timeline_subscription(TimelineTabType::Home, sub_home.clone());
+        state.add_timeline_subscription(user_tab, sub_user.clone());
+
+        state.unsubscribe_all_tabs();
+
+        assert_eq!(state.find_tab_by_subscription(&sub_home), None);
+        assert_eq!(state.find_tab_by_subscription(&sub_user), None);
+    }
+
+    #[tokio::test]
+    async fn test_unsubscribe_all_tabs_with_sender_sends_all_ids() -> color_eyre::Result<()> {
+        let mut state = NostrState::default();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        state.command_sender = Some(tx);
+
+        let sub_home1 = nostr_sdk::SubscriptionId::new("home1");
+        let sub_home2 = nostr_sdk::SubscriptionId::new("home2");
+        let sub_user = nostr_sdk::SubscriptionId::new("user");
+
+        let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("valid pubkey");
+        let user_tab = TimelineTabType::UserTimeline { pubkey };
+
+        state.add_timeline_subscription(TimelineTabType::Home, sub_home1.clone());
+        state.add_timeline_subscription(TimelineTabType::Home, sub_home2.clone());
+        state.add_timeline_subscription(user_tab.clone(), sub_user.clone());
+
+        state.unsubscribe_all_tabs();
+
+        let cmd = rx.recv().await.expect("should receive command");
+        match cmd {
+            NostrCommand::Unsubscribe { subscription_ids } => {
+                assert_eq!(subscription_ids.len(), 3);
+                assert!(subscription_ids.contains(&sub_home1));
+                assert!(subscription_ids.contains(&sub_home2));
+                assert!(subscription_ids.contains(&sub_user));
+            }
+            other => {
+                return Err(color_eyre::eyre::eyre!(format!(
+                    "unexpected command: {other:?}"
+                )))
+            }
+        }
+
+        // Local tracking must be cleared.
+        assert_eq!(state.find_tab_by_subscription(&sub_home1), None);
+        assert_eq!(state.find_tab_by_subscription(&sub_home2), None);
+        assert_eq!(state.find_tab_by_subscription(&sub_user), None);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_unsubscribes_then_sends_shutdown_and_clears_sender(
+    ) -> color_eyre::Result<()> {
+        let mut state = NostrState::default();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        state.command_sender = Some(tx);
+
+        let sub_home = nostr_sdk::SubscriptionId::new("home");
+        state.add_timeline_subscription(TimelineTabType::Home, sub_home.clone());
+
+        state.shutdown();
+
+        let cmd1 = rx.recv().await.expect("should receive first command");
+        let cmd2 = rx.recv().await.expect("should receive second command");
+
+        match cmd1 {
+            NostrCommand::Unsubscribe { subscription_ids } => {
+                assert_eq!(subscription_ids, vec![sub_home]);
+            }
+            other => {
+                return Err(color_eyre::eyre::eyre!(format!(
+                    "unexpected command: {other:?}"
+                )))
+            }
+        }
+
+        match cmd2 {
+            NostrCommand::Shutdown => {}
+            other => {
+                return Err(color_eyre::eyre::eyre!(format!(
+                    "unexpected command: {other:?}"
+                )))
+            }
+        }
+
+        assert!(state.command_sender.is_none());
+
+        Ok(())
     }
 }

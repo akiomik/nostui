@@ -181,37 +181,8 @@ impl<'a> TearsApp<'a> {
                 log::info!("Quit requested - initiating graceful shutdown");
 
                 // Graceful shutdown: unsubscribe from all timeline subscriptions
-                if let Some(sender) = &self.state.nostr.command_sender {
-                    // Clone sender to avoid borrow conflicts
-                    let sender = sender.clone();
-
-                    // Collect all subscription IDs from all tabs
-                    let all_subscription_ids: Vec<nostr_sdk::SubscriptionId> = self
-                        .state
-                        .timeline
-                        .tabs()
-                        .iter()
-                        .flat_map(|tab| {
-                            self.state.nostr.remove_timeline_subscription(&tab.tab_type)
-                        })
-                        .collect();
-
-                    if !all_subscription_ids.is_empty() {
-                        log::info!(
-                            "Unsubscribing from {} subscriptions before shutdown",
-                            all_subscription_ids.len()
-                        );
-                        let _ = sender.send(NostrCommand::Unsubscribe {
-                            subscription_ids: all_subscription_ids,
-                        });
-                    }
-
-                    // Send shutdown command to disconnect from relays
-                    log::info!("Sending shutdown command to Nostr client");
-                    let _ = sender.send(NostrCommand::Shutdown);
-                } else {
-                    log::warn!("No Nostr command sender available during shutdown");
-                }
+                // and disconnect from relays.
+                self.state.nostr.shutdown();
 
                 // Trigger the quit action
                 return Command::effect(Action::Quit);
@@ -501,24 +472,8 @@ impl<'a> TearsApp<'a> {
                 // Try to close the tab
                 match self.state.timeline.remove_tab(current_index) {
                     Ok(()) => {
-                        // Get all subscription IDs for this tab
-                        let sub_ids = self.state.nostr.remove_timeline_subscription(&tab_type);
-
-                        // Unsubscribe from all subscriptions
-                        if !sub_ids.is_empty() {
-                            if let Some(sender) = &self.state.nostr.command_sender {
-                                let _ = sender.send(NostrCommand::Unsubscribe {
-                                    subscription_ids: sub_ids.clone(),
-                                });
-                                log::info!(
-                                    "Sent Unsubscribe command for {} subscriptions for tab {tab_type:?}: {:?}",
-                                    sub_ids.len(),
-                                    sub_ids
-                                );
-                            }
-                        } else {
-                            log::warn!("No subscriptions found for tab {tab_type:?} during close");
-                        }
+                        // Unsubscribe subscriptions associated with this tab.
+                        self.state.nostr.unsubscribe_tab(&tab_type);
 
                         log::info!("Closed tab at index {current_index}");
                         self.state.system.set_status_message("Tab closed");
@@ -611,10 +566,10 @@ impl<'a> TearsApp<'a> {
                 log::info!("NostrEvents subscription will handle connection");
             }
             NostrMsg::Disconnect => {
+                log::info!("Disconnected from Nostr");
+
                 // Send shutdown command through the sender
-                if let Some(sender) = &self.state.nostr.command_sender {
-                    let _ = sender.send(NostrCommand::Shutdown);
-                }
+                self.state.nostr.shutdown();
             }
             NostrMsg::SubscriptionMessage(sub_msg) => {
                 self.handle_nostr_subscription_message(sub_msg);
