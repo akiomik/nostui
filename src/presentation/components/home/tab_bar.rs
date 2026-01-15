@@ -29,24 +29,18 @@ impl TabBarComponent {
                 TimelineTabType::Home => "Home".to_string(),
                 TimelineTabType::UserTimeline { pubkey } => {
                     // Try to get the handle from profile, fallback to shortened npub
-                    if let Some(profile) = state.user.get_profile(pubkey) {
-                        // Use handle if available (already includes @)
-                        if let Some(handle) = profile.handle() {
-                            handle
-                        } else {
+                    state
+                        .user
+                        .get_profile(pubkey)
+                        .and_then(|profile| {
+                            // Use handle if available (already includes @)
+                            profile.handle()
+                        })
+                        .unwrap_or_else(|| {
                             // Fallback to shortened npub
-                            let npub = pubkey
-                                .to_bech32()
-                                .expect("Public key to bech32 conversion should not fail");
+                            let Ok(npub) = pubkey.to_bech32();
                             shorten_npub(npub)
-                        }
-                    } else {
-                        // No profile available, use shortened npub
-                        let npub = pubkey
-                            .to_bech32()
-                            .expect("Public key to bech32 conversion should not fail");
-                        shorten_npub(npub)
-                    }
+                        })
                 }
             })
             .collect();
