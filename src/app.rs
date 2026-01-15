@@ -431,23 +431,25 @@ impl<'a> TearsApp<'a> {
                                 let short_hex = &author_pubkey.to_hex()[..8];
 
                                 // Send subscription command
-                                if let Some(sender) = &self.state.nostr.command_sender {
-                                    let _ = sender.send(NostrCommand::SubscribeTimeline {
-                                        tab_type: tab_type.clone(),
-                                    });
-                                    log::info!(
-                                        "Sent SubscribeTimeline command for user: {author_pubkey}"
-                                    );
-                                    self.state.system.set_status_message(format!(
-                                        "Opening timeline for {short_hex}"
-                                    ));
-                                } else {
-                                    log::warn!(
-                                        "Cannot subscribe: Nostr command sender not available"
-                                    );
-                                    self.state.system.set_status_message(format!(
-                                        "Opened timeline for {short_hex}"
-                                    ));
+                                match self.state.nostr.subscribe_tab(&tab_type) {
+                                    Ok(()) => {
+                                        log::info!(
+                                            "Sent SubscribeTimeline command for user: {author_pubkey}"
+                                        );
+                                        self.state.system.set_status_message(format!(
+                                            "Opening timeline for {short_hex}"
+                                        ));
+                                    }
+                                    Err(_e) => {
+                                        // NOTE: UI already opened the tab, so this is best-effort.
+                                        // If not connected yet, the subscription will not start.
+                                        log::warn!(
+                                            "Cannot subscribe: {author_pubkey} (nostr not ready)"
+                                        );
+                                        self.state.system.set_status_message(format!(
+                                            "Opened timeline for {short_hex}"
+                                        ));
+                                    }
                                 }
                             }
                             Err(e) => {

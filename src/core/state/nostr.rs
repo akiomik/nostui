@@ -17,6 +17,18 @@ pub struct NostrState {
     timeline_subscriptions: HashMap<TimelineTabType, Vec<nostr_sdk::SubscriptionId>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubscribeTabError {
+    /// Nostr subscription is not ready (no command sender).
+    NotConnected,
+    /// Home tab subscription is managed during NostrEvents initialization.
+    HomeTabIsManaged,
+    /// Already subscribed (or subscription is in-flight).
+    AlreadySubscribed,
+    /// Failed to send command to subscription task.
+    SendFailed,
+}
+
 impl NostrState {
     /// Add a subscription ID for a specific tab type
     pub fn add_timeline_subscription(
@@ -46,6 +58,44 @@ impl NostrState {
             .iter()
             .find(|(_, sub_ids)| sub_ids.contains(subscription_id))
             .map(|(tab_type, _)| tab_type)
+    }
+
+    /// Subscribe a timeline for a tab.
+    ///
+    /// - Home tab is managed by subscription initialization, and cannot be subscribed via command.
+    /// - To avoid duplicate subscribe requests (e.g. repeated UI actions), this records an empty
+    ///   entry in the local tracking map as "in-flight".
+    pub fn subscribe_tab(&mut self, tab_type: &TimelineTabType) -> Result<(), SubscribeTabError> {
+        if matches!(tab_type, TimelineTabType::Home) {
+            return Err(SubscribeTabError::HomeTabIsManaged);
+        }
+
+        if self.timeline_subscriptions.contains_key(tab_type) {
+            // Already subscribed or in-flight.
+            return Err(SubscribeTabError::AlreadySubscribed);
+        }
+
+        let sender = self
+            .command_sender
+            .as_ref()
+            .ok_or(SubscribeTabError::NotConnected)?;
+
+        // Mark as in-flight before sending, so repeated calls are rejected.
+        self.timeline_subscriptions
+            .insert(tab_type.clone(), Vec::new());
+
+        if sender
+            .send(NostrCommand::SubscribeTimeline {
+                tab_type: tab_type.clone(),
+            })
+            .is_err()
+        {
+            // NOTE: Avoid leaving an "in-flight" mark when the command didn't go through.
+            self.timeline_subscriptions.remove(tab_type);
+            return Err(SubscribeTabError::SendFailed);
+        }
+
+        Ok(())
     }
 
     /// Unsubscribe subscriptions associated with a specific tab.
@@ -240,6 +290,98 @@ mod tests {
 
         // Should still find the original
         assert_eq!(state.find_tab_by_subscription(&sub_id), Some(&user_tab1));
+    }
+
+    #[test]
+    fn test_subscribe_tab_without_sender_returns_error() {
+        let mut state = NostrState::default();
+        let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("valid pubkey");
+        let tab_type = TimelineTabType::UserTimeline { pubkey };
+
+        let result = state.subscribe_tab(&tab_type);
+        assert_eq!(result, Err(SubscribeTabError::NotConnected));
+        assert!(!state.timeline_subscriptions.contains_key(&tab_type));
+    }
+
+    #[test]
+    fn test_subscribe_tab_home_is_rejected() {
+        let mut state = NostrState::default();
+        let result = state.subscribe_tab(&TimelineTabType::Home);
+        assert_eq!(result, Err(SubscribeTabError::HomeTabIsManaged));
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_tab_sends_command_and_marks_in_flight() -> color_eyre::Result<()> {
+        let mut state = NostrState::default();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        state.command_sender = Some(tx);
+
+        let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("valid pubkey");
+        let tab_type = TimelineTabType::UserTimeline { pubkey };
+
+        state
+            .subscribe_tab(&tab_type)
+            .map_err(|e| color_eyre::eyre::eyre!(format!("subscribe_tab failed: {e:?}")))?;
+
+        // In-flight marker should exist (empty Vec).
+        assert!(state.timeline_subscriptions.contains_key(&tab_type));
+        assert_eq!(
+            state.timeline_subscriptions.get(&tab_type).cloned(),
+            Some(Vec::<SubscriptionId>::new())
+        );
+
+        let cmd = rx.recv().await.expect("should receive command");
+        match cmd {
+            NostrCommand::SubscribeTimeline { tab_type: sent } => {
+                assert_eq!(sent, tab_type);
+            }
+            other => {
+                return Err(color_eyre::eyre::eyre!(format!(
+                    "unexpected command: {other:?}"
+                )))
+            }
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_tab_duplicate_is_rejected() -> color_eyre::Result<()> {
+        let mut state = NostrState::default();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        state.command_sender = Some(tx);
+
+        let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("valid pubkey");
+        let tab_type = TimelineTabType::UserTimeline { pubkey };
+
+        state
+            .subscribe_tab(&tab_type)
+            .map_err(|e| color_eyre::eyre::eyre!(format!("subscribe_tab failed: {e:?}")))?;
+        // Drain first command.
+        let _ = rx.recv().await.expect("should receive command");
+
+        let result = state.subscribe_tab(&tab_type);
+        assert_eq!(result, Err(SubscribeTabError::AlreadySubscribed));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_subscribe_tab_send_failed_does_not_mark_in_flight() {
+        let mut state = NostrState::default();
+
+        let (tx, rx) = mpsc::unbounded_channel::<NostrCommand>();
+        drop(rx); // make send fail
+        state.command_sender = Some(tx);
+
+        let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("valid pubkey");
+        let tab_type = TimelineTabType::UserTimeline { pubkey };
+
+        let result = state.subscribe_tab(&tab_type);
+        assert_eq!(result, Err(SubscribeTabError::SendFailed));
+
+        // Should not stay marked in-flight.
+        assert!(!state.timeline_subscriptions.contains_key(&tab_type));
     }
 
     #[test]
