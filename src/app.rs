@@ -465,7 +465,9 @@ impl<'a> TearsApp<'a> {
                                     let _ = sender.send(NostrCommand::SubscribeTimeline {
                                         tab_type: tab_type.clone(),
                                     });
-                                    log::info!("Subscribing to timeline for user: {author_pubkey}");
+                                    log::info!(
+                                        "Sent SubscribeTimeline command for user: {author_pubkey}"
+                                    );
                                     self.state.system.set_status_message(format!(
                                         "Opening timeline for {short_hex}"
                                     ));
@@ -510,10 +512,13 @@ impl<'a> TearsApp<'a> {
                                     subscription_ids: sub_ids.clone(),
                                 });
                                 log::info!(
-                                    "Unsubscribed from {} subscriptions for tab {tab_type:?}",
-                                    sub_ids.len()
+                                    "Sent Unsubscribe command for {} subscriptions for tab {tab_type:?}: {:?}",
+                                    sub_ids.len(),
+                                    sub_ids
                                 );
                             }
+                        } else {
+                            log::warn!("No subscriptions found for tab {tab_type:?} during close");
                         }
 
                         log::info!("Closed tab at index {current_index}");
@@ -641,6 +646,16 @@ impl<'a> TearsApp<'a> {
                     .add_timeline_subscription(tab_type, subscription_id);
             }
             NostrSubscriptionMessage::Notification(notif) => match *notif {
+                // NOTE: We use `RelayPoolNotification::Message` instead of `RelayPoolNotification::Event`
+                // because:
+                // - `Event`: Only notifies events that haven't been seen before (deduplication)
+                // - `Message`: Notifies all relay messages including duplicate events
+                //
+                // In the current architecture, each tab subscribes to its own set of events,
+                // so we need to receive all events (including duplicates across subscriptions)
+                // to properly route them to the correct tab.
+                // Ideally, we would cache all events globally and use `Event`, but that would
+                // require a significant architectural change.
                 RelayPoolNotification::Event {
                     event,
                     subscription_id,
@@ -650,29 +665,41 @@ impl<'a> TearsApp<'a> {
                         "Received event {} from subscription {subscription_id:?}",
                         event.id
                     );
-                    if self.state.system.is_loading() {
-                        self.state.system.set_status_message("[Home] Loaded");
-                        self.state.system.stop_loading();
-                    }
-
-                    // Find the tab that owns this subscription
-                    if let Some(tab_type) = self
-                        .state
-                        .nostr
-                        .find_tab_by_subscription(&subscription_id)
-                        .cloned()
-                    {
-                        self.process_nostr_event_for_tab(*event, &tab_type);
-                    } else {
-                        // Fallback: use default processing (for backward compatibility)
-                        log::debug!(
-                            "Subscription {subscription_id:?} not found, using default processing"
-                        );
-                        self.process_nostr_event(*event);
-                    }
                 }
                 RelayPoolNotification::Message { message, .. } => {
                     log::debug!("Received relay message: {message:?}");
+
+                    if let RelayMessage::Event {
+                        subscription_id,
+                        event,
+                    } = message
+                    {
+                        if self.state.system.is_loading() {
+                            self.state.system.set_status_message("[Home] Loaded");
+                            self.state.system.stop_loading();
+                        }
+
+                        // Find the tab that owns this subscription
+                        if let Some(tab_type) = self
+                            .state
+                            .nostr
+                            .find_tab_by_subscription(&subscription_id)
+                            .cloned()
+                        {
+                            log::debug!(
+                                "Routing event {} (kind: {:?}) to tab {tab_type:?}",
+                                event.id,
+                                event.kind
+                            );
+                            self.process_nostr_event_for_tab(event.into_owned(), &tab_type);
+                        } else {
+                            // Fallback: use default processing (for backward compatibility)
+                            log::debug!(
+                            "Subscription {subscription_id:?} not found, using default processing"
+                        );
+                            self.process_nostr_event(event.into_owned());
+                        }
+                    }
                 }
                 RelayPoolNotification::Shutdown => {
                     log::info!("Nostr subscription shut down");
@@ -696,25 +723,27 @@ impl<'a> TearsApp<'a> {
         match event.kind {
             Kind::TextNote => {
                 // Add note to the specific tab
-                // TODO: Implement add_note_to_tab in TimelineState (will be done in next phase)
-                // For now, only add events to Home tab to avoid breaking existing functionality
-                match tab_type {
-                    TimelineTabType::Home => {
-                        let (was_inserted, loading_completed) = self.state.timeline.add_note(event);
+                let (was_inserted, loading_completed) =
+                    self.state.timeline.add_note_to_tab(event.clone(), tab_type);
 
-                        if was_inserted {
-                            log::debug!("Added text note to Home tab");
-                        }
-                        if loading_completed {
-                            log::info!("Load more completed for Home tab");
+                if was_inserted {
+                    log::info!(
+                        "Added event {} (created_at: {}) to tab {tab_type:?}",
+                        event.id,
+                        event.created_at
+                    );
+                } else {
+                    log::debug!("Skipped duplicate event {} for tab {tab_type:?}", event.id);
+                }
+                if loading_completed {
+                    log::info!("Load more completed for tab {tab_type:?}");
+                    match tab_type {
+                        TimelineTabType::Home => {
                             self.state.system.set_status_message("[Home] Loaded more");
                         }
-                    }
-                    TimelineTabType::UserTimeline { .. } => {
-                        // Skip adding events to user timelines for now
-                        log::debug!(
-                            "Skipping event for {tab_type:?} (user timeline event routing not yet implemented)"
-                        );
+                        TimelineTabType::UserTimeline { .. } => {
+                            self.state.system.set_status_message("[User] Loaded more");
+                        }
                     }
                 }
             }
@@ -727,16 +756,16 @@ impl<'a> TearsApp<'a> {
                     }
                 }
             }
+            Kind::Repost => {
+                // Reactions are shared (global_reactions)
+                if let Some(event_id) = self.state.timeline.add_repost(event) {
+                    log::debug!("Added repost for event: {event_id}");
+                }
+            }
             Kind::Reaction => {
                 // Reactions are shared (global_reactions)
                 if let Some(event_id) = self.state.timeline.add_reaction(event) {
                     log::debug!("Added reaction for event: {event_id}");
-                }
-            }
-            Kind::Repost => {
-                // Reposts are shared (global_reposts)
-                if let Some(event_id) = self.state.timeline.add_repost(event) {
-                    log::debug!("Added repost for event: {event_id}");
                 }
             }
             Kind::ZapReceipt => {
@@ -841,11 +870,11 @@ impl<'a> TearsApp<'a> {
         }
     }
 
-    /// Load more older timeline events
+    /// Load more older timeline events for the active tab
     fn load_more_timeline_events(&mut self) -> Command<AppMsg> {
         log::info!("Loading more timeline events");
 
-        // Get the oldest timestamp from the timeline
+        // Get the oldest timestamp from the active timeline
         let until_timestamp = match self.state.timeline.oldest_timestamp() {
             Some(ts) => ts,
             None => {
@@ -854,6 +883,12 @@ impl<'a> TearsApp<'a> {
             }
         };
 
+        // Get the active tab type
+        let active_tab_index = self.state.timeline.active_tab_index();
+        let tab_type = self.state.timeline.tabs()[active_tab_index]
+            .tab_type
+            .clone();
+
         // Get the command sender
         if let Some(sender) = &self.state.nostr.command_sender {
             // Mark loading started
@@ -861,11 +896,18 @@ impl<'a> TearsApp<'a> {
 
             // Send command to NostrEvents to load more timeline events
             let _ = sender.send(NostrCommand::LoadMoreTimeline {
+                tab_type: tab_type.clone(),
                 until: until_timestamp,
             });
-            self.state
-                .system
-                .set_status_message("[Home] Loading more ...");
+
+            // Set appropriate status message
+            let status_msg = match tab_type {
+                TimelineTabType::Home => "[Home] Loading more ...".to_string(),
+                TimelineTabType::UserTimeline { pubkey } => {
+                    format!("[User {}] Loading more ...", &pubkey.to_hex()[..8])
+                }
+            };
+            self.state.system.set_status_message(status_msg);
         } else {
             log::warn!("No Nostr command sender available");
             self.state
