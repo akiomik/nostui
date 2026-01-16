@@ -31,8 +31,5 @@
     "wss://relay.damus.io",
     "wss://yabu.me",
     "wss://relay-jp.nostr.wirednet.jp"
-  ],
-  "experimental": {
-    "use_elm_home": true
-  }
+  ]
 }
