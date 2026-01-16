@@ -15,7 +15,7 @@ use crate::core::state::timeline::TimelineTabType;
 use crate::core::state::AppState;
 use crate::infrastructure::config::Config;
 use crate::infrastructure::subscription::nostr::{
-    Message as NostrSubscriptionMessage, NostrCommand, NostrEvents,
+    Message as NostrSubscriptionMessage, NostrEvents,
 };
 use crate::presentation::components::Components;
 use crate::presentation::config::keybindings::Action as KeyAction;
@@ -673,23 +673,23 @@ impl<'a> TearsApp<'a> {
         success_message: String,
         error_prefix: &str,
     ) -> bool {
-        if let Some(sender) = &self.state.nostr.command_sender {
-            match event_builder.sign_with_keys(&self.keys) {
-                Ok(event) => {
-                    let _ = sender.send(NostrCommand::SendEvent { event });
-                    self.state.system.set_status_message(success_message);
-                    true
-                }
-                Err(e) => {
-                    log::error!("{error_prefix}: {e}");
-                    self.state
-                        .system
-                        .set_status_message(format!("{error_prefix}: {e}"));
-                    false
-                }
+        let result = event_builder
+            .sign_with_keys(&self.keys)
+            .map_err(|e| e.into())
+            .and_then(|event| self.state.nostr.send_event(event));
+
+        match result {
+            Ok(()) => {
+                self.state.system.set_status_message(success_message);
+                true
             }
-        } else {
-            false
+            Err(e) => {
+                log::error!("{error_prefix}: {e}");
+                self.state
+                    .system
+                    .set_status_message(format!("{error_prefix}: {e}"));
+                false
+            }
         }
     }
 
@@ -712,30 +712,28 @@ impl<'a> TearsApp<'a> {
             .tab_type
             .clone();
 
-        // Get the command sender
-        if let Some(sender) = &self.state.nostr.command_sender {
-            // Mark loading started
-            self.state.timeline.start_loading_more();
-
-            // Send command to NostrEvents to load more timeline events
-            let _ = sender.send(NostrCommand::LoadMoreTimeline {
-                tab_type: tab_type.clone(),
-                until: until_timestamp,
-            });
-
-            // Set appropriate status message
-            let status_msg = match tab_type {
-                TimelineTabType::Home => "[Home] Loading more ...".to_string(),
-                TimelineTabType::UserTimeline { pubkey } => {
-                    format!("[User {}] Loading more ...", &pubkey.to_hex()[..8])
-                }
-            };
-            self.state.system.set_status_message(status_msg);
-        } else {
-            log::warn!("No Nostr command sender available");
-            self.state
-                .system
-                .set_status_message("Not connected to Nostr");
+        // Mark loading started
+        match self
+            .state
+            .nostr
+            .load_more_timeline(tab_type.clone(), until_timestamp)
+        {
+            Ok(()) => {
+                // Set appropriate status message
+                let status_msg = match tab_type {
+                    TimelineTabType::Home => "[Home] Loading more ...".to_string(),
+                    TimelineTabType::UserTimeline { pubkey } => {
+                        format!("[User {}] Loading more ...", &pubkey.to_hex()[..8])
+                    }
+                };
+                self.state.system.set_status_message(status_msg);
+            }
+            Err(_) => {
+                log::warn!("No Nostr command sender available");
+                self.state
+                    .system
+                    .set_status_message("Not connected to Nostr");
+            }
         }
 
         Command::none()
