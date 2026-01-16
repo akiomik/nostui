@@ -1,3 +1,5 @@
+use color_eyre::eyre::eyre;
+use color_eyre::Result;
 use nostr_sdk::prelude::*;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
@@ -30,12 +32,30 @@ pub enum SubscribeTabError {
 }
 
 impl NostrState {
+    /// Send a signed event to relays
+    pub fn send_event(&self, event: Event) -> Result<()> {
+        if let Some(sender) = &self.command_sender {
+            sender
+                .send(NostrCommand::SendEvent { event })
+                .map_err(|e| e.into())
+        } else {
+            Err(eyre!("Not connected to Nostr"))
+        }
+    }
+
+    /// Load more timeline events
+    pub fn load_more_timeline(&self, tab_type: TimelineTabType, until: Timestamp) -> Result<()> {
+        if let Some(sender) = &self.command_sender {
+            sender
+                .send(NostrCommand::LoadMoreTimeline { tab_type, until })
+                .map_err(|e| e.into())
+        } else {
+            Err(eyre!("Not connected to Nostr"))
+        }
+    }
+
     /// Add a subscription ID for a specific tab type
-    pub fn add_timeline_subscription(
-        &mut self,
-        tab_type: TimelineTabType,
-        sub_id: nostr_sdk::SubscriptionId,
-    ) {
+    pub fn add_timeline_subscription(&mut self, tab_type: TimelineTabType, sub_id: SubscriptionId) {
         self.timeline_subscriptions
             .entry(tab_type)
             .or_default()
@@ -155,6 +175,72 @@ impl NostrState {
 mod tests {
     use super::*;
     use nostr_sdk::PublicKey;
+
+    fn create_test_event(content: &str) -> Result<Event> {
+        let keys = Keys::generate();
+        Ok(EventBuilder::text_note(content)
+            .custom_created_at(Timestamp::now())
+            .sign_with_keys(&keys)?)
+    }
+
+    #[test]
+    fn test_send_event_without_sender_returns_error() -> Result<()> {
+        let state = NostrState::default();
+        let event = create_test_event("foo")?;
+
+        let result = state.send_event(event);
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_send_event_with_sender_sends_command() -> Result<()> {
+        let mut state = NostrState::default();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        state.command_sender = Some(tx);
+        let event = create_test_event("foo")?;
+
+        let result = state.send_event(event.clone());
+        assert!(result.is_ok());
+
+        let cmd = rx.recv().await.expect("should receive command");
+        assert_eq!(cmd, NostrCommand::SendEvent { event });
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_more_timeline_without_sender_returns_error() -> Result<()> {
+        let state = NostrState::default();
+
+        let result = state.load_more_timeline(TimelineTabType::Home, Timestamp::now());
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_load_more_timeline_with_sender_sends_command() -> Result<()> {
+        let mut state = NostrState::default();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        state.command_sender = Some(tx);
+        let now = Timestamp::now();
+
+        let result = state.load_more_timeline(TimelineTabType::Home, now);
+        assert!(result.is_ok());
+
+        let cmd = rx.recv().await.expect("should receive command");
+        assert_eq!(
+            cmd,
+            NostrCommand::LoadMoreTimeline {
+                tab_type: TimelineTabType::Home,
+                until: now
+            }
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn test_add_timeline_subscription() {

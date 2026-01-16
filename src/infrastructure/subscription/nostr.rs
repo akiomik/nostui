@@ -21,7 +21,7 @@ const TIMELINE_KINDS: [Kind; 4] = [
 ];
 
 /// Commands that can be sent to the Nostr subscription
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NostrCommand {
     /// Send an event to relays
     SendEvent { event: Event },
