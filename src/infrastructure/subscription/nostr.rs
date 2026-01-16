@@ -24,7 +24,7 @@ const TIMELINE_KINDS: [Kind; 4] = [
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NostrCommand {
     /// Send an event to relays
-    SendEvent { event: Event },
+    SendEventBuilder { event_builder: EventBuilder },
     /// Add a new relay
     AddRelay { url: String },
     /// Remove a relay
@@ -179,8 +179,8 @@ impl NostrEvents {
         msg_tx: &mpsc::UnboundedSender<Message>,
     ) {
         match cmd {
-            NostrCommand::SendEvent { event } => {
-                if let Err(e) = client.send_event(&event).await {
+            NostrCommand::SendEventBuilder { event_builder } => {
+                if let Err(e) = client.send_event_builder(event_builder).await {
                     let _ = msg_tx.send(Message::Error {
                         error: CommandError::SendEventFailed {
                             error: e.to_string(),

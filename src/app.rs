@@ -23,10 +23,9 @@ use crate::presentation::config::keybindings::Action as KeyAction;
 /// Initialization flags for the Tears application
 #[derive(Debug)]
 pub struct InitFlags {
-    pub pubkey: Option<PublicKey>,
+    pub pubkey: PublicKey,
     pub config: Config,
     pub nostr_client: Client,
-    pub keys: Keys,
     pub tick_rate: f64,
 }
 
@@ -40,8 +39,6 @@ pub struct TearsApp<'a> {
     state: AppState,
     /// Component collection (wrapped in RefCell for interior mutability during view)
     components: RefCell<Components<'a>>,
-    /// User's keys for signing events
-    keys: Keys,
     /// Nostr client (wrapped in Arc for sharing across subscriptions)
     nostr_client: Arc<Client>,
     /// Configuration (including keybindings)
@@ -59,14 +56,7 @@ impl<'a> Application for TearsApp<'a> {
         let config = flags.config.clone();
 
         // Initialize global state
-        let state = if let Some(pubkey) = flags.pubkey {
-            AppState::new_with_config(pubkey, flags.config)
-        } else {
-            // Use default state with config
-            let mut state = AppState::default();
-            state.config.config = flags.config;
-            state
-        };
+        let state = AppState::new_with_config(flags.pubkey, flags.config);
 
         // Initialize components
         let components = Components::new();
@@ -78,7 +68,6 @@ impl<'a> Application for TearsApp<'a> {
         let app = Self {
             state,
             components: RefCell::new(components),
-            keys: flags.keys,
             nostr_client,
             config,
             tick_rate: flags.tick_rate,
@@ -357,9 +346,20 @@ impl<'a> TearsApp<'a> {
                     let Ok(note1) = event_id.to_bech32();
                     log::info!("Reacting to event: {note1}");
 
+                    // Send the event
                     let event_builder = EventBuilder::reaction(note, "+");
-                    let success_msg = format!("[Reacted] note {note1}");
-                    self.send_signed_event(event_builder, success_msg, "Failed to sign reaction");
+                    match self.state.nostr.send_event_builder(event_builder) {
+                        Ok(()) => {
+                            self.state
+                                .system
+                                .set_status_message(format!("[Reacted] note {note1}",));
+                        }
+                        Err(e) => {
+                            let message = format!("Failed to send reaction: {e}");
+                            log::error!("{message}");
+                            self.state.system.set_status_message(message);
+                        }
+                    }
                 } else {
                     self.state.system.set_status_message("No note selected");
                 }
@@ -371,9 +371,20 @@ impl<'a> TearsApp<'a> {
                     let Ok(note1) = event_id.to_bech32();
                     log::info!("Reposting event: {note1}");
 
+                    // Send the event
                     let event_builder = EventBuilder::repost(note, None);
-                    let success_msg = format!("[Reposted] {note1}");
-                    self.send_signed_event(event_builder, success_msg, "Failed to sign repost");
+                    match self.state.nostr.send_event_builder(event_builder) {
+                        Ok(()) => {
+                            self.state
+                                .system
+                                .set_status_message(format!("[Reposted] {note1}"));
+                        }
+                        Err(e) => {
+                            let message = format!("Failed to send repost: {e}");
+                            log::error!("{message}");
+                            self.state.system.set_status_message(message);
+                        }
+                    }
                 } else {
                     self.state.system.set_status_message("No note selected");
                 }
@@ -533,15 +544,20 @@ impl<'a> TearsApp<'a> {
                     EventBuilder::text_note(&content)
                 };
 
-                // Send the signed event
-                self.send_signed_event(
-                    event_builder,
-                    format!(
-                        "[Posted] {}",
-                        content.lines().collect::<Vec<&str>>().join(" ")
-                    ),
-                    "Failed to sign event",
-                );
+                // Send the event
+                match self.state.nostr.send_event_builder(event_builder) {
+                    Ok(()) => {
+                        self.state.system.set_status_message(format!(
+                            "[Posted] {}",
+                            content.lines().collect::<Vec<&str>>().join(" ")
+                        ));
+                    }
+                    Err(e) => {
+                        let message = format!("Failed to send event: {e}");
+                        log::error!("{message}");
+                        self.state.system.set_status_message(message);
+                    }
+                }
 
                 // Clear UI state
                 self.state.editor.cancel_composing();
@@ -664,34 +680,6 @@ impl<'a> TearsApp<'a> {
         }
     }
 
-    /// Send a signed Nostr event through the command sender
-    /// Returns true if the event was sent successfully, false otherwise
-    fn send_signed_event(
-        &mut self,
-        event_builder: EventBuilder,
-        success_message: String,
-        error_prefix: &str,
-    ) -> bool {
-        let result = event_builder
-            .sign_with_keys(&self.keys)
-            .map_err(|e| e.into())
-            .and_then(|event| self.state.nostr.send_event(event));
-
-        match result {
-            Ok(()) => {
-                self.state.system.set_status_message(success_message);
-                true
-            }
-            Err(e) => {
-                log::error!("{error_prefix}: {e}");
-                self.state
-                    .system
-                    .set_status_message(format!("{error_prefix}: {e}"));
-                false
-            }
-        }
-    }
-
     /// Load more older timeline events for the active tab
     fn load_more_timeline_events(&mut self) -> Command<AppMsg> {
         log::info!("Loading more timeline events");
@@ -751,10 +739,9 @@ mod tests {
         let config = Config::default();
 
         let flags = InitFlags {
-            pubkey: Some(keys.public_key()),
+            pubkey: keys.public_key(),
             config,
             nostr_client: client,
-            keys,
             tick_rate: 16.0,
         };
 

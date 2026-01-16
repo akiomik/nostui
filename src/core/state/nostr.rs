@@ -37,10 +37,10 @@ impl NostrState {
     }
 
     /// Send a signed event to relays
-    pub fn send_event(&self, event: Event) -> Result<()> {
+    pub fn send_event_builder(&self, event_builder: EventBuilder) -> Result<()> {
         if let Some(sender) = &self.command_sender {
             sender
-                .send(NostrCommand::SendEvent { event })
+                .send(NostrCommand::SendEventBuilder { event_builder })
                 .map_err(|e| e.into())
         } else {
             Err(eyre!("Not connected to Nostr"))
@@ -180,36 +180,29 @@ mod tests {
     use super::*;
     use nostr_sdk::PublicKey;
 
-    fn create_test_event(content: &str) -> Result<Event> {
-        let keys = Keys::generate();
-        Ok(EventBuilder::text_note(content)
-            .custom_created_at(Timestamp::now())
-            .sign_with_keys(&keys)?)
-    }
-
     #[test]
-    fn test_send_event_without_sender_returns_error() -> Result<()> {
+    fn test_send_event_builder_without_sender_returns_error() -> Result<()> {
         let state = NostrState::default();
-        let event = create_test_event("foo")?;
+        let event_builder = EventBuilder::text_note("foo");
 
-        let result = state.send_event(event);
+        let result = state.send_event_builder(event_builder);
         assert!(result.is_err());
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_send_event_with_sender_sends_command() -> Result<()> {
+    async fn test_send_event_builder_with_sender_sends_command() -> Result<()> {
         let mut state = NostrState::default();
         let (tx, mut rx) = mpsc::unbounded_channel();
         state.set_command_sender(tx);
-        let event = create_test_event("foo")?;
+        let event_builder = EventBuilder::text_note("foo");
 
-        let result = state.send_event(event.clone());
+        let result = state.send_event_builder(event_builder.clone());
         assert!(result.is_ok());
 
         let cmd = rx.recv().await.expect("should receive command");
-        assert_eq!(cmd, NostrCommand::SendEvent { event });
+        assert_eq!(cmd, NostrCommand::SendEventBuilder { event_builder });
 
         Ok(())
     }
