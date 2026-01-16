@@ -29,7 +29,10 @@ pub struct Config {
     #[serde(default)]
     pub styles: styles::Styles,
     #[serde(default)]
+    #[warn(deprecated)]
     pub privatekey: SecretString,
+    #[serde(default)]
+    pub key: SecretString,
     #[serde(default)]
     pub relays: Vec<String>,
 }
@@ -85,8 +88,8 @@ impl Config {
                 .or_insert_with(|| *style);
         }
 
-        if cfg.privatekey.expose_secret().is_empty() {
-            return Err(ConfigError::NotFound(String::from("privatekey")));
+        if cfg.privatekey.expose_secret().is_empty() && cfg.key.expose_secret().is_empty() {
+            return Err(ConfigError::NotFound("key".to_owned()));
         }
 
         if cfg.relays.is_empty() {

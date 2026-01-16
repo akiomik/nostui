@@ -8,7 +8,7 @@ use tears::Runtime;
 
 use nostui::{
     app::{InitFlags, TearsApp},
-    infrastructure::{cli::Cli, config::Config},
+    infrastructure::{cli::Cli, config::Config, nostr::PublicKeySigner},
     utils::{initialize_logging, initialize_panic_handler},
 };
 
@@ -21,13 +21,18 @@ async fn tokio_main() -> Result<()> {
     // Load configuration
     let config = Config::new()?;
 
-    // Load user keys from config
-    let keys = Keys::parse(config.privatekey.expose_secret())?;
-    let pubkey = keys.public_key();
-    log::info!("Starting nostui with public key: {pubkey}");
-
     // Create Nostr client
-    let client = Client::new(keys);
+    let (client, pubkey) = if config.key.expose_secret().starts_with("npub") {
+        let pubkey = PublicKey::parse(config.key.expose_secret())?;
+        let signer = PublicKeySigner::new(pubkey);
+        (Client::new(signer), pubkey)
+    } else {
+        let keys = Keys::parse(config.key.expose_secret())
+            .or(Keys::parse(config.privatekey.expose_secret()))?;
+        let pubkey = keys.public_key();
+        (Client::new(keys), pubkey)
+    };
+    log::info!("Starting nostui with public key: {pubkey}");
 
     // Add relays from config
     for relay_url in &config.relays {
