@@ -32,28 +32,6 @@ pub struct Config {
     pub privatekey: SecretString,
     #[serde(default)]
     pub relays: Vec<String>,
-    #[serde(default)]
-    pub experimental: ExperimentalConfig,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct ExperimentalConfig {
-    #[serde(default)]
-    pub use_elm_home: bool,
-    #[serde(default)]
-    pub elm_cache_enabled: bool,
-    #[serde(default)]
-    pub elm_performance_logging: bool,
-}
-
-impl Default for ExperimentalConfig {
-    fn default() -> Self {
-        Self {
-            use_elm_home: true, // Default to Elm Home (can be overridden by user config)
-            elm_cache_enabled: true,
-            elm_performance_logging: false,
-        }
-    }
 }
 
 impl Config {
