@@ -40,11 +40,11 @@ pkgin install nostui
 - Windows: `~\AppData\Roaming\0m1\nostui\config.json`
 - macOS: `~/Library/Application Support/io.0m1.nostui/config.json`
 
-2. Add your privatekey to the `config.json`:
+2. Add your key to the `config.json`:
 
 ```json5
 {
-    "privatekey": "nsec1...",
+    "key": "nsec1...", // or "npub..." for readonly mode
     "relays": ["wss://nos.lol"] // optional
 }
 ```
