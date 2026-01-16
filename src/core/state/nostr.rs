@@ -12,7 +12,7 @@ use crate::{
 pub struct NostrState {
     /// Command sender for NostrEvents subscription
     /// This is set when the subscription emits a Ready message
-    pub command_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
+    command_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
     /// Track subscription IDs for each timeline tab
     /// Home tab has 3 subscriptions (backward, forward, profile)
     /// User timelines have 1 subscription
@@ -32,6 +32,10 @@ pub enum SubscribeTabError {
 }
 
 impl NostrState {
+    pub fn set_command_sender(&mut self, command_sender: mpsc::UnboundedSender<NostrCommand>) {
+        self.command_sender = Some(command_sender);
+    }
+
     /// Send a signed event to relays
     pub fn send_event(&self, event: Event) -> Result<()> {
         if let Some(sender) = &self.command_sender {
@@ -198,7 +202,7 @@ mod tests {
     async fn test_send_event_with_sender_sends_command() -> Result<()> {
         let mut state = NostrState::default();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        state.command_sender = Some(tx);
+        state.set_command_sender(tx);
         let event = create_test_event("foo")?;
 
         let result = state.send_event(event.clone());
@@ -224,7 +228,7 @@ mod tests {
     async fn test_load_more_timeline_with_sender_sends_command() -> Result<()> {
         let mut state = NostrState::default();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        state.command_sender = Some(tx);
+        state.set_command_sender(tx);
         let now = Timestamp::now();
 
         let result = state.load_more_timeline(TimelineTabType::Home, now);
@@ -400,7 +404,7 @@ mod tests {
     async fn test_subscribe_tab_sends_command_and_marks_in_flight() -> color_eyre::Result<()> {
         let mut state = NostrState::default();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        state.command_sender = Some(tx);
+        state.set_command_sender(tx);
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("valid pubkey");
         let tab_type = TimelineTabType::UserTimeline { pubkey };
@@ -435,7 +439,7 @@ mod tests {
     async fn test_subscribe_tab_duplicate_is_rejected() -> color_eyre::Result<()> {
         let mut state = NostrState::default();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        state.command_sender = Some(tx);
+        state.set_command_sender(tx);
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("valid pubkey");
         let tab_type = TimelineTabType::UserTimeline { pubkey };
@@ -458,7 +462,7 @@ mod tests {
 
         let (tx, rx) = mpsc::unbounded_channel::<NostrCommand>();
         drop(rx); // make send fail
-        state.command_sender = Some(tx);
+        state.set_command_sender(tx);
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("valid pubkey");
         let tab_type = TimelineTabType::UserTimeline { pubkey };
@@ -489,7 +493,7 @@ mod tests {
     async fn test_unsubscribe_tab_with_sender_sends_command() -> color_eyre::Result<()> {
         let mut state = NostrState::default();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        state.command_sender = Some(tx);
+        state.set_command_sender(tx);
 
         let sub_id1 = nostr_sdk::SubscriptionId::new("sub1");
         let sub_id2 = nostr_sdk::SubscriptionId::new("sub2");
@@ -542,7 +546,7 @@ mod tests {
     async fn test_unsubscribe_all_tabs_with_sender_sends_all_ids() -> color_eyre::Result<()> {
         let mut state = NostrState::default();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        state.command_sender = Some(tx);
+        state.set_command_sender(tx);
 
         let sub_home1 = nostr_sdk::SubscriptionId::new("home1");
         let sub_home2 = nostr_sdk::SubscriptionId::new("home2");
@@ -585,7 +589,7 @@ mod tests {
     ) -> color_eyre::Result<()> {
         let mut state = NostrState::default();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        state.command_sender = Some(tx);
+        state.set_command_sender(tx);
 
         let sub_home = nostr_sdk::SubscriptionId::new("home");
         state.add_timeline_subscription(TimelineTabType::Home, sub_home.clone());

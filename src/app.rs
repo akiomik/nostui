@@ -585,7 +585,7 @@ impl<'a> TearsApp<'a> {
         match msg {
             NostrSubscriptionMessage::Ready { sender } => {
                 log::info!("NostrEvents subscription ready");
-                self.state.nostr.command_sender = Some(sender);
+                self.state.nostr.set_command_sender(sender);
                 self.state.system.set_status_message("[Home] Loading...");
             }
             NostrSubscriptionMessage::SubscriptionCreated {
@@ -650,7 +650,6 @@ impl<'a> TearsApp<'a> {
                 }
                 RelayPoolNotification::Shutdown => {
                     log::info!("Nostr subscription shut down");
-                    self.state.nostr.command_sender = None;
                     self.state
                         .system
                         .set_status_message("Disconnected from Nostr");
