@@ -27,7 +27,7 @@ async fn tokio_main() -> Result<()> {
     log::info!("Starting nostui with public key: {pubkey}");
 
     // Create Nostr client
-    let client = Client::new(keys.clone());
+    let client = Client::new(keys);
 
     // Add relays from config
     for relay_url in &config.relays {
@@ -41,10 +41,9 @@ async fn tokio_main() -> Result<()> {
 
     // Create initialization flags for TearsApp
     let init_flags = InitFlags {
-        pubkey: Some(pubkey),
+        pubkey,
         config,
         nostr_client: client,
-        keys,
         tick_rate: args.tick_rate,
     };
 
