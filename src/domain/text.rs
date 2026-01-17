@@ -2,17 +2,26 @@ use unicode_width::UnicodeWidthStr;
 
 pub fn wrap_text(s: &str, width: usize) -> String {
     if width == 0 {
-        return String::from("");
+        return String::new();
     }
 
-    s.chars().fold(String::from(""), |acc: String, c: char| {
-        let last_line = acc.lines().last().unwrap_or(&acc);
-        if last_line.width() + c.to_string().width() > width {
-            format!("{acc}\n{c}")
+    let mut result = String::with_capacity(s.len() + s.len() / width);
+    let mut current_line_width = 0;
+
+    for c in s.chars() {
+        let char_width = UnicodeWidthStr::width(c.encode_utf8(&mut [0; 4]));
+
+        if current_line_width + char_width > width {
+            result.push('\n');
+            current_line_width = char_width;
         } else {
-            format!("{acc}{c}")
+            current_line_width += char_width;
         }
-    })
+
+        result.push(c);
+    }
+
+    result
 }
 
 pub fn truncate_text(s: &str, max_height: usize) -> String {
