@@ -21,6 +21,13 @@ fmt:
 run:
   cargo run
 
+bench:
+  cargo bench
+
 [macos]
 log-tailf:
   tail -f ~/Library/Application\ Support/io.0m1.nostui/nostui.log
+
+[macos]
+flamegraph:
+  CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --root
