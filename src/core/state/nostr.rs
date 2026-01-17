@@ -1,6 +1,7 @@
 use color_eyre::eyre::eyre;
 use color_eyre::Result;
 use nostr_sdk::prelude::*;
+use nowhear::Track;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
@@ -173,10 +174,30 @@ impl NostrState {
 
         self.command_sender = None;
     }
+
+    pub fn live_status_with_content_from_track(track: Track) -> Option<(LiveStatus, String)> {
+        if track.title.is_empty() || track.artist.is_empty() || track.duration.is_none() {
+            return None;
+        }
+
+        let content = format!("{} - {}", track.title, track.artist.join(", "));
+        let reference =
+            percent_encoding::utf8_percent_encode(&content, percent_encoding::NON_ALPHANUMERIC)
+                .to_string();
+        let status = LiveStatus {
+            status_type: StatusType::Music,
+            expiration: track.duration.map(|duration| Timestamp::now() + duration),
+            reference: Some(reference),
+        };
+
+        Some((status, content))
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
     use nostr_sdk::PublicKey;
 
@@ -615,5 +636,88 @@ mod tests {
         assert!(state.command_sender.is_none());
 
         Ok(())
+    }
+
+    #[test]
+    fn test_live_status_with_content_from_track_returns_none_when_title_is_empty() {
+        let track = Track {
+            title: String::new(),
+            artist: vec!["Queen".to_string()],
+            album: None,
+            album_artist: None,
+            track_number: None,
+            duration: Some(Duration::from_secs(120)),
+            art_url: None,
+        };
+
+        let result = NostrState::live_status_with_content_from_track(track);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_live_status_with_content_from_track_returns_none_when_artist_is_empty() {
+        let track = Track {
+            title: "Bohemian Rhapsody".to_string(),
+            artist: Vec::new(),
+            album: None,
+            album_artist: None,
+            track_number: None,
+            duration: Some(Duration::from_secs(120)),
+            art_url: None,
+        };
+
+        let result = NostrState::live_status_with_content_from_track(track);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_live_status_with_content_from_track_returns_none_when_duration_is_none() {
+        let track = Track {
+            title: "Bohemian Rhapsody".to_string(),
+            artist: vec!["Queen".to_string()],
+            album: None,
+            album_artist: None,
+            track_number: None,
+            duration: None,
+            art_url: None,
+        };
+
+        let result = NostrState::live_status_with_content_from_track(track);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_live_status_with_content_from_track_builds_status_and_content() {
+        let duration = Duration::from_secs(120);
+        let track = Track {
+            title: "Bohemian Rhapsody".to_string(),
+            artist: vec!["Queen".to_string(), "Freddie Mercury".to_string()],
+            album: None,
+            album_artist: None,
+            track_number: None,
+            duration: Some(duration),
+            art_url: None,
+        };
+
+        let before = Timestamp::now();
+        let result = NostrState::live_status_with_content_from_track(track)
+            .expect("should build live status and content");
+        let after = Timestamp::now();
+
+        let (status, content) = result;
+
+        let expected_content = "Bohemian Rhapsody - Queen, Freddie Mercury".to_string();
+        let expected_reference =
+            "Bohemian%20Rhapsody%20%2D%20Queen%2C%20Freddie%20Mercury".to_string();
+
+        assert_eq!(content, expected_content);
+        assert_eq!(status.status_type, StatusType::Music);
+        assert_eq!(status.reference, Some(expected_reference));
+
+        let expiration = status.expiration.expect("expiration should exist");
+        let expected_min = before + duration;
+        let expected_max = after + duration;
+        assert!(expiration >= expected_min);
+        assert!(expiration <= expected_max);
     }
 }

@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
+use nowhear::{MediaEvent, MediaSourceError};
 use ratatui::prelude::*;
 use tears::prelude::*;
 use tears::subscription::terminal::TerminalEvents;
@@ -12,8 +13,9 @@ use tears::subscription::time::{Message as TimerMessage, Timer};
 
 use crate::core::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
 use crate::core::state::timeline::TimelineTabType;
-use crate::core::state::AppState;
+use crate::core::state::{AppState, NostrState};
 use crate::infrastructure::config::Config;
+use crate::infrastructure::subscription::media::MediaEvents;
 use crate::infrastructure::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrEvents,
 };
@@ -87,6 +89,7 @@ impl<'a> Application for TearsApp<'a> {
             AppMsg::Timeline(timeline_msg) => self.handle_timeline_msg(timeline_msg),
             AppMsg::Editor(editor_msg) => self.handle_editor_msg(editor_msg),
             AppMsg::Nostr(nostr_msg) => self.handle_nostr_msg(nostr_msg),
+            AppMsg::Media(media_msg) => self.handle_media_msg(media_msg),
         }
     }
 
@@ -120,6 +123,10 @@ impl<'a> Application for TearsApp<'a> {
                 Err(e) => AppMsg::System(SystemMsg::TerminalError(e.to_string())),
             }),
         ];
+
+        if self.config.nip38.enabled {
+            subs.push(Subscription::new(MediaEvents::new()).map(AppMsg::Media));
+        }
 
         // Add signal subscription for Ctrl+C (SIGINT)
         // This handles OS-level signals separately from keyboard input
@@ -593,6 +600,38 @@ impl<'a> TearsApp<'a> {
                 self.handle_nostr_subscription_message(sub_msg);
             }
         }
+        Command::none()
+    }
+
+    fn handle_media_msg(&mut self, msg: Result<MediaEvent, MediaSourceError>) -> Command<AppMsg> {
+        match msg {
+            Ok(event) => {
+                if let MediaEvent::TrackChanged { track, .. } = event {
+                    if let Some((status, content)) =
+                        NostrState::live_status_with_content_from_track(track)
+                    {
+                        let event_builder = EventBuilder::live_status(status, content.clone());
+
+                        match self.state.nostr.send_event_builder(event_builder) {
+                            Ok(()) => {
+                                self.state
+                                    .system
+                                    .set_status_message(format!("[Status Updated] {content}"));
+                            }
+                            Err(e) => {
+                                let message = format!("Failed to update status: {e}");
+                                log::error!("{message}");
+                                self.state.system.set_status_message(message);
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("media source error: {e}");
+            }
+        }
+
         Command::none()
     }
 

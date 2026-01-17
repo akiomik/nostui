@@ -20,6 +20,12 @@ pub struct AppConfig {
     pub _config_dir: PathBuf,
 }
 
+#[derive(Clone, Debug, Deserialize, Default)]
+pub struct Nip38Config {
+    #[serde(default)]
+    pub enabled: bool,
+}
+
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Config {
     #[serde(default, flatten)]
@@ -35,6 +41,8 @@ pub struct Config {
     pub key: SecretString,
     #[serde(default)]
     pub relays: Vec<String>,
+    #[serde(default, rename = "nip-38")]
+    pub nip38: Nip38Config,
 }
 
 impl Config {
