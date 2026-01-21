@@ -161,30 +161,6 @@ impl TimelineState {
         self.active_tab().is_empty()
     }
 
-    /// Iterate over text notes in the active timeline with their indices
-    ///
-    /// This iterator yields tuples of (index, &TextNote) for each note in the timeline.
-    /// The index represents the position in the timeline (0 is the newest event).
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// for (index, note) in timeline.iter_notes() {
-    ///     println!("TextNote {}: {}", index, note.content());
-    /// }
-    /// ```
-    pub fn iter_notes(&self) -> impl Iterator<Item = (usize, &TextNote)> + '_ {
-        // Read SortableEventId from the tab, then look up the event in the HashMap
-        self.active_tab()
-            .notes
-            .iter()
-            .enumerate()
-            .filter_map(move |(i, rev)| {
-                let event_id = rev.0.id;
-                self.notes.get(&event_id).map(|note| (i, note))
-            })
-    }
-
     /// Get the index of currently selected note in the active tab
     pub fn selected_index(&self) -> Option<usize> {
         self.active_tab().selected_index()
@@ -193,20 +169,6 @@ impl TimelineState {
     pub fn note_by_index(&self, index: usize) -> Option<&TextNote> {
         let event_id = self.active_tab().notes.get(index)?.0.id;
         self.notes.get(&event_id)
-    }
-
-    /// Add a text note to the Home timeline
-    ///
-    /// NOTE: This is a convenience method that always adds to the Home tab (index 0).
-    /// For routing events to specific tabs, use `add_note_to_tab()` instead.
-    ///
-    /// Returns a tuple of (was_inserted, loading_completed)
-    /// - was_inserted: `true` if the event was newly inserted, `false` if it already existed
-    /// - loading_completed: `true` if this event completed a LoadMore operation
-    ///
-    /// Automatically adjusts the selected index if a new item is inserted before it (only for Home tab)
-    pub fn add_note(&mut self, event: Event) -> (bool, bool) {
-        self.add_note_to_tab(event, &TimelineTabType::Home)
     }
 
     /// Add a text note to a specific timeline tab
@@ -772,175 +734,6 @@ mod tests {
     }
 
     #[test]
-    fn test_add_note_returns_correct_value() -> Result<()> {
-        let mut state = TimelineState::default();
-
-        let keys = Keys::generate();
-        let event1 = EventBuilder::text_note("test 1")
-            .custom_created_at(Timestamp::from(1000))
-            .sign_with_keys(&keys)?;
-
-        // First insert should return (true, false)
-        let (was_inserted, loading_completed) = state.add_note(event1.clone());
-        assert!(was_inserted);
-        assert!(!loading_completed);
-        assert_eq!(state.len(), 1);
-
-        // Duplicate insert should return (false, false)
-        let (was_inserted, loading_completed) = state.add_note(event1);
-        assert!(!was_inserted);
-        assert!(!loading_completed);
-        assert_eq!(state.len(), 1);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_add_note_without_selection() -> Result<()> {
-        let mut state = TimelineState::default();
-
-        let keys = Keys::generate();
-
-        // Add first note
-        let event1 = EventBuilder::text_note("test 1")
-            .custom_created_at(Timestamp::from(1000))
-            .sign_with_keys(&keys)?;
-        state.add_note(event1);
-
-        // Selection should remain None
-        assert_eq!(state.selected_index(), None);
-
-        // Add second note (newer, will be inserted at index 0)
-        let event2 = EventBuilder::text_note("test 2")
-            .custom_created_at(Timestamp::from(2000))
-            .sign_with_keys(&keys)?;
-        state.add_note(event2);
-
-        // Selection should still be None
-        assert_eq!(state.selected_index(), None);
-        assert_eq!(state.len(), 2);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_add_note_adjusts_selection_when_inserted_before() -> Result<()> {
-        let mut state = TimelineState::default();
-
-        let keys = Keys::generate();
-
-        // Add initial notes
-        let event1 = EventBuilder::text_note("test 1")
-            .custom_created_at(Timestamp::from(1000))
-            .sign_with_keys(&keys)?;
-        state.add_note(event1);
-
-        let event2 = EventBuilder::text_note("test 2")
-            .custom_created_at(Timestamp::from(2000))
-            .sign_with_keys(&keys)?;
-        state.add_note(event2);
-
-        let event3 = EventBuilder::text_note("test 3")
-            .custom_created_at(Timestamp::from(3000))
-            .sign_with_keys(&keys)?;
-        state.add_note(event3);
-
-        // Timeline: [3000, 2000, 1000] (indices: 0, 1, 2)
-        assert_eq!(state.len(), 3);
-
-        // Select the middle item (2000 at index 1)
-        state.select(1);
-        assert_eq!(state.selected_index(), Some(1));
-
-        // Add a newer note (4000) - will be inserted at index 0
-        let event4 = EventBuilder::text_note("test 4")
-            .custom_created_at(Timestamp::from(4000))
-            .sign_with_keys(&keys)?;
-        state.add_note(event4);
-
-        // Selection should be adjusted to index 2 to keep pointing to the same note
-        // Timeline: [4000, 3000, 2000, 1000] (indices: 0, 1, 2, 3)
-        assert_eq!(state.selected_index(), Some(2));
-        assert_eq!(state.len(), 4);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_add_note_does_not_adjust_selection_when_inserted_after() -> Result<()> {
-        let mut state = TimelineState::default();
-
-        let keys = Keys::generate();
-
-        // Add initial notes
-        let event1 = EventBuilder::text_note("test 1")
-            .custom_created_at(Timestamp::from(1000))
-            .sign_with_keys(&keys)?;
-        state.add_note(event1);
-
-        let event2 = EventBuilder::text_note("test 2")
-            .custom_created_at(Timestamp::from(3000))
-            .sign_with_keys(&keys)?;
-        state.add_note(event2);
-
-        // Timeline: [3000, 1000] (indices: 0, 1)
-        assert_eq!(state.len(), 2);
-
-        // Select the first item (3000 at index 0)
-        state.select(0);
-        assert_eq!(state.selected_index(), Some(0));
-
-        // Add an older note (2000) - will be inserted at index 1
-        let event3 = EventBuilder::text_note("test 3")
-            .custom_created_at(Timestamp::from(2000))
-            .sign_with_keys(&keys)?;
-        state.add_note(event3);
-
-        // Selection should remain at index 0
-        // Timeline: [3000, 2000, 1000] (indices: 0, 1, 2)
-        assert_eq!(state.selected_index(), Some(0));
-        assert_eq!(state.len(), 3);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_add_note_edge_case_insert_at_selected_index() -> Result<()> {
-        let mut state = TimelineState::default();
-
-        let keys = Keys::generate();
-
-        // Add initial notes
-        let event1 = EventBuilder::text_note("test 1")
-            .custom_created_at(Timestamp::from(1000))
-            .sign_with_keys(&keys)?;
-        state.add_note(event1);
-
-        let event2 = EventBuilder::text_note("test 2")
-            .custom_created_at(Timestamp::from(3000))
-            .sign_with_keys(&keys)?;
-        state.add_note(event2);
-
-        // Timeline: [3000, 1000] (indices: 0, 1)
-        // Select the second item (1000 at index 1)
-        state.select(1);
-        assert_eq!(state.selected_index(), Some(1));
-
-        // Add a note with timestamp 2000 - will be inserted at index 1
-        let event3 = EventBuilder::text_note("test 3")
-            .custom_created_at(Timestamp::from(2000))
-            .sign_with_keys(&keys)?;
-        state.add_note(event3);
-
-        // Since inserted_at (1) <= selected (1), selection should be adjusted
-        // Timeline: [3000, 2000, 1000] (indices: 0, 1, 2)
-        assert_eq!(state.selected_index(), Some(2));
-        assert_eq!(state.len(), 3);
-
-        Ok(())
-    }
-
-    #[test]
     fn test_add_reaction_with_valid_target() -> Result<()> {
         let mut state = TimelineState::default();
         let keys = Keys::generate();
@@ -951,7 +744,7 @@ mod tests {
             .sign_with_keys(&keys)?;
         let target_id = target_note.id;
 
-        state.add_note(target_note.clone());
+        state.add_note_to_tab(target_note.clone(), &TimelineTabType::Home);
 
         // Create a reaction to the target note
         let reaction = EventBuilder::reaction(&target_note, "👍").sign_with_keys(&keys)?;
@@ -979,7 +772,7 @@ mod tests {
         let target_note = EventBuilder::text_note("popular note").sign_with_keys(&keys1)?;
         let target_id = target_note.id;
 
-        state.add_note(target_note.clone());
+        state.add_note_to_tab(target_note.clone(), &TimelineTabType::Home);
 
         // Create multiple reactions from different users
         let reaction1 = EventBuilder::reaction(&target_note, "👍").sign_with_keys(&keys1)?;
@@ -1006,7 +799,7 @@ mod tests {
             .sign_with_keys(&keys)?;
         let target_id = target_note.id;
 
-        state.add_note(target_note.clone());
+        state.add_note_to_tab(target_note.clone(), &TimelineTabType::Home);
 
         // Create a repost of the target note
         let repost = EventBuilder::repost(&target_note, None).sign_with_keys(&keys)?;
@@ -1035,7 +828,7 @@ mod tests {
             .sign_with_keys(&keys)?;
         let target_id = target_note.id;
 
-        state.add_note(target_note);
+        state.add_note_to_tab(target_note, &TimelineTabType::Home);
 
         // Create a zap receipt (Kind 9735) with an 'e' tag pointing to the target
         let zap_receipt = EventBuilder::new(Kind::from(9735), "zap receipt")
@@ -1064,7 +857,7 @@ mod tests {
         let target_note = EventBuilder::text_note("popular note").sign_with_keys(&keys)?;
         let target_id = target_note.id;
 
-        state.add_note(target_note.clone());
+        state.add_note_to_tab(target_note.clone(), &TimelineTabType::Home);
 
         // Add a reaction
         let reaction = EventBuilder::reaction(&target_note, "👍").sign_with_keys(&keys)?;
@@ -1101,21 +894,21 @@ mod tests {
         let event1 = EventBuilder::text_note("note 1")
             .custom_created_at(Timestamp::from(2000))
             .sign_with_keys(&keys)?;
-        state.add_note(event1);
+        state.add_note_to_tab(event1, &TimelineTabType::Home);
         assert_eq!(state.oldest_timestamp(), Some(Timestamp::from(2000)));
 
         // Add older note
         let event2 = EventBuilder::text_note("note 2")
             .custom_created_at(Timestamp::from(1000))
             .sign_with_keys(&keys)?;
-        state.add_note(event2);
+        state.add_note_to_tab(event2, &TimelineTabType::Home);
         assert_eq!(state.oldest_timestamp(), Some(Timestamp::from(1000)));
 
         // Add newer note (should not change oldest)
         let event3 = EventBuilder::text_note("note 3")
             .custom_created_at(Timestamp::from(3000))
             .sign_with_keys(&keys)?;
-        state.add_note(event3);
+        state.add_note_to_tab(event3, &TimelineTabType::Home);
         assert_eq!(state.oldest_timestamp(), Some(Timestamp::from(1000)));
 
         Ok(())
@@ -1134,17 +927,17 @@ mod tests {
         let event1 = EventBuilder::text_note("note 1")
             .custom_created_at(Timestamp::from(1000))
             .sign_with_keys(&keys)?;
-        state.add_note(event1);
+        state.add_note_to_tab(event1, &TimelineTabType::Home);
 
         let event2 = EventBuilder::text_note("note 2")
             .custom_created_at(Timestamp::from(2000))
             .sign_with_keys(&keys)?;
-        state.add_note(event2);
+        state.add_note_to_tab(event2, &TimelineTabType::Home);
 
         let event3 = EventBuilder::text_note("note 3")
             .custom_created_at(Timestamp::from(3000))
             .sign_with_keys(&keys)?;
-        state.add_note(event3);
+        state.add_note_to_tab(event3, &TimelineTabType::Home);
 
         // No selection - not at bottom
         assert!(!state.is_at_bottom());
@@ -1174,7 +967,7 @@ mod tests {
             let event = EventBuilder::text_note(format!("note {i}"))
                 .custom_created_at(Timestamp::from(i * 1000))
                 .sign_with_keys(&keys)?;
-            state.add_note(event);
+            state.add_note_to_tab(event, &TimelineTabType::Home);
         }
 
         // Select last
@@ -1197,12 +990,12 @@ mod tests {
         let event1 = EventBuilder::text_note("note 1")
             .custom_created_at(Timestamp::from(1000))
             .sign_with_keys(&keys)?;
-        state.add_note(event1);
+        state.add_note_to_tab(event1, &TimelineTabType::Home);
 
         let event2 = EventBuilder::text_note("note 2")
             .custom_created_at(Timestamp::from(2000))
             .sign_with_keys(&keys)?;
-        state.add_note(event2);
+        state.add_note_to_tab(event2, &TimelineTabType::Home);
 
         // Not loading initially
         assert!(!state.is_loading_more());
@@ -1217,7 +1010,7 @@ mod tests {
         let event3 = EventBuilder::text_note("note 3")
             .custom_created_at(Timestamp::from(3000))
             .sign_with_keys(&keys)?;
-        let (_, loading_completed) = state.add_note(event3);
+        let (_, loading_completed) = state.add_note_to_tab(event3, &TimelineTabType::Home);
         assert!(!loading_completed);
         assert!(state.is_loading_more());
 
@@ -1225,7 +1018,8 @@ mod tests {
         let event0 = EventBuilder::text_note("note 0")
             .custom_created_at(Timestamp::from(500))
             .sign_with_keys(&keys)?;
-        let (was_inserted, loading_completed) = state.add_note(event0);
+        let (was_inserted, loading_completed) =
+            state.add_note_to_tab(event0, &TimelineTabType::Home);
         assert!(was_inserted);
         assert!(loading_completed);
         assert!(!state.is_loading_more());
@@ -1242,7 +1036,7 @@ mod tests {
         let event1 = EventBuilder::text_note("note 1")
             .custom_created_at(Timestamp::from(1000))
             .sign_with_keys(&keys)?;
-        state.add_note(event1);
+        state.add_note_to_tab(event1, &TimelineTabType::Home);
 
         // Start loading more (loading_more_since = 1000)
         state.start_loading_more();
@@ -1251,7 +1045,7 @@ mod tests {
         let event_same = EventBuilder::text_note("note same")
             .custom_created_at(Timestamp::from(1000))
             .sign_with_keys(&keys)?;
-        let (_, loading_completed) = state.add_note(event_same);
+        let (_, loading_completed) = state.add_note_to_tab(event_same, &TimelineTabType::Home);
         assert!(!loading_completed);
         assert!(state.is_loading_more());
 
@@ -1259,7 +1053,7 @@ mod tests {
         let event_older = EventBuilder::text_note("note older")
             .custom_created_at(Timestamp::from(999))
             .sign_with_keys(&keys)?;
-        let (_, loading_completed) = state.add_note(event_older);
+        let (_, loading_completed) = state.add_note_to_tab(event_older, &TimelineTabType::Home);
         assert!(loading_completed);
         assert!(!state.is_loading_more());
 

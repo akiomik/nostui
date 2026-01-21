@@ -7,7 +7,6 @@ use tui_widget_list::{ListBuilder, ListView};
 
 use crate::{
     core::state::AppState,
-    domain::nostr::text_note::TextNote,
     presentation::widgets::text_note::{TextNoteWidget, ViewContext},
 };
 
@@ -74,26 +73,6 @@ impl HomeListComponent {
 
         frame.render_stateful_widget(list, area, &mut list_state);
     }
-
-    /// Get the number of notes in the timeline
-    pub fn note_count(state: &AppState) -> usize {
-        state.timeline.len()
-    }
-
-    /// Check if a note is selected
-    pub fn has_selection(state: &AppState) -> bool {
-        state.timeline.selected_index().is_some()
-    }
-
-    /// Get the selected note index
-    pub fn selected_index(state: &AppState) -> Option<usize> {
-        state.timeline.selected_index()
-    }
-
-    /// Get the selected note if any
-    pub fn selected_note(state: &AppState) -> Option<&TextNote> {
-        state.timeline.selected_note()
-    }
 }
 
 impl Default for HomeListComponent {
@@ -104,22 +83,10 @@ impl Default for HomeListComponent {
 
 #[cfg(test)]
 mod tests {
+    use crate::core::state::timeline::TimelineTabType;
+
     use super::*;
     use nostr_sdk::prelude::*;
-
-    fn create_test_state_with_notes(note_count: usize) -> Result<AppState> {
-        let keys = Keys::generate();
-        let mut state = AppState::new(keys.public_key());
-
-        for i in 0..note_count {
-            let note_keys = Keys::generate();
-            let content = format!("Test note {i}");
-            let event = EventBuilder::text_note(&content).sign_with_keys(&note_keys)?;
-            state.timeline.add_note(event);
-        }
-
-        Ok(state)
-    }
 
     #[test]
     fn test_list_component_creation() {
@@ -138,69 +105,6 @@ mod tests {
     }
 
     #[test]
-    fn test_note_count() -> Result<()> {
-        let state_empty = create_test_state_with_notes(0)?;
-        let state_with_notes = create_test_state_with_notes(5)?;
-
-        assert_eq!(HomeListComponent::note_count(&state_empty), 0);
-        assert_eq!(HomeListComponent::note_count(&state_with_notes), 5);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_has_selection() -> Result<()> {
-        let mut state = create_test_state_with_notes(5)?;
-
-        assert!(!HomeListComponent::has_selection(&state));
-
-        state.timeline.select(2);
-        assert!(HomeListComponent::has_selection(&state));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_selected_index() -> Result<()> {
-        let mut state = create_test_state_with_notes(5)?;
-
-        assert_eq!(HomeListComponent::selected_index(&state), None);
-
-        state.timeline.select(2);
-        assert_eq!(HomeListComponent::selected_index(&state), Some(2));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_selected_note() -> Result<()> {
-        let mut state = create_test_state_with_notes(5)?;
-
-        assert!(HomeListComponent::selected_note(&state).is_none());
-
-        state.timeline.select(2);
-        let selected = HomeListComponent::selected_note(&state);
-        assert!(selected.is_some());
-        if let Some(note) = selected {
-            // Notes are stored in reverse order, so index 2 is actually note 3
-            assert!(note.content().starts_with("Test note"));
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_selected_note_out_of_bounds() -> Result<()> {
-        let mut state = create_test_state_with_notes(3)?;
-
-        state.timeline.select(10); // Out of bounds
-        let selected = HomeListComponent::selected_note(&state);
-        assert!(selected.is_none());
-
-        Ok(())
-    }
-
-    #[test]
     fn test_multibyte_character_rendering() -> Result<()> {
         use ratatui::backend::TestBackend;
         use ratatui::Terminal;
@@ -214,7 +118,9 @@ mod tests {
         let note_keys = Keys::generate();
         let japanese_text = "初force pushめでたい";
         let event = EventBuilder::text_note(japanese_text).sign_with_keys(&note_keys)?;
-        state.timeline.add_note(event);
+        state
+            .timeline
+            .add_note_to_tab(event, &TimelineTabType::Home);
 
         // Render the note
         let list = HomeListComponent::new();
