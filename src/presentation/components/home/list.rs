@@ -46,9 +46,8 @@ impl HomeListComponent {
         // Prepare note data for the list builder
         let notes_data: Vec<_> = state
             .timeline
-            .iter()
-            .map(|sortable_event| {
-                let event = &sortable_event.event;
+            .iter_events()
+            .map(|(_index, event)| {
                 let event_id = event.id;
 
                 // Get author profile if available
