@@ -91,6 +91,10 @@ impl UserState {
     pub fn remove_profile(&mut self, pubkey: &PublicKey) -> Option<Profile> {
         self.profiles.remove(pubkey)
     }
+
+    pub fn profiles(&self) -> &HashMap<PublicKey, Profile> {
+        &self.profiles
+    }
 }
 
 #[cfg(test)]

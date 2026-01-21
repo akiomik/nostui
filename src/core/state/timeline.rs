@@ -2,7 +2,10 @@ use nostr_sdk::prelude::*;
 use sorted_vec::ReverseSortedSet;
 use std::{cmp::Reverse, collections::HashMap};
 
-use crate::domain::{collections::EventSet, nostr::SortableEventId};
+use crate::domain::nostr::{
+    text_note::{Message, TextNote},
+    SortableEventId,
+};
 
 mod pagination;
 mod selection;
@@ -114,12 +117,7 @@ pub struct TimelineState {
 
     // Centralized event storage (shared across all tabs)
     // Each event is stored once here and referenced by EventId from tabs
-    events: HashMap<EventId, Event>,
-
-    // Shared global data across all tabs
-    global_reactions: HashMap<EventId, EventSet>,
-    global_reposts: HashMap<EventId, EventSet>,
-    global_zap_receipts: HashMap<EventId, EventSet>,
+    notes: HashMap<EventId, TextNote>,
 }
 
 impl Default for TimelineState {
@@ -127,10 +125,7 @@ impl Default for TimelineState {
         Self {
             tabs: vec![TimelineTab::new_home()],
             active_tab_index: 0,
-            events: HashMap::new(),
-            global_reactions: HashMap::new(),
-            global_reposts: HashMap::new(),
-            global_zap_receipts: HashMap::new(),
+            notes: HashMap::new(),
         }
     }
 }
@@ -166,19 +161,19 @@ impl TimelineState {
         self.active_tab().is_empty()
     }
 
-    /// Iterate over events in the active timeline with their indices
+    /// Iterate over text notes in the active timeline with their indices
     ///
-    /// This iterator yields tuples of (index, &Event) for each event in the timeline.
+    /// This iterator yields tuples of (index, &TextNote) for each note in the timeline.
     /// The index represents the position in the timeline (0 is the newest event).
     ///
     /// # Examples
     ///
     /// ```ignore
-    /// for (index, event) in timeline.iter_events() {
-    ///     println!("Event {}: {}", index, event.content);
+    /// for (index, note) in timeline.iter_notes() {
+    ///     println!("TextNote {}: {}", index, note.content());
     /// }
     /// ```
-    pub fn iter_events(&self) -> impl Iterator<Item = (usize, &Event)> + '_ {
+    pub fn iter_notes(&self) -> impl Iterator<Item = (usize, &TextNote)> + '_ {
         // Read SortableEventId from the tab, then look up the event in the HashMap
         self.active_tab()
             .notes
@@ -186,7 +181,7 @@ impl TimelineState {
             .enumerate()
             .filter_map(move |(i, rev)| {
                 let event_id = rev.0.id;
-                self.events.get(&event_id).map(|event| (i, event))
+                self.notes.get(&event_id).map(|note| (i, note))
             })
     }
 
@@ -195,28 +190,9 @@ impl TimelineState {
         self.active_tab().selected_index()
     }
 
-    /// Get reactions for the specified event (shared across all tabs)
-    pub fn reactions_for(&self, event_id: &EventId) -> EventSet {
-        self.global_reactions
-            .get(event_id)
-            .cloned()
-            .unwrap_or_else(EventSet::new)
-    }
-
-    /// Get reposts for the specified event (shared across all tabs)
-    pub fn reposts_for(&self, event_id: &EventId) -> EventSet {
-        self.global_reposts
-            .get(event_id)
-            .cloned()
-            .unwrap_or_else(EventSet::new)
-    }
-
-    /// Get zap receipts for the specified event (shared across all tabs)
-    pub fn zap_receipts_for(&self, event_id: &EventId) -> EventSet {
-        self.global_zap_receipts
-            .get(event_id)
-            .cloned()
-            .unwrap_or_else(EventSet::new)
+    pub fn note_by_index(&self, index: usize) -> Option<&TextNote> {
+        let event_id = self.active_tab().notes.get(index)?.0.id;
+        self.notes.get(&event_id)
     }
 
     /// Add a text note to the Home timeline
@@ -254,7 +230,9 @@ impl TimelineState {
         // Store event in centralized storage
         let event_id = event.id;
         let created_at = event.created_at;
-        self.events.entry(event_id).or_insert_with(|| event.clone());
+        self.notes
+            .entry(event_id)
+            .or_insert_with(|| TextNote::new(event.clone()));
 
         // Create SortableEventId and insert into tab
         let sortable_id = SortableEventId::new(event_id, created_at);
@@ -311,10 +289,10 @@ impl TimelineState {
                 _ => None,
             })?;
 
-        self.global_reactions
-            .entry(target_event_id)
-            .or_default()
-            .insert(event);
+        self.notes.entry(target_event_id).and_modify(|note| {
+            note.update(Message::ReactionReceived(event));
+        });
+
         Some(target_event_id)
     }
 
@@ -333,10 +311,10 @@ impl TimelineState {
                 _ => None,
             })?;
 
-        self.global_reposts
-            .entry(target_event_id)
-            .or_default()
-            .insert(event);
+        self.notes.entry(target_event_id).and_modify(|note| {
+            note.update(Message::RepostReceived(event));
+        });
+
         Some(target_event_id)
     }
 
@@ -355,10 +333,10 @@ impl TimelineState {
                 _ => None,
             })?;
 
-        self.global_zap_receipts
-            .entry(target_event_id)
-            .or_default()
-            .insert(event);
+        self.notes.entry(target_event_id).and_modify(|note| {
+            note.update(Message::ZapReceiptReceived(event));
+        });
+
         Some(target_event_id)
     }
 
@@ -389,12 +367,12 @@ impl TimelineState {
     }
 
     /// Get the currently selected note from the active tab
-    pub fn selected_note(&self) -> Option<&Event> {
+    pub fn selected_note(&self) -> Option<&TextNote> {
         // Get the SortableEventId from the selected index, then look up in the HashMap
         let index = self.selected_index()?;
         let sortable_id = self.active_tab().notes.get(index)?;
         let event_id = sortable_id.0.id;
-        self.events.get(&event_id)
+        self.notes.get(&event_id)
     }
 
     /// Select a note at the specified index in the active tab
@@ -576,9 +554,9 @@ mod tests {
 
         // Store in centralized storage
         state
-            .events
+            .notes
             .entry(event_id)
-            .or_insert_with(|| event.clone());
+            .or_insert_with(|| TextNote::new(event.clone()));
 
         // Create SortableEventId and insert into tab
         let sortable_id = SortableEventId::new(event_id, created_at);
@@ -766,8 +744,8 @@ mod tests {
         let event2_id = event2.id;
 
         // Store in centralized storage
-        state.events.insert(event1_id, event1.clone());
-        state.events.insert(event2_id, event2.clone());
+        state.notes.insert(event1_id, TextNote::new(event1.clone()));
+        state.notes.insert(event2_id, TextNote::new(event2.clone()));
 
         // Create SortableEventIds and insert into tab
         let sortable1 = SortableEventId::new(event1_id, event1.created_at);
@@ -781,12 +759,12 @@ mod tests {
         state.select(0);
         let selected = state.selected_note().expect("should exist");
         // ReverseSortedSet sorts in reverse order, so index 0 is the newest (2000)
-        assert_eq!(selected.id, event2_id);
+        assert_eq!(selected.id(), event2_id);
 
         // Select second note
         state.select(1);
         let selected = state.selected_note().expect("should exist");
-        assert_eq!(selected.id, event1_id);
+        assert_eq!(selected.id(), event1_id);
 
         // Deselect
         state.deselect();
@@ -977,7 +955,6 @@ mod tests {
 
         // Create a reaction to the target note
         let reaction = EventBuilder::reaction(&target_note, "👍").sign_with_keys(&keys)?;
-        let reaction_id = reaction.id;
 
         // Add the reaction
         let result = state.add_reaction(reaction);
@@ -986,31 +963,8 @@ mod tests {
         assert_eq!(result, Some(target_id));
 
         // The reaction should be stored in the reactions map
-        assert!(state.global_reactions.contains_key(&target_id));
-        let reactions = state.reactions_for(&target_id);
-        assert_eq!(reactions.len(), 1);
-        assert!(reactions.contains(&reaction_id));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_add_reaction_without_target() -> Result<()> {
-        let mut state = TimelineState::default();
-        let keys = Keys::generate();
-
-        // Create a reaction-like event without an 'e' tag
-        let invalid_reaction =
-            EventBuilder::text_note("not a valid reaction").sign_with_keys(&keys)?;
-
-        // Add the invalid reaction
-        let result = state.add_reaction(invalid_reaction);
-
-        // Should return None
-        assert_eq!(result, None);
-
-        // No reactions should be stored
-        assert!(state.global_reactions.is_empty());
+        let note = state.notes.get(&target_id).expect("target note must exist");
+        assert_eq!(note.reactions_count(), 1);
 
         Ok(())
     }
@@ -1031,14 +985,12 @@ mod tests {
         let reaction1 = EventBuilder::reaction(&target_note, "👍").sign_with_keys(&keys1)?;
         let reaction2 = EventBuilder::reaction(&target_note, "🔥").sign_with_keys(&keys2)?;
 
-        state.add_reaction(reaction1.clone());
-        state.add_reaction(reaction2.clone());
+        state.add_reaction(reaction1);
+        state.add_reaction(reaction2);
 
         // Both reactions should be stored
-        let reactions = state.reactions_for(&target_id);
-        assert_eq!(reactions.len(), 2);
-        assert!(reactions.contains(&reaction1.id));
-        assert!(reactions.contains(&reaction2.id));
+        let note = state.notes.get(&target_id).expect("target note must exist");
+        assert_eq!(note.reactions_count(), 2);
 
         Ok(())
     }
@@ -1058,7 +1010,6 @@ mod tests {
 
         // Create a repost of the target note
         let repost = EventBuilder::repost(&target_note, None).sign_with_keys(&keys)?;
-        let repost_id = repost.id;
 
         // Add the repost
         let result = state.add_repost(repost);
@@ -1067,30 +1018,8 @@ mod tests {
         assert_eq!(result, Some(target_id));
 
         // The repost should be stored in the reposts map
-        assert!(state.global_reposts.contains_key(&target_id));
-        let reposts = state.reposts_for(&target_id);
-        assert_eq!(reposts.len(), 1);
-        assert!(reposts.contains(&repost_id));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_add_repost_without_target() -> Result<()> {
-        let mut state = TimelineState::default();
-        let keys = Keys::generate();
-
-        // Create a repost-like event without an 'e' tag
-        let invalid_repost = EventBuilder::text_note("not a valid repost").sign_with_keys(&keys)?;
-
-        // Add the invalid repost
-        let result = state.add_repost(invalid_repost);
-
-        // Should return None
-        assert_eq!(result, None);
-
-        // No reposts should be stored
-        assert!(state.global_reposts.is_empty());
+        let note = state.notes.get(&target_id).expect("target note must exist");
+        assert_eq!(note.reposts_count(), 1);
 
         Ok(())
     }
@@ -1112,7 +1041,6 @@ mod tests {
         let zap_receipt = EventBuilder::new(Kind::from(9735), "zap receipt")
             .tag(Tag::event(target_id))
             .sign_with_keys(&keys)?;
-        let zap_id = zap_receipt.id;
 
         // Add the zap receipt
         let result = state.add_zap_receipt(zap_receipt);
@@ -1121,31 +1049,8 @@ mod tests {
         assert_eq!(result, Some(target_id));
 
         // The zap receipt should be stored in the zap_receipts map
-        assert!(state.global_zap_receipts.contains_key(&target_id));
-        let zaps = state.zap_receipts_for(&target_id);
-        assert_eq!(zaps.len(), 1);
-        assert!(zaps.contains(&zap_id));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_add_zap_receipt_without_target() -> Result<()> {
-        let mut state = TimelineState::default();
-        let keys = Keys::generate();
-
-        // Create a zap receipt without an 'e' tag
-        let invalid_zap =
-            EventBuilder::new(Kind::from(9735), "invalid zap").sign_with_keys(&keys)?;
-
-        // Add the invalid zap receipt
-        let result = state.add_zap_receipt(invalid_zap);
-
-        // Should return None
-        assert_eq!(result, None);
-
-        // No zap receipts should be stored
-        assert!(state.global_zap_receipts.is_empty());
+        let note = state.notes.get(&target_id).expect("target note must exist");
+        assert_eq!(note.zap_amount(), 0);
 
         Ok(())
     }
@@ -1176,9 +1081,10 @@ mod tests {
         state.add_zap_receipt(zap);
 
         // All three should be stored independently
-        assert_eq!(state.reactions_for(&target_id).len(), 1);
-        assert_eq!(state.reposts_for(&target_id).len(), 1);
-        assert_eq!(state.zap_receipts_for(&target_id).len(), 1);
+        let note = state.notes.get(&target_id).expect("target note must exist");
+        assert_eq!(note.reactions_count(), 1);
+        assert_eq!(note.reposts_count(), 1);
+        assert_eq!(note.zap_amount(), 0);
 
         Ok(())
     }

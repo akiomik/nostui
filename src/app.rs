@@ -349,12 +349,11 @@ impl<'a> TearsApp<'a> {
             TimelineMsg::ReactToSelected => {
                 // React to the selected note
                 if let Some(note) = self.state.timeline.selected_note() {
-                    let event_id = note.id;
-                    let Ok(note1) = event_id.to_bech32();
+                    let note1 = note.bech32_id();
                     log::info!("Reacting to event: {note1}");
 
                     // Send the event
-                    let event_builder = EventBuilder::reaction(note, "+");
+                    let event_builder = EventBuilder::reaction(note.as_event(), "+");
                     match self.state.nostr.send_event_builder(event_builder) {
                         Ok(()) => {
                             self.state
@@ -374,12 +373,11 @@ impl<'a> TearsApp<'a> {
             TimelineMsg::RepostSelected => {
                 // Repost the selected note
                 if let Some(note) = self.state.timeline.selected_note() {
-                    let event_id = note.id;
-                    let Ok(note1) = event_id.to_bech32();
+                    let note1 = note.bech32_id();
                     log::info!("Reposting event: {note1}");
 
                     // Send the event
-                    let event_builder = EventBuilder::repost(note, None);
+                    let event_builder = EventBuilder::repost(note.as_event(), None);
                     match self.state.nostr.send_event_builder(event_builder) {
                         Ok(()) => {
                             self.state
@@ -426,7 +424,7 @@ impl<'a> TearsApp<'a> {
             TimelineMsg::OpenAuthorTimeline => {
                 // Open author timeline for the selected note's author
                 if let Some(event) = self.state.timeline.selected_note() {
-                    let author_pubkey = event.pubkey;
+                    let author_pubkey = event.author_pubkey();
                     let tab_type = TimelineTabType::UserTimeline {
                         pubkey: author_pubkey,
                     };
@@ -515,18 +513,17 @@ impl<'a> TearsApp<'a> {
             EditorMsg::StartReply => {
                 // Get the selected note
                 if let Some(note) = self.state.timeline.selected_note() {
-                    let event_id = note.id;
+                    let note1 = note.bech32_id();
 
                     // Set reply context
-                    self.state.editor.start_reply(note.clone());
+                    self.state.editor.start_reply(note.as_event().clone());
 
                     // Show status message
-                    self.state.system.set_status_message(format!(
-                        "Replying to note {}",
-                        &event_id.to_hex()[..8]
-                    ));
+                    self.state
+                        .system
+                        .set_status_message(format!("Replying to note {note1}",));
 
-                    log::info!("Starting reply to event: {event_id}");
+                    log::info!("Starting reply to event: {note1}");
                 } else {
                     self.state.system.set_status_message("No note selected");
                 }
@@ -1177,7 +1174,7 @@ mod tests {
             .timeline
             .selected_note()
             .expect("Timeline should have event at index 1")
-            .id;
+            .id();
         assert_eq!(selected_event_id, event2.id);
 
         // New event arrives with timestamp between now and middle (5 seconds ago)
@@ -1197,7 +1194,7 @@ mod tests {
             .timeline
             .selected_note()
             .expect("Timeline should have event at index 2")
-            .id;
+            .id();
         assert_eq!(still_selected_event_id, event2.id);
     }
 
@@ -1231,7 +1228,7 @@ mod tests {
             .timeline
             .selected_note()
             .expect("Timeline should have first event")
-            .id;
+            .id();
         assert_eq!(selected_event_id, event2.id);
 
         // Even older event arrives (will be inserted after the selection)
@@ -1251,7 +1248,7 @@ mod tests {
             .timeline
             .selected_note()
             .expect("Timeline should have first event")
-            .id;
+            .id();
         assert_eq!(still_selected_event_id, event2.id);
     }
 

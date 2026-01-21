@@ -2,12 +2,13 @@
 //!
 //! Displays the timeline list of events.
 
-use nostr_sdk::ToBech32;
 use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::{ListBuilder, ListView};
 
 use crate::{
-    core::state::AppState, domain::text::shorten_npub, presentation::widgets::text_note::TextNote,
+    core::state::AppState,
+    domain::nostr::text_note::TextNote,
+    presentation::widgets::text_note::{TextNoteWidget, ViewContext},
 };
 
 /// Home list component
@@ -43,58 +44,23 @@ impl HomeListComponent {
             return;
         }
 
-        // Prepare note data for the list builder
-        let notes_data: Vec<_> = state
-            .timeline
-            .iter_events()
-            .map(|(_index, event)| {
-                let event_id = event.id;
-
-                // Get author profile if available
-                let profile = state.user.get_profile(&event.pubkey).cloned();
-
-                // Extract p-tags and get profiles for mentioned users
-                let mentioned_names: Vec<_> = event
-                    .tags
-                    .public_keys()
-                    .map(|pubkey| {
-                        state
-                            .user
-                            .get_profile(pubkey)
-                            .map(|p| p.name())
-                            .unwrap_or_else(|| {
-                                let Ok(npub) = pubkey.to_bech32();
-                                shorten_npub(npub)
-                            })
-                    })
-                    .collect();
-
-                // Get reactions, reposts, and zap receipts for this event
-                let reactions = state.timeline.reactions_for(&event_id);
-                let reposts = state.timeline.reposts_for(&event_id);
-                let zap_receipts = state.timeline.zap_receipts_for(&event_id);
-
-                // Create TextNote widget
-                let text_note = TextNote::new(
-                    event.clone(),
-                    profile,
-                    mentioned_names,
-                    reactions,
-                    reposts,
-                    zap_receipts,
-                    padding,
-                );
-
-                let height = text_note.calculate_height(&area);
-                (text_note, height)
-            })
-            .collect();
-
         // Create list builder with notes
-        let builder = ListBuilder::new(move |context| {
-            let mut item = notes_data[context.index].clone();
-            item.0.highlight = context.is_selected;
-            (item.0, item.1)
+        let builder = ListBuilder::new(move |list_ctx| {
+            let note = state
+                .timeline
+                .note_by_index(list_ctx.index)
+                .cloned()
+                .expect("note must exist");
+
+            let item_ctx = ViewContext {
+                profiles: state.user.profiles(),
+                live_status: None,
+                selected: list_ctx.is_selected,
+            };
+            let widget = TextNoteWidget::new(note, item_ctx);
+            let height = widget.calculate_height(&area, padding);
+
+            (widget, height)
         });
 
         // Create list state from AppState
@@ -124,8 +90,8 @@ impl HomeListComponent {
         state.timeline.selected_index()
     }
 
-    /// Get the selected event if any
-    pub fn selected_event(state: &AppState) -> Option<&nostr_sdk::Event> {
+    /// Get the selected note if any
+    pub fn selected_note(state: &AppState) -> Option<&TextNote> {
         state.timeline.selected_note()
     }
 }
@@ -207,28 +173,28 @@ mod tests {
     }
 
     #[test]
-    fn test_selected_event() -> Result<()> {
+    fn test_selected_note() -> Result<()> {
         let mut state = create_test_state_with_notes(5)?;
 
-        assert!(HomeListComponent::selected_event(&state).is_none());
+        assert!(HomeListComponent::selected_note(&state).is_none());
 
         state.timeline.select(2);
-        let selected = HomeListComponent::selected_event(&state);
+        let selected = HomeListComponent::selected_note(&state);
         assert!(selected.is_some());
-        if let Some(event) = selected {
+        if let Some(note) = selected {
             // Notes are stored in reverse order, so index 2 is actually note 3
-            assert!(event.content.starts_with("Test note"));
+            assert!(note.content().starts_with("Test note"));
         }
 
         Ok(())
     }
 
     #[test]
-    fn test_selected_event_out_of_bounds() -> Result<()> {
+    fn test_selected_note_out_of_bounds() -> Result<()> {
         let mut state = create_test_state_with_notes(3)?;
 
         state.timeline.select(10); // Out of bounds
-        let selected = HomeListComponent::selected_event(&state);
+        let selected = HomeListComponent::selected_note(&state);
         assert!(selected.is_none());
 
         Ok(())
