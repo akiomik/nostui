@@ -1,13 +1,12 @@
 use nostr_sdk::prelude::*;
-use sorted_vec::ReverseSortedSet;
+use sorted_vec::{FindOrInsert, ReverseSortedSet};
 use std::{cmp::Reverse, collections::HashMap};
 
 use crate::domain::nostr::SortableEventId;
-use crate::model::timeline as model_timeline;
 use crate::model::timeline::text_note::{Message as TextNoteMessage, TextNote};
-
-// Re-export for backward compatibility
-pub use crate::model::timeline::TimelineTabType;
+use crate::model::timeline::{
+    tab::Message as TabMessage, TimelineTab as TimelineTabInner, TimelineTabType,
+};
 
 /// Represents a single timeline tab with its own state
 ///
@@ -15,9 +14,9 @@ pub use crate::model::timeline::TimelineTabType;
 /// with the existing TimelineState API. Internally delegates to src/model/timeline.
 #[derive(Debug, Clone)]
 pub struct TimelineTab {
-    pub tab_type: model_timeline::TimelineTabType,
+    pub tab_type: TimelineTabType,
     /// The new Elm-style model
-    inner: model_timeline::TimelineTab,
+    inner: TimelineTabInner,
     /// Sorted list of event IDs (newest first) - kept for public access
     /// The actual event data is stored in TimelineState::events
     pub notes: ReverseSortedSet<SortableEventId>,
@@ -28,7 +27,7 @@ impl TimelineTab {
     pub fn new(tab_type: TimelineTabType) -> Self {
         Self {
             tab_type: tab_type.clone(),
-            inner: model_timeline::TimelineTab::new(tab_type),
+            inner: TimelineTabInner::new(tab_type),
             notes: ReverseSortedSet::new(),
         }
     }
@@ -44,28 +43,23 @@ impl TimelineTab {
     }
 
     pub fn scroll_up(&mut self) {
-        self.inner
-            .update(model_timeline::tab::Message::PreviousItemSelected);
+        self.inner.update(TabMessage::PreviousItemSelected);
     }
 
     pub fn scroll_down(&mut self, _max_index: usize) {
-        self.inner
-            .update(model_timeline::tab::Message::NextItemSelected);
+        self.inner.update(TabMessage::NextItemSelected);
     }
 
     pub fn select_first(&mut self) {
-        self.inner
-            .update(model_timeline::tab::Message::FirstItemSelected);
+        self.inner.update(TabMessage::FirstItemSelected);
     }
 
     pub fn select_last(&mut self, _max_index: usize) {
-        self.inner
-            .update(model_timeline::tab::Message::LastItemSelected);
+        self.inner.update(TabMessage::LastItemSelected);
     }
 
     pub fn deselect(&mut self) {
-        self.inner
-            .update(model_timeline::tab::Message::SelectionCleared);
+        self.inner.update(TabMessage::SelectionCleared);
     }
 
     pub fn oldest_timestamp(&self) -> Option<Timestamp> {
@@ -77,19 +71,16 @@ impl TimelineTab {
     }
 
     pub fn start_loading_more(&mut self) {
-        self.inner
-            .update(model_timeline::tab::Message::LoadingMoreStarted);
+        self.inner.update(TabMessage::LoadingMoreStarted);
     }
 
     pub fn finish_loading_more(&mut self) {
-        self.inner
-            .update(model_timeline::tab::Message::LoadingMoreFinished);
+        self.inner.update(TabMessage::LoadingMoreFinished);
     }
 
     // Note management
     pub fn add_note(&mut self, sortable_id: SortableEventId) {
-        self.inner
-            .update(model_timeline::tab::Message::NoteAdded(sortable_id));
+        self.inner.update(TabMessage::NoteAdded(sortable_id));
         // Keep the public notes field in sync
         let _ = self.notes.find_or_insert(Reverse(sortable_id));
     }
@@ -208,17 +199,14 @@ impl TimelineState {
         };
 
         // Update inner model (this will adjust selection for active tab)
-        tab.inner
-            .update(model_timeline::tab::Message::NoteAdded(sortable_id));
+        tab.inner.update(TabMessage::NoteAdded(sortable_id));
 
         // Restore original selection for inactive tabs
         if !is_active {
             if let Some(index) = original_selection {
-                tab.inner
-                    .update(model_timeline::tab::Message::ItemSelected(index));
+                tab.inner.update(TabMessage::ItemSelected(index));
             } else {
-                tab.inner
-                    .update(model_timeline::tab::Message::SelectionCleared);
+                tab.inner.update(TabMessage::SelectionCleared);
             }
         }
 
@@ -242,7 +230,7 @@ impl TimelineState {
         // This prevents the selection from shifting when new events arrive
         // NOTE: Only adjust if this tab is currently active
         // The inner model handles this automatically via NoteAdded message
-        if let sorted_vec::FindOrInsert::Inserted(_inserted_at) = insert_result {
+        if let FindOrInsert::Inserted(_inserted_at) = insert_result {
             (true, loading_completed)
         } else {
             (false, loading_completed)
@@ -322,8 +310,7 @@ impl TimelineState {
 
         if let Some(current) = tab.selected_index() {
             if current > 0 {
-                tab.inner
-                    .update(model_timeline::tab::Message::ItemSelected(current - 1));
+                tab.inner.update(TabMessage::ItemSelected(current - 1));
             }
         } else if !tab.is_empty() {
             tab.select_first();
@@ -356,8 +343,7 @@ impl TimelineState {
         let tab = self.active_tab_mut();
 
         if index < tab.len() {
-            tab.inner
-                .update(model_timeline::tab::Message::ItemSelected(index));
+            tab.inner.update(TabMessage::ItemSelected(index));
         } else {
             tab.deselect();
         }

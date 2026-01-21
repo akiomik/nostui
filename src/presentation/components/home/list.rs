@@ -83,7 +83,7 @@ impl Default for HomeListComponent {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::state::timeline::TimelineTabType;
+    use crate::model::timeline::TimelineTabType;
 
     use super::*;
     use nostr_sdk::prelude::*;
