@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    domain::{
-        nostr::{text_note::TextNote, Profile},
-        text::shorten_npub,
-    },
+    domain::{nostr::Profile, text::shorten_npub},
+    model::timeline::text_note::TextNote,
     presentation::widgets::{
         name_with_handle::NameWithHandle, shrink_text::ShrinkText, text_note_stats::TextNoteStats,
     },
