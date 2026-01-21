@@ -17,6 +17,9 @@ pub mod domain;
 // Utilities
 pub mod utils;
 
+// Models
+pub mod model;
+
 // Re-exports for convenience
 pub use color_eyre::eyre::Result;
 pub use core::state::AppState;

@@ -6,41 +6,32 @@ use crate::domain::nostr::{
     text_note::{Message, TextNote},
     SortableEventId,
 };
+use crate::model::timeline as model_timeline;
 
-mod pagination;
-mod selection;
-
-pub use pagination::PaginationState;
-pub use selection::SelectionState;
-
-/// Represents the type of timeline tab
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TimelineTabType {
-    /// Home timeline (global feed)
-    Home,
-    /// User timeline (specific author's posts)
-    UserTimeline { pubkey: PublicKey },
-}
+// Re-export for backward compatibility
+pub use crate::model::timeline::TimelineTabType;
 
 /// Represents a single timeline tab with its own state
+///
+/// This is a wrapper around the new Elm-style model to maintain backward compatibility
+/// with the existing TimelineState API. Internally delegates to src/model/timeline.
 #[derive(Debug, Clone)]
 pub struct TimelineTab {
-    pub tab_type: TimelineTabType,
-    /// Sorted list of event IDs (newest first)
+    pub tab_type: model_timeline::TimelineTabType,
+    /// The new Elm-style model
+    inner: model_timeline::TimelineTab,
+    /// Sorted list of event IDs (newest first) - kept for public access
     /// The actual event data is stored in TimelineState::events
     pub notes: ReverseSortedSet<SortableEventId>,
-    pub selection: SelectionState,
-    pub pagination: PaginationState,
 }
 
 impl TimelineTab {
     /// Create a new timeline tab with the specified type
     pub fn new(tab_type: TimelineTabType) -> Self {
         Self {
-            tab_type,
+            tab_type: tab_type.clone(),
+            inner: model_timeline::TimelineTab::new(tab_type),
             notes: ReverseSortedSet::new(),
-            selection: SelectionState::new(),
-            pagination: PaginationState::new(),
         }
     }
 
@@ -49,62 +40,68 @@ impl TimelineTab {
         Self::new(TimelineTabType::Home)
     }
 
-    // Delegate to SelectionState
+    // Delegate to inner model
     pub fn selected_index(&self) -> Option<usize> {
-        self.selection.selected_index()
+        self.inner.selected_index()
     }
 
     pub fn scroll_up(&mut self) {
-        self.selection.scroll_up();
+        self.inner
+            .update(model_timeline::tab::Message::PreviousItemSelected);
     }
 
-    pub fn scroll_down(&mut self, max_index: usize) {
-        self.selection.scroll_down(max_index);
+    pub fn scroll_down(&mut self, _max_index: usize) {
+        self.inner
+            .update(model_timeline::tab::Message::NextItemSelected);
     }
 
     pub fn select_first(&mut self) {
-        self.selection.select_first();
+        self.inner
+            .update(model_timeline::tab::Message::FirstItemSelected);
     }
 
-    pub fn select_last(&mut self, max_index: usize) {
-        self.selection.select_last(max_index);
+    pub fn select_last(&mut self, _max_index: usize) {
+        self.inner
+            .update(model_timeline::tab::Message::LastItemSelected);
     }
 
     pub fn deselect(&mut self) {
-        self.selection.deselect();
+        self.inner
+            .update(model_timeline::tab::Message::SelectionCleared);
     }
 
-    // Delegate to PaginationState
     pub fn oldest_timestamp(&self) -> Option<Timestamp> {
-        self.pagination.oldest_timestamp()
+        self.inner.oldest_timestamp()
     }
 
     pub fn is_loading_more(&self) -> bool {
-        self.pagination.is_loading_more()
+        self.inner.is_loading_more()
     }
 
     pub fn start_loading_more(&mut self) {
-        if let Some(ts) = self.oldest_timestamp() {
-            self.pagination.start_loading_more(ts);
-        }
+        self.inner
+            .update(model_timeline::tab::Message::LoadingMoreStarted);
     }
 
     pub fn finish_loading_more(&mut self) {
-        self.pagination.finish_loading_more();
+        self.inner
+            .update(model_timeline::tab::Message::LoadingMoreFinished);
     }
 
     // Note management
     pub fn add_note(&mut self, sortable_id: SortableEventId) {
-        self.pagination.update_oldest(sortable_id.created_at);
+        self.inner
+            .update(model_timeline::tab::Message::NoteAdded(sortable_id));
+        // Keep the public notes field in sync
         let _ = self.notes.find_or_insert(Reverse(sortable_id));
     }
 
     pub fn len(&self) -> usize {
-        self.notes.len()
+        self.inner.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.notes.is_empty()
+        self.inner.is_empty()
     }
 }
 
@@ -199,13 +196,39 @@ impl TimelineState {
         // Create SortableEventId and insert into tab
         let sortable_id = SortableEventId::new(event_id, created_at);
         let tab = &mut self.tabs[tab_index];
+
+        // Store the insert result
         let insert_result = tab.notes.find_or_insert(Reverse(sortable_id));
 
+        // For inactive tabs, we need to preserve the selection state
+        // because NoteAdded will adjust it, but we only want adjustment for active tabs
+        let is_active = self.active_tab_index == tab_index;
+        let original_selection = if !is_active {
+            tab.selected_index()
+        } else {
+            None
+        };
+
+        // Update inner model (this will adjust selection for active tab)
+        tab.inner
+            .update(model_timeline::tab::Message::NoteAdded(sortable_id));
+
+        // Restore original selection for inactive tabs
+        if !is_active {
+            if let Some(index) = original_selection {
+                tab.inner
+                    .update(model_timeline::tab::Message::ItemSelected(index));
+            } else {
+                tab.inner
+                    .update(model_timeline::tab::Message::SelectionCleared);
+            }
+        }
+
         // Check if this event completes a LoadMore operation
-        let loading_completed = if let Some(loading_since) = tab.pagination.loading_more_since() {
+        let loading_completed = if let Some(loading_since) = tab.inner.loading_more_since() {
             if created_at < loading_since {
                 // An older event arrived - loading completed
-                tab.pagination.finish_loading_more();
+                tab.finish_loading_more();
                 true
             } else {
                 false
@@ -214,22 +237,14 @@ impl TimelineState {
             false
         };
 
-        // Update oldest timestamp if this event is older
-        tab.pagination.update_oldest(created_at);
+        // Update oldest timestamp - handled by add_note which calls inner.update(NoteAdded)
+        // (no need to call separately as add_note already updates pagination)
 
         // Adjust selected index if a new item was inserted before it
         // This prevents the selection from shifting when new events arrive
         // NOTE: Only adjust if this tab is currently active
-        if let sorted_vec::FindOrInsert::Inserted(inserted_at) = insert_result {
-            if self.active_tab_index == tab_index {
-                // Re-borrow tab mutably for selection adjustment
-                let tab = &mut self.tabs[tab_index];
-                if let Some(selected) = tab.selection.selected_index() {
-                    if inserted_at <= selected {
-                        tab.selection.select(selected + 1);
-                    }
-                }
-            }
+        // The inner model handles this automatically via NoteAdded message
+        if let sorted_vec::FindOrInsert::Inserted(_inserted_at) = insert_result {
             (true, loading_completed)
         } else {
             (false, loading_completed)
@@ -307,9 +322,10 @@ impl TimelineState {
     pub fn scroll_up(&mut self) {
         let tab = self.active_tab_mut();
 
-        if let Some(current) = tab.selection.selected_index() {
+        if let Some(current) = tab.selected_index() {
             if current > 0 {
-                tab.selection.select(current - 1);
+                tab.inner
+                    .update(model_timeline::tab::Message::ItemSelected(current - 1));
             }
         } else if !tab.is_empty() {
             tab.select_first();
@@ -321,9 +337,8 @@ impl TimelineState {
     pub fn scroll_down(&mut self) {
         let tab = self.active_tab_mut();
 
-        let max_index = tab.len().saturating_sub(1);
-        tab.selection.scroll_down(max_index);
-        if tab.selection.selected_index().is_none() && !tab.is_empty() {
+        tab.scroll_down(0); // max_index is now calculated internally
+        if tab.selected_index().is_none() && !tab.is_empty() {
             tab.select_first();
         }
     }
@@ -343,7 +358,8 @@ impl TimelineState {
         let tab = self.active_tab_mut();
 
         if index < tab.len() {
-            tab.selection.select(index);
+            tab.inner
+                .update(model_timeline::tab::Message::ItemSelected(index));
         } else {
             tab.deselect();
         }
@@ -386,7 +402,7 @@ impl TimelineState {
             return false;
         }
         let max_index = tab.len().saturating_sub(1);
-        tab.selection.selected_index() == Some(max_index)
+        tab.selected_index() == Some(max_index)
     }
 
     /// Mark that a LoadMore operation has started in the active tab
@@ -520,10 +536,10 @@ mod tests {
             .entry(event_id)
             .or_insert_with(|| TextNote::new(event.clone()));
 
-        // Create SortableEventId and insert into tab
+        // Create SortableEventId and insert into tab using add_note which updates inner
         let sortable_id = SortableEventId::new(event_id, created_at);
         let tab = state.active_tab_mut();
-        let _ = tab.notes.find_or_insert(Reverse(sortable_id));
+        tab.add_note(sortable_id);
     }
 
     #[test]
@@ -709,13 +725,13 @@ mod tests {
         state.notes.insert(event1_id, TextNote::new(event1.clone()));
         state.notes.insert(event2_id, TextNote::new(event2.clone()));
 
-        // Create SortableEventIds and insert into tab
+        // Create SortableEventIds and insert into tab using add_note
         let sortable1 = SortableEventId::new(event1_id, event1.created_at);
         let sortable2 = SortableEventId::new(event2_id, event2.created_at);
 
         let tab = state.active_tab_mut();
-        let _ = tab.notes.find_or_insert(Reverse(sortable1));
-        let _ = tab.notes.find_or_insert(Reverse(sortable2));
+        tab.add_note(sortable1);
+        tab.add_note(sortable2);
 
         // Select first note
         state.select(0);
