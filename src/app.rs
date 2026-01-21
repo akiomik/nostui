@@ -485,7 +485,7 @@ impl<'a> TearsApp<'a> {
                 let current_index = self.state.timeline.active_tab_index();
 
                 // Get the tab type before closing
-                let tab_type = self.state.timeline.tabs()[current_index].tab_type.clone();
+                let tab_type = self.state.timeline.active_tab().tab_type().clone();
 
                 // Try to close the tab
                 match self.state.timeline.remove_tab(current_index) {
@@ -730,10 +730,7 @@ impl<'a> TearsApp<'a> {
         };
 
         // Get the active tab type
-        let active_tab_index = self.state.timeline.active_tab_index();
-        let tab_type = self.state.timeline.tabs()[active_tab_index]
-            .tab_type
-            .clone();
+        let tab_type = self.state.timeline.active_tab().tab_type().clone();
 
         // Mark loading started
         match self

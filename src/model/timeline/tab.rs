@@ -97,6 +97,10 @@ impl TimelineTab {
         &self.tab_type
     }
 
+    pub fn event_id_by_index(&self, index: usize) -> Option<SortableEventId> {
+        self.notes.get(index).map(|id| id.0)
+    }
+
     // Delegate to Selection
     pub fn selected_index(&self) -> Option<usize> {
         self.selection.selected_index()
@@ -139,26 +143,36 @@ impl TimelineTab {
         match message {
             // Selection-related messages - simple delegation
             Message::ItemSelected(index) => {
-                self.selection.update(SelectionMessage::ItemSelected(index))
+                if !self.is_empty() && index < self.len() {
+                    self.selection.update(SelectionMessage::ItemSelected(index))
+                }
             }
             Message::SelectionCleared => self.selection.update(SelectionMessage::SelectionCleared),
-            Message::PreviousItemSelected => self
-                .selection
-                .update(SelectionMessage::PreviousItemSelected),
+            Message::PreviousItemSelected => {
+                if !self.is_empty() {
+                    self.selection
+                        .update(SelectionMessage::PreviousItemSelected)
+                }
+            }
             Message::NextItemSelected => {
-                let max_index = self.notes.len().saturating_sub(1);
-                self.selection
-                    .update(SelectionMessage::NextItemSelected { max_index })
+                if !self.is_empty() {
+                    let max_index = self.notes.len().saturating_sub(1);
+                    self.selection
+                        .update(SelectionMessage::NextItemSelected { max_index })
+                }
             }
             Message::FirstItemSelected => {
-                self.selection.update(SelectionMessage::FirstItemSelected)
+                if !self.is_empty() {
+                    self.selection.update(SelectionMessage::FirstItemSelected)
+                }
             }
             Message::LastItemSelected => {
-                let max_index = self.notes.len().saturating_sub(1);
-                self.selection
-                    .update(SelectionMessage::LastItemSelected { max_index })
+                if !self.is_empty() {
+                    let max_index = self.notes.len().saturating_sub(1);
+                    self.selection
+                        .update(SelectionMessage::LastItemSelected { max_index })
+                }
             }
-
             // Pagination-related messages - simple delegation
             Message::LoadingMoreStarted => {
                 if let Some(since) = self.oldest_timestamp() {
@@ -237,7 +251,7 @@ mod tests {
 
         // Test ItemSelected
         tab.update(Message::ItemSelected(5));
-        assert_eq!(tab.selected_index(), Some(5));
+        assert_eq!(tab.selected_index(), None);
 
         // Test SelectionCleared
         tab.update(Message::SelectionCleared);
@@ -245,7 +259,7 @@ mod tests {
 
         // Test FirstItemSelected
         tab.update(Message::FirstItemSelected);
-        assert_eq!(tab.selected_index(), Some(0));
+        assert_eq!(tab.selected_index(), None);
 
         // Add some notes first so LastItemSelected and NextItemSelected work properly
         for i in 0..11 {
@@ -489,10 +503,9 @@ mod tests {
         tab.update(Message::NextItemSelected);
         assert_eq!(tab.selected_index(), None);
 
-        // LastItemSelected on empty timeline should select index 0 (which doesn't exist)
-        // This is handled by Selection's logic
+        // LastItemSelected on empty timeline should do nothing
         tab.update(Message::LastItemSelected);
-        assert_eq!(tab.selected_index(), Some(0));
+        assert_eq!(tab.selected_index(), None);
     }
 
     #[test]

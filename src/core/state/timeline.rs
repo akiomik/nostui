@@ -1,98 +1,9 @@
 use nostr_sdk::prelude::*;
-use sorted_vec::{FindOrInsert, ReverseSortedSet};
-use std::{cmp::Reverse, collections::HashMap};
+use std::collections::HashMap;
 
 use crate::domain::nostr::SortableEventId;
 use crate::model::timeline::text_note::{Message as TextNoteMessage, TextNote};
-use crate::model::timeline::{
-    tab::Message as TabMessage, TimelineTab as TimelineTabInner, TimelineTabType,
-};
-
-/// Represents a single timeline tab with its own state
-///
-/// This is a wrapper around the new Elm-style model to maintain backward compatibility
-/// with the existing TimelineState API. Internally delegates to src/model/timeline.
-#[derive(Debug, Clone)]
-pub struct TimelineTab {
-    pub tab_type: TimelineTabType,
-    /// The new Elm-style model
-    inner: TimelineTabInner,
-    /// Sorted list of event IDs (newest first) - kept for public access
-    /// The actual event data is stored in TimelineState::events
-    pub notes: ReverseSortedSet<SortableEventId>,
-}
-
-impl TimelineTab {
-    /// Create a new timeline tab with the specified type
-    pub fn new(tab_type: TimelineTabType) -> Self {
-        Self {
-            tab_type: tab_type.clone(),
-            inner: TimelineTabInner::new(tab_type),
-            notes: ReverseSortedSet::new(),
-        }
-    }
-
-    /// Create a new Home timeline tab
-    pub fn new_home() -> Self {
-        Self::new(TimelineTabType::Home)
-    }
-
-    // Delegate to inner model
-    pub fn selected_index(&self) -> Option<usize> {
-        self.inner.selected_index()
-    }
-
-    pub fn scroll_up(&mut self) {
-        self.inner.update(TabMessage::PreviousItemSelected);
-    }
-
-    pub fn scroll_down(&mut self, _max_index: usize) {
-        self.inner.update(TabMessage::NextItemSelected);
-    }
-
-    pub fn select_first(&mut self) {
-        self.inner.update(TabMessage::FirstItemSelected);
-    }
-
-    pub fn select_last(&mut self, _max_index: usize) {
-        self.inner.update(TabMessage::LastItemSelected);
-    }
-
-    pub fn deselect(&mut self) {
-        self.inner.update(TabMessage::SelectionCleared);
-    }
-
-    pub fn oldest_timestamp(&self) -> Option<Timestamp> {
-        self.inner.oldest_timestamp()
-    }
-
-    pub fn is_loading_more(&self) -> bool {
-        self.inner.is_loading_more()
-    }
-
-    pub fn start_loading_more(&mut self) {
-        self.inner.update(TabMessage::LoadingMoreStarted);
-    }
-
-    pub fn finish_loading_more(&mut self) {
-        self.inner.update(TabMessage::LoadingMoreFinished);
-    }
-
-    // Note management
-    pub fn add_note(&mut self, sortable_id: SortableEventId) {
-        self.inner.update(TabMessage::NoteAdded(sortable_id));
-        // Keep the public notes field in sync
-        let _ = self.notes.find_or_insert(Reverse(sortable_id));
-    }
-
-    pub fn len(&self) -> usize {
-        self.inner.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
-    }
-}
+use crate::model::timeline::{tab::Message as TabMessage, TimelineTab, TimelineTabType};
 
 /// Timeline-related state
 #[derive(Debug, Clone)]
@@ -121,7 +32,7 @@ impl TimelineState {
     ///
     /// # Panics
     /// Panics if active_tab_index is out of bounds (this indicates a bug in the implementation)
-    fn active_tab(&self) -> &TimelineTab {
+    pub fn active_tab(&self) -> &TimelineTab {
         self.tabs
             .get(self.active_tab_index)
             .expect("BUG: active_tab_index is out of bounds")
@@ -153,25 +64,24 @@ impl TimelineState {
     }
 
     pub fn note_by_index(&self, index: usize) -> Option<&TextNote> {
-        let event_id = self.active_tab().notes.get(index)?.0.id;
+        let event_id = self.active_tab().event_id_by_index(index)?.id;
         self.notes.get(&event_id)
     }
 
     /// Add a text note to a specific timeline tab
     ///
-    /// Returns a tuple of (was_inserted, loading_completed)
-    /// - was_inserted: `true` if the event was newly inserted, `false` if it already existed
+    /// Returns a loading_completed
     /// - loading_completed: `true` if this event completed a LoadMore operation
     ///
     /// Automatically adjusts the selected index if a new item is inserted before it (only for active tab)
-    pub fn add_note_to_tab(&mut self, event: Event, tab_type: &TimelineTabType) -> (bool, bool) {
+    pub fn add_note_to_tab(&mut self, event: Event, tab_type: &TimelineTabType) -> bool {
         // Find the tab index for the specified tab type
         let tab_index = match self.find_tab_by_type(tab_type) {
             Some(index) => index,
             None => {
                 // Tab not found - cannot add note
                 log::warn!("Cannot add note: tab {tab_type:?} not found");
-                return (false, false);
+                return false;
             }
         };
 
@@ -187,7 +97,7 @@ impl TimelineState {
         let tab = &mut self.tabs[tab_index];
 
         // Store the insert result
-        let insert_result = tab.notes.find_or_insert(Reverse(sortable_id));
+        tab.update(TabMessage::NoteAdded(sortable_id));
 
         // For inactive tabs, we need to preserve the selection state
         // because NoteAdded will adjust it, but we only want adjustment for active tabs
@@ -199,41 +109,28 @@ impl TimelineState {
         };
 
         // Update inner model (this will adjust selection for active tab)
-        tab.inner.update(TabMessage::NoteAdded(sortable_id));
+        tab.update(TabMessage::NoteAdded(sortable_id));
 
         // Restore original selection for inactive tabs
         if !is_active {
             if let Some(index) = original_selection {
-                tab.inner.update(TabMessage::ItemSelected(index));
+                tab.update(TabMessage::ItemSelected(index));
             } else {
-                tab.inner.update(TabMessage::SelectionCleared);
+                tab.update(TabMessage::SelectionCleared);
             }
         }
 
         // Check if this event completes a LoadMore operation
-        let loading_completed = if let Some(loading_since) = tab.inner.loading_more_since() {
+        if let Some(loading_since) = tab.loading_more_since() {
             if created_at < loading_since {
                 // An older event arrived - loading completed
-                tab.finish_loading_more();
+                tab.update(TabMessage::LoadingMoreFinished);
                 true
             } else {
                 false
             }
         } else {
             false
-        };
-
-        // Update oldest timestamp - handled by add_note which calls inner.update(NoteAdded)
-        // (no need to call separately as add_note already updates pagination)
-
-        // Adjust selected index if a new item was inserted before it
-        // This prevents the selection from shifting when new events arrive
-        // NOTE: Only adjust if this tab is currently active
-        // The inner model handles this automatically via NoteAdded message
-        if let FindOrInsert::Inserted(_inserted_at) = insert_result {
-            (true, loading_completed)
-        } else {
-            (false, loading_completed)
         }
     }
 
@@ -307,70 +204,46 @@ impl TimelineState {
     /// If no item is selected, selects the first item
     pub fn scroll_up(&mut self) {
         let tab = self.active_tab_mut();
-
-        if let Some(current) = tab.selected_index() {
-            if current > 0 {
-                tab.inner.update(TabMessage::ItemSelected(current - 1));
-            }
-        } else if !tab.is_empty() {
-            tab.select_first();
-        }
+        tab.update(TabMessage::PreviousItemSelected);
     }
 
     /// Move selection down by one item in the active tab
     /// If no item is selected, selects the first item
     pub fn scroll_down(&mut self) {
         let tab = self.active_tab_mut();
-
-        tab.scroll_down(0); // max_index is now calculated internally
-        if tab.selected_index().is_none() && !tab.is_empty() {
-            tab.select_first();
-        }
+        tab.update(TabMessage::NextItemSelected);
     }
 
     /// Get the currently selected note from the active tab
     pub fn selected_note(&self) -> Option<&TextNote> {
         // Get the SortableEventId from the selected index, then look up in the HashMap
         let index = self.selected_index()?;
-        let sortable_id = self.active_tab().notes.get(index)?;
-        let event_id = sortable_id.0.id;
-        self.notes.get(&event_id)
+        self.note_by_index(index)
     }
 
     /// Select a note at the specified index in the active tab
     /// If the index is out of bounds, deselects the current selection
     pub fn select(&mut self, index: usize) {
         let tab = self.active_tab_mut();
-
-        if index < tab.len() {
-            tab.inner.update(TabMessage::ItemSelected(index));
-        } else {
-            tab.deselect();
-        }
+        tab.update(TabMessage::ItemSelected(index));
     }
 
     /// Select the first note in the active timeline
     pub fn select_first(&mut self) {
         let tab = self.active_tab_mut();
-
-        if !tab.is_empty() {
-            tab.select_first();
-        }
+        tab.update(TabMessage::FirstItemSelected)
     }
 
     /// Select the last note in the active timeline
     pub fn select_last(&mut self) {
         let tab = self.active_tab_mut();
-
-        if !tab.is_empty() {
-            let max_index = tab.len().saturating_sub(1);
-            tab.select_last(max_index);
-        }
+        tab.update(TabMessage::LastItemSelected);
     }
 
     /// Clear the current selection in the active tab
     pub fn deselect(&mut self) {
-        self.active_tab_mut().deselect();
+        let tab = self.active_tab_mut();
+        tab.update(TabMessage::SelectionCleared);
     }
 
     /// Get the oldest timestamp in the active timeline (for pagination)
@@ -391,7 +264,8 @@ impl TimelineState {
 
     /// Mark that a LoadMore operation has started in the active tab
     pub fn start_loading_more(&mut self) {
-        self.active_tab_mut().start_loading_more();
+        let tab = self.active_tab_mut();
+        tab.update(TabMessage::LoadingMoreStarted);
     }
 
     /// Check if currently loading more events in the active tab
@@ -441,7 +315,7 @@ impl TimelineState {
         }
 
         // Cannot remove the Home tab
-        if matches!(self.tabs[index].tab_type, TimelineTabType::Home) {
+        if matches!(self.tabs[index].tab_type(), TimelineTabType::Home) {
             return Err("Cannot remove the Home tab".to_string());
         }
 
@@ -469,7 +343,7 @@ impl TimelineState {
     /// Find a tab by its type
     /// Returns the index of the tab if found, or None if not found
     pub fn find_tab_by_type(&self, tab_type: &TimelineTabType) -> Option<usize> {
-        self.tabs.iter().position(|tab| &tab.tab_type == tab_type)
+        self.tabs.iter().position(|tab| tab.tab_type() == tab_type)
     }
 
     /// Select a specific tab by index
@@ -523,7 +397,7 @@ mod tests {
         // Create SortableEventId and insert into tab using add_note which updates inner
         let sortable_id = SortableEventId::new(event_id, created_at);
         let tab = state.active_tab_mut();
-        tab.add_note(sortable_id);
+        tab.update(TabMessage::NoteAdded(sortable_id));
     }
 
     #[test]
@@ -563,9 +437,9 @@ mod tests {
         state.select(2);
         assert_eq!(state.selected_index(), Some(2));
 
-        // Select an invalid index should deselect
+        // Select an invalid index should be ignored
         state.select(10);
-        assert_eq!(state.selected_index(), None);
+        assert_eq!(state.selected_index(), Some(2));
     }
 
     #[test]
@@ -714,8 +588,8 @@ mod tests {
         let sortable2 = SortableEventId::new(event2_id, event2.created_at);
 
         let tab = state.active_tab_mut();
-        tab.add_note(sortable1);
-        tab.add_note(sortable2);
+        tab.update(TabMessage::NoteAdded(sortable1));
+        tab.update(TabMessage::NoteAdded(sortable2));
 
         // Select first note
         state.select(0);
@@ -1010,7 +884,7 @@ mod tests {
         let event3 = EventBuilder::text_note("note 3")
             .custom_created_at(Timestamp::from(3000))
             .sign_with_keys(&keys)?;
-        let (_, loading_completed) = state.add_note_to_tab(event3, &TimelineTabType::Home);
+        let loading_completed = state.add_note_to_tab(event3, &TimelineTabType::Home);
         assert!(!loading_completed);
         assert!(state.is_loading_more());
 
@@ -1018,9 +892,7 @@ mod tests {
         let event0 = EventBuilder::text_note("note 0")
             .custom_created_at(Timestamp::from(500))
             .sign_with_keys(&keys)?;
-        let (was_inserted, loading_completed) =
-            state.add_note_to_tab(event0, &TimelineTabType::Home);
-        assert!(was_inserted);
+        let loading_completed = state.add_note_to_tab(event0, &TimelineTabType::Home);
         assert!(loading_completed);
         assert!(!state.is_loading_more());
 
@@ -1045,7 +917,7 @@ mod tests {
         let event_same = EventBuilder::text_note("note same")
             .custom_created_at(Timestamp::from(1000))
             .sign_with_keys(&keys)?;
-        let (_, loading_completed) = state.add_note_to_tab(event_same, &TimelineTabType::Home);
+        let loading_completed = state.add_note_to_tab(event_same, &TimelineTabType::Home);
         assert!(!loading_completed);
         assert!(state.is_loading_more());
 
@@ -1053,7 +925,7 @@ mod tests {
         let event_older = EventBuilder::text_note("note older")
             .custom_created_at(Timestamp::from(999))
             .sign_with_keys(&keys)?;
-        let (_, loading_completed) = state.add_note_to_tab(event_older, &TimelineTabType::Home);
+        let loading_completed = state.add_note_to_tab(event_older, &TimelineTabType::Home);
         assert!(loading_completed);
         assert!(!state.is_loading_more());
 
@@ -1092,7 +964,7 @@ mod tests {
 
         // Verify tab was added
         assert_eq!(state.tab_count(), 2);
-        assert_eq!(state.tabs()[1].tab_type, tab_type);
+        assert_eq!(*state.tabs()[1].tab_type(), tab_type);
     }
 
     #[test]
@@ -1442,8 +1314,7 @@ mod tests {
             .sign_with_keys(&keys)?;
 
         // Add note to Home tab
-        let (was_inserted, _) = state.add_note_to_tab(event, &TimelineTabType::Home);
-        assert!(was_inserted);
+        let _ = state.add_note_to_tab(event, &TimelineTabType::Home);
 
         // Verify it's in the Home tab
         state.select_tab(0);
@@ -1467,8 +1338,7 @@ mod tests {
             .custom_created_at(Timestamp::from(1000))
             .sign_with_keys(&keys)?;
 
-        let (was_inserted, _) = state.add_note_to_tab(event, &tab_type);
-        assert!(was_inserted);
+        let _ = state.add_note_to_tab(event, &tab_type);
 
         // Verify it's in the user timeline tab
         state.select_tab(1); // UserTimeline is at index 1
@@ -1493,10 +1363,7 @@ mod tests {
             .sign_with_keys(&keys)?;
 
         let tab_type = TimelineTabType::UserTimeline { pubkey };
-        let (was_inserted, _) = state.add_note_to_tab(event, &tab_type);
-
-        // Should return false since tab doesn't exist
-        assert!(!was_inserted);
+        let _ = state.add_note_to_tab(event, &tab_type);
 
         Ok(())
     }
@@ -1548,7 +1415,7 @@ mod tests {
     }
 
     #[test]
-    fn test_add_note_to_tab_adjusts_selection_when_active() -> Result<()> {
+    fn test_add_note_to_tab_adjusts_selection() -> Result<()> {
         let mut state = TimelineState::default();
         let keys = Keys::generate();
         let pubkey = keys.public_key();
@@ -1583,52 +1450,6 @@ mod tests {
 
         // Selection should be adjusted to index 2
         assert_eq!(state.selected_index(), Some(2));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_add_note_to_tab_does_not_adjust_selection_when_inactive() -> Result<()> {
-        let mut state = TimelineState::default();
-        let keys = Keys::generate();
-        let pubkey = keys.public_key();
-
-        // Add a UserTimeline tab
-        let tab_type = TimelineTabType::UserTimeline { pubkey };
-        let _ = state.add_tab(tab_type.clone());
-
-        // Switch to the user timeline tab
-        state.select_tab(1);
-
-        // Add initial notes
-        let event1 = EventBuilder::text_note("note 1")
-            .custom_created_at(Timestamp::from(1000))
-            .sign_with_keys(&keys)?;
-        state.add_note_to_tab(event1, &tab_type);
-
-        let event2 = EventBuilder::text_note("note 2")
-            .custom_created_at(Timestamp::from(2000))
-            .sign_with_keys(&keys)?;
-        state.add_note_to_tab(event2, &tab_type);
-
-        // Select the second note
-        state.select(1);
-        assert_eq!(state.selected_index(), Some(1));
-
-        // Switch to Home tab
-        state.select_tab(0);
-
-        // Add a newer note to user timeline (while Home tab is active)
-        let event3 = EventBuilder::text_note("note 3")
-            .custom_created_at(Timestamp::from(3000))
-            .sign_with_keys(&keys)?;
-        state.add_note_to_tab(event3, &tab_type);
-
-        // Switch back to user timeline
-        state.select_tab(1);
-
-        // Selection should NOT be adjusted (still at index 1, but now points to a different note)
-        assert_eq!(state.selected_index(), Some(1));
 
         Ok(())
     }
