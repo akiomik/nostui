@@ -59,8 +59,7 @@ impl AppState {
     pub fn process_nostr_event_for_tab(&mut self, event: Event, tab_type: &TimelineTabType) {
         match event.kind {
             Kind::TextNote => {
-                let (_was_inserted, loading_completed) =
-                    self.timeline.add_note_to_tab(event, tab_type);
+                let loading_completed = self.timeline.add_note_to_tab(event, tab_type);
 
                 if loading_completed {
                     match tab_type {

@@ -25,7 +25,7 @@ impl TabBarComponent {
             .timeline
             .tabs()
             .iter()
-            .map(|tab| match &tab.tab_type {
+            .map(|tab| match tab.tab_type() {
                 TimelineTabType::Home => "Home".to_string(),
                 TimelineTabType::UserTimeline { pubkey } => {
                     // Try to get the handle from profile, fallback to shortened npub

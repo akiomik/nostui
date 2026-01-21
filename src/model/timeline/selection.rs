@@ -61,13 +61,14 @@ impl Selection {
             Message::SelectionCleared => {
                 self.selected_index = None;
             }
-            Message::PreviousItemSelected => {
-                if let Some(index) = self.selected_index {
-                    if index > 0 {
-                        self.selected_index = Some(index - 1);
-                    }
+            Message::PreviousItemSelected => match self.selected_index {
+                Some(index) => {
+                    self.selected_index = Some(index.saturating_sub(1));
                 }
-            }
+                None => {
+                    self.selected_index = Some(0);
+                }
+            },
             Message::NextItemSelected { max_index } => match self.selected_index {
                 Some(index) if index < max_index => {
                     self.selected_index = Some(index + 1);
@@ -157,9 +158,8 @@ mod tests {
         let mut state = Selection::new();
         assert_eq!(state.selected_index(), None);
 
-        // Should do nothing when nothing is selected
         state.update(Message::PreviousItemSelected);
-        assert_eq!(state.selected_index(), None);
+        assert_eq!(state.selected_index(), Some(0));
     }
 
     #[test]
