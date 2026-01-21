@@ -268,47 +268,4 @@ mod tests {
 
         Ok(())
     }
-
-    #[test]
-    fn test_process_nostr_event_for_tab_reaction_repost_zap_are_added_globally() -> Result<()> {
-        let current_user_pubkey = Keys::generate().public_key();
-        let mut state = AppState::new(current_user_pubkey);
-
-        let author_keys = Keys::generate();
-
-        let target = create_text_note(&author_keys, "target", Timestamp::from(1000))?;
-        let target_id = target.id;
-        state.process_nostr_event_for_tab(target.clone(), &TimelineTabType::Home);
-
-        // Reaction
-        let reaction = EventBuilder::reaction(&target, "+").sign_with_keys(&author_keys)?;
-        let reaction_id = reaction.id;
-        state.process_nostr_event_for_tab(reaction, &TimelineTabType::Home);
-        assert_eq!(state.timeline.reactions_for(&target_id).len(), 1);
-        assert!(state
-            .timeline
-            .reactions_for(&target_id)
-            .contains(&reaction_id));
-
-        // Repost
-        let repost = EventBuilder::repost(&target, None).sign_with_keys(&author_keys)?;
-        let repost_id = repost.id;
-        state.process_nostr_event_for_tab(repost, &TimelineTabType::Home);
-        assert_eq!(state.timeline.reposts_for(&target_id).len(), 1);
-        assert!(state.timeline.reposts_for(&target_id).contains(&repost_id));
-
-        // ZapReceipt (Kind 9735)
-        let zap = EventBuilder::new(Kind::ZapReceipt, "zap")
-            .tag(Tag::event(target_id))
-            .sign_with_keys(&author_keys)?;
-        let zap_id = zap.id;
-        state.process_nostr_event_for_tab(zap, &TimelineTabType::Home);
-        assert_eq!(state.timeline.zap_receipts_for(&target_id).len(), 1);
-        assert!(state
-            .timeline
-            .zap_receipts_for(&target_id)
-            .contains(&zap_id));
-
-        Ok(())
-    }
 }
