@@ -2,11 +2,9 @@ use nostr_sdk::prelude::*;
 use sorted_vec::ReverseSortedSet;
 use std::{cmp::Reverse, collections::HashMap};
 
-use crate::domain::nostr::{
-    text_note::{Message, TextNote},
-    SortableEventId,
-};
+use crate::domain::nostr::SortableEventId;
 use crate::model::timeline as model_timeline;
+use crate::model::timeline::text_note::{Message as TextNoteMessage, TextNote};
 
 // Re-export for backward compatibility
 pub use crate::model::timeline::TimelineTabType;
@@ -267,7 +265,7 @@ impl TimelineState {
             })?;
 
         self.notes.entry(target_event_id).and_modify(|note| {
-            note.update(Message::ReactionReceived(event));
+            note.update(TextNoteMessage::ReactionReceived(event));
         });
 
         Some(target_event_id)
@@ -289,7 +287,7 @@ impl TimelineState {
             })?;
 
         self.notes.entry(target_event_id).and_modify(|note| {
-            note.update(Message::RepostReceived(event));
+            note.update(TextNoteMessage::RepostReceived(event));
         });
 
         Some(target_event_id)
@@ -311,7 +309,7 @@ impl TimelineState {
             })?;
 
         self.notes.entry(target_event_id).and_modify(|note| {
-            note.update(Message::ZapReceiptReceived(event));
+            note.update(TextNoteMessage::ZapReceiptReceived(event));
         });
 
         Some(target_event_id)
