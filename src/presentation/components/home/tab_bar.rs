@@ -3,9 +3,9 @@
 use nostr_sdk::ToBech32;
 use ratatui::prelude::*;
 
-use crate::core::state::timeline::TimelineTabType;
 use crate::core::state::AppState;
 use crate::domain::text::shorten_npub;
+use crate::model::timeline::TimelineTabType;
 
 /// Tab bar component
 ///

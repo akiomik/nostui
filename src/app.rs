@@ -12,13 +12,13 @@ use tears::subscription::terminal::TerminalEvents;
 use tears::subscription::time::{Message as TimerMessage, Timer};
 
 use crate::core::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
-use crate::core::state::timeline::TimelineTabType;
 use crate::core::state::{AppState, NostrState};
 use crate::infrastructure::config::Config;
 use crate::infrastructure::subscription::media::MediaEvents;
 use crate::infrastructure::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrEvents,
 };
+use crate::model::timeline::TimelineTabType;
 use crate::presentation::components::Components;
 use crate::presentation::config::keybindings::Action as KeyAction;
 

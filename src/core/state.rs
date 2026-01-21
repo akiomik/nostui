@@ -1,7 +1,8 @@
 use nostr_sdk::prelude::*;
-use timeline::TimelineTabType;
 
-use crate::{domain::nostr::Profile, infrastructure::config::Config};
+use crate::{
+    domain::nostr::Profile, infrastructure::config::Config, model::timeline::TimelineTabType,
+};
 
 pub mod editor;
 pub mod fps;
