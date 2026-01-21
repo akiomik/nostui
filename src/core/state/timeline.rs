@@ -2,7 +2,7 @@ use nostr_sdk::prelude::*;
 use sorted_vec::ReverseSortedSet;
 use std::{cmp::Reverse, collections::HashMap};
 
-use crate::domain::{collections::EventSet, nostr::EventWrapper};
+use crate::domain::{collections::EventSet, nostr::SortableEventId};
 
 mod pagination;
 mod selection;
@@ -23,7 +23,9 @@ pub enum TimelineTabType {
 #[derive(Debug, Clone)]
 pub struct TimelineTab {
     pub tab_type: TimelineTabType,
-    pub notes: ReverseSortedSet<EventWrapper>,
+    /// Sorted list of event IDs (newest first)
+    /// The actual event data is stored in TimelineState::events
+    pub notes: ReverseSortedSet<SortableEventId>,
     pub selection: SelectionState,
     pub pagination: PaginationState,
 }
@@ -89,14 +91,9 @@ impl TimelineTab {
     }
 
     // Note management
-    pub fn add_note(&mut self, note: EventWrapper) {
-        self.pagination.update_oldest(note.event.created_at);
-        let _ = self.notes.find_or_insert(Reverse(note));
-    }
-
-    pub fn selected_note(&self) -> Option<&Event> {
-        let index = self.selected_index()?;
-        self.notes.get(index).map(|wrapper| &wrapper.0.event)
+    pub fn add_note(&mut self, sortable_id: SortableEventId) {
+        self.pagination.update_oldest(sortable_id.created_at);
+        let _ = self.notes.find_or_insert(Reverse(sortable_id));
     }
 
     pub fn len(&self) -> usize {
@@ -115,6 +112,10 @@ pub struct TimelineState {
     tabs: Vec<TimelineTab>,
     active_tab_index: usize,
 
+    // Centralized event storage (shared across all tabs)
+    // Each event is stored once here and referenced by EventId from tabs
+    events: HashMap<EventId, Event>,
+
     // Shared global data across all tabs
     global_reactions: HashMap<EventId, EventSet>,
     global_reposts: HashMap<EventId, EventSet>,
@@ -126,6 +127,7 @@ impl Default for TimelineState {
         Self {
             tabs: vec![TimelineTab::new_home()],
             active_tab_index: 0,
+            events: HashMap::new(),
             global_reactions: HashMap::new(),
             global_reposts: HashMap::new(),
             global_zap_receipts: HashMap::new(),
@@ -164,8 +166,28 @@ impl TimelineState {
         self.active_tab().is_empty()
     }
 
-    pub fn iter(&self) -> Box<dyn Iterator<Item = &EventWrapper> + '_> {
-        Box::new(self.active_tab().notes.iter().map(|rev| &rev.0))
+    /// Iterate over events in the active timeline with their indices
+    ///
+    /// This iterator yields tuples of (index, &Event) for each event in the timeline.
+    /// The index represents the position in the timeline (0 is the newest event).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// for (index, event) in timeline.iter_events() {
+    ///     println!("Event {}: {}", index, event.content);
+    /// }
+    /// ```
+    pub fn iter_events(&self) -> impl Iterator<Item = (usize, &Event)> + '_ {
+        // Read SortableEventId from the tab, then look up the event in the HashMap
+        self.active_tab()
+            .notes
+            .iter()
+            .enumerate()
+            .filter_map(move |(i, rev)| {
+                let event_id = rev.0.id;
+                self.events.get(&event_id).map(|event| (i, event))
+            })
     }
 
     /// Get the index of currently selected note in the active tab
@@ -229,13 +251,19 @@ impl TimelineState {
             }
         };
 
+        // Store event in centralized storage
+        let event_id = event.id;
+        let created_at = event.created_at;
+        self.events.entry(event_id).or_insert_with(|| event.clone());
+
+        // Create SortableEventId and insert into tab
+        let sortable_id = SortableEventId::new(event_id, created_at);
         let tab = &mut self.tabs[tab_index];
-        let wrapper = EventWrapper::new(event.clone());
-        let insert_result = tab.notes.find_or_insert(Reverse(wrapper));
+        let insert_result = tab.notes.find_or_insert(Reverse(sortable_id));
 
         // Check if this event completes a LoadMore operation
         let loading_completed = if let Some(loading_since) = tab.pagination.loading_more_since() {
-            if event.created_at < loading_since {
+            if created_at < loading_since {
                 // An older event arrived - loading completed
                 tab.pagination.finish_loading_more();
                 true
@@ -247,7 +275,7 @@ impl TimelineState {
         };
 
         // Update oldest timestamp if this event is older
-        tab.pagination.update_oldest(event.created_at);
+        tab.pagination.update_oldest(created_at);
 
         // Adjust selected index if a new item was inserted before it
         // This prevents the selection from shifting when new events arrive
@@ -271,46 +299,67 @@ impl TimelineState {
     /// Add a reaction event to the timeline (shared across all tabs)
     /// Returns the ID of the event being reacted to, or `None` if no valid target event is found
     pub fn add_reaction(&mut self, event: Event) -> Option<EventId> {
-        let wrapper = EventWrapper::new(event);
-        if let Some(event_id) = wrapper.last_event_id_from_tags() {
-            self.global_reactions
-                .entry(event_id)
-                .or_default()
-                .insert(wrapper.event);
-            Some(event_id)
-        } else {
-            None
-        }
+        // Extract the last event ID from 'e' tags
+        let target_event_id = event
+            .tags
+            .filter_standardized(TagKind::SingleLetter(SingleLetterTag::lowercase(
+                Alphabet::E,
+            )))
+            .last()
+            .and_then(|tag| match tag {
+                TagStandard::Event { event_id, .. } => Some(*event_id),
+                _ => None,
+            })?;
+
+        self.global_reactions
+            .entry(target_event_id)
+            .or_default()
+            .insert(event);
+        Some(target_event_id)
     }
 
     /// Add a repost event to the timeline (shared across all tabs)
     /// Returns the ID of the event being reposted, or `None` if no valid target event is found
     pub fn add_repost(&mut self, event: Event) -> Option<EventId> {
-        let wrapper = EventWrapper::new(event);
-        if let Some(event_id) = wrapper.last_event_id_from_tags() {
-            self.global_reposts
-                .entry(event_id)
-                .or_default()
-                .insert(wrapper.event);
-            Some(event_id)
-        } else {
-            None
-        }
+        // Extract the last event ID from 'e' tags
+        let target_event_id = event
+            .tags
+            .filter_standardized(TagKind::SingleLetter(SingleLetterTag::lowercase(
+                Alphabet::E,
+            )))
+            .last()
+            .and_then(|tag| match tag {
+                TagStandard::Event { event_id, .. } => Some(*event_id),
+                _ => None,
+            })?;
+
+        self.global_reposts
+            .entry(target_event_id)
+            .or_default()
+            .insert(event);
+        Some(target_event_id)
     }
 
     /// Add a zap receipt event to the timeline (shared across all tabs)
     /// Returns the ID of the event being zapped, or `None` if no valid target event is found
     pub fn add_zap_receipt(&mut self, event: Event) -> Option<EventId> {
-        let wrapper = EventWrapper::new(event);
-        if let Some(event_id) = wrapper.last_event_id_from_tags() {
-            self.global_zap_receipts
-                .entry(event_id)
-                .or_default()
-                .insert(wrapper.event);
-            Some(event_id)
-        } else {
-            None
-        }
+        // Extract the last event ID from 'e' tags
+        let target_event_id = event
+            .tags
+            .filter_standardized(TagKind::SingleLetter(SingleLetterTag::lowercase(
+                Alphabet::E,
+            )))
+            .last()
+            .and_then(|tag| match tag {
+                TagStandard::Event { event_id, .. } => Some(*event_id),
+                _ => None,
+            })?;
+
+        self.global_zap_receipts
+            .entry(target_event_id)
+            .or_default()
+            .insert(event);
+        Some(target_event_id)
     }
 
     /// Move selection up by one item in the active tab
@@ -341,7 +390,11 @@ impl TimelineState {
 
     /// Get the currently selected note from the active tab
     pub fn selected_note(&self) -> Option<&Event> {
-        self.active_tab().selected_note()
+        // Get the SortableEventId from the selected index, then look up in the HashMap
+        let index = self.selected_index()?;
+        let sortable_id = self.active_tab().notes.get(index)?;
+        let event_id = sortable_id.0.id;
+        self.events.get(&event_id)
     }
 
     /// Select a note at the specified index in the active tab
@@ -507,21 +560,30 @@ mod tests {
     use super::*;
 
     /// Helper function to create a test event with a specific timestamp
-    fn create_test_event(timestamp: u64) -> EventWrapper {
+    fn create_test_event(timestamp: u64) -> Event {
         let keys = Keys::generate();
-        let event = EventBuilder::text_note(format!("test note {timestamp}"))
+        EventBuilder::text_note(format!("test note {timestamp}"))
             .custom_created_at(Timestamp::from(timestamp))
             .sign_with_keys(&keys)
-            .expect("Failed to sign event");
-        EventWrapper::new(event)
+            .expect("Failed to sign event")
     }
 
     /// Helper function to insert a test event into the timeline
     fn insert_test_event(state: &mut TimelineState, timestamp: u64) {
+        let event = create_test_event(timestamp);
+        let event_id = event.id;
+        let created_at = event.created_at;
+
+        // Store in centralized storage
+        state
+            .events
+            .entry(event_id)
+            .or_insert_with(|| event.clone());
+
+        // Create SortableEventId and insert into tab
+        let sortable_id = SortableEventId::new(event_id, created_at);
         let tab = state.active_tab_mut();
-        let _ = tab
-            .notes
-            .find_or_insert(Reverse(create_test_event(timestamp)));
+        let _ = tab.notes.find_or_insert(Reverse(sortable_id));
     }
 
     #[test]
@@ -700,12 +762,20 @@ mod tests {
         // Add notes with known content
         let event1 = create_test_event(1000);
         let event2 = create_test_event(2000);
-        let event1_id = event1.event.id;
-        let event2_id = event2.event.id;
+        let event1_id = event1.id;
+        let event2_id = event2.id;
+
+        // Store in centralized storage
+        state.events.insert(event1_id, event1.clone());
+        state.events.insert(event2_id, event2.clone());
+
+        // Create SortableEventIds and insert into tab
+        let sortable1 = SortableEventId::new(event1_id, event1.created_at);
+        let sortable2 = SortableEventId::new(event2_id, event2.created_at);
 
         let tab = state.active_tab_mut();
-        let _ = tab.notes.find_or_insert(Reverse(event1));
-        let _ = tab.notes.find_or_insert(Reverse(event2));
+        let _ = tab.notes.find_or_insert(Reverse(sortable1));
+        let _ = tab.notes.find_or_insert(Reverse(sortable2));
 
         // Select first note
         state.select(0);
