@@ -18,6 +18,7 @@ use crate::infrastructure::subscription::media::MediaEvents;
 use crate::infrastructure::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrEvents,
 };
+use crate::model::fps::Message as FpsMessage;
 use crate::model::status_bar::Message as StatusBarMessage;
 use crate::model::timeline::tab::TimelineTabType;
 use crate::model::timeline::Message as TimelineMessage;
@@ -191,9 +192,9 @@ impl<'a> TearsApp<'a> {
             }
             SystemMsg::Tick => {
                 // Track app FPS based on tick events (approximately matches render FPS)
-                if let Some(fps) = self.state.fps.record_frame(None) {
-                    log::debug!("App FPS: {fps:.2}");
-                }
+                self.state
+                    .fps
+                    .update(FpsMessage::FrameRecorded { now: None });
             }
             SystemMsg::ShowError(error) => {
                 log::error!("{error}");

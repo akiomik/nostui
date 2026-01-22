@@ -4,19 +4,18 @@ use crate::{
     domain::nostr::Profile,
     infrastructure::config::Config,
     model::{
+        fps::Fps,
         status_bar::{Message, StatusBar},
         timeline::{tab::TimelineTabType, Message as TimelineMessage, Timeline},
     },
 };
 
 pub mod editor;
-pub mod fps;
 pub mod nostr;
 pub mod system;
 pub mod user;
 
 pub use editor::EditorState;
-pub use fps::FpsState;
 pub use nostr::NostrState;
 pub use system::SystemState;
 pub use user::UserState;
@@ -30,7 +29,7 @@ pub struct AppState {
     pub system: SystemState,
     pub nostr: NostrState,
     pub config: ConfigState,
-    pub fps: FpsState,
+    pub fps: Fps,
     pub status_bar: StatusBar,
 }
 
