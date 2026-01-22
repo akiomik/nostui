@@ -18,6 +18,7 @@ use crate::infrastructure::subscription::media::MediaEvents;
 use crate::infrastructure::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrEvents,
 };
+use crate::model::status_bar::Message as StatusBarMessage;
 use crate::model::timeline::tab::TimelineTabType;
 use crate::model::timeline::Message as TimelineMessage;
 use crate::presentation::components::Components;
@@ -121,7 +122,7 @@ impl<'a> Application for TearsApp<'a> {
                         _ => AppMsg::System(SystemMsg::Tick), // Ignore other events for now
                     }
                 }
-                Err(e) => AppMsg::System(SystemMsg::TerminalError(e.to_string())),
+                Err(e) => AppMsg::System(SystemMsg::ShowError(e.to_string())),
             }),
         ];
 
@@ -195,16 +196,16 @@ impl<'a> TearsApp<'a> {
                 }
             }
             SystemMsg::ShowError(error) => {
-                self.state.system.set_status_message(error);
+                log::error!("{error}");
+                self.state
+                    .status_bar
+                    .update(StatusBarMessage::ErrorMessageChanged {
+                        label: "System".to_owned(),
+                        message: error,
+                    });
             }
             SystemMsg::KeyInput(key) => {
                 return self.handle_key_input(key);
-            }
-            SystemMsg::TerminalError(error) => {
-                log::error!("Terminal error: {error}");
-                self.state
-                    .system
-                    .set_status_message(format!("Terminal error: {error}"));
             }
         }
         Command::none()
@@ -321,7 +322,9 @@ impl<'a> TearsApp<'a> {
         }
 
         //  Clear status message
-        self.state.system.clear_status_message();
+        self.state
+            .status_bar
+            .update(StatusBarMessage::MessageCleared);
 
         match msg {
             TimelineMsg::ScrollUp => {
@@ -379,17 +382,23 @@ impl<'a> TearsApp<'a> {
                     match self.state.nostr.send_event_builder(event_builder) {
                         Ok(()) => {
                             self.state
-                                .system
-                                .set_status_message(format!("[Reacted] note {note1}",));
+                                .status_bar
+                                .update(StatusBarMessage::MessageChanged {
+                                    label: "Reacted".to_string(),
+                                    message: note1,
+                                });
                         }
                         Err(e) => {
-                            let message = format!("Failed to send reaction: {e}");
+                            let message = format!("failed to send reaction: {e}");
                             log::error!("{message}");
-                            self.state.system.set_status_message(message);
+                            self.state
+                                .status_bar
+                                .update(StatusBarMessage::ErrorMessageChanged {
+                                    label: "Reaction".to_string(),
+                                    message,
+                                });
                         }
                     }
-                } else {
-                    self.state.system.set_status_message("No note selected");
                 }
             }
             TimelineMsg::RepostSelected => {
@@ -403,17 +412,23 @@ impl<'a> TearsApp<'a> {
                     match self.state.nostr.send_event_builder(event_builder) {
                         Ok(()) => {
                             self.state
-                                .system
-                                .set_status_message(format!("[Reposted] {note1}"));
+                                .status_bar
+                                .update(StatusBarMessage::MessageChanged {
+                                    label: "Reposted".to_owned(),
+                                    message: note1,
+                                });
                         }
                         Err(e) => {
-                            let message = format!("Failed to send repost: {e}");
+                            let message = format!("failed to send repost: {e}");
                             log::error!("{message}");
-                            self.state.system.set_status_message(message);
+                            self.state
+                                .status_bar
+                                .update(StatusBarMessage::ErrorMessageChanged {
+                                    label: "Repost".to_string(),
+                                    message,
+                                });
                         }
                     }
-                } else {
-                    self.state.system.set_status_message("No note selected");
                 }
             }
             TimelineMsg::SelectTab(index) => {
@@ -462,11 +477,6 @@ impl<'a> TearsApp<'a> {
                             .state
                             .timeline
                             .update(TimelineMessage::TabSelected { index });
-
-                        log::info!("Switched to existing author timeline for {author_npub}");
-                        self.state
-                            .system
-                            .set_status_message(format!("Switched to timeline for {author_npub}"));
                     } else {
                         // Tab doesn't exist, create a new one
                         let _ = self.state.timeline.update(TimelineMessage::TabAdded {
@@ -482,26 +492,36 @@ impl<'a> TearsApp<'a> {
                                     log::info!(
                                         "Sent SubscribeTimeline command for user: {author_npub}"
                                     );
-                                    self.state.system.set_status_message(format!(
-                                        "Opening timeline for {author_npub}"
-                                    ));
+
+                                    self.state.status_bar.update(
+                                        StatusBarMessage::MessageChanged {
+                                            label: author_npub,
+                                            message: "loading...".to_owned(),
+                                        },
+                                    );
                                 }
-                                Err(_e) => {
+                                Err(e) => {
                                     // NOTE: UI already opened the tab, so this is best-effort.
                                     // If not connected yet, the subscription will not start.
-                                    log::warn!("Cannot subscribe: {author_npub} (nostr not ready)");
-                                    self.state.system.set_status_message(format!(
-                                        "Opened timeline for {author_npub}"
-                                    ));
+                                    log::warn!("Cannot subscribe: {author_npub} ({e:?})");
+                                    self.state.status_bar.update(
+                                        StatusBarMessage::ErrorMessageChanged {
+                                            label: author_npub,
+                                            message: format!("failed to subscribe timeline: {e:?}"),
+                                        },
+                                    );
                                 }
                             }
                         } else {
                             log::error!("Failed to create author timeline");
-                            self.state.system.set_status_message("Failed to create tab");
+                            self.state
+                                .status_bar
+                                .update(StatusBarMessage::ErrorMessageChanged {
+                                    label: author_npub,
+                                    message: "failed to open tab".to_owned(),
+                                });
                         }
                     }
-                } else {
-                    self.state.system.set_status_message("No note selected");
                 }
             }
             TimelineMsg::CloseCurrentTab => {
@@ -535,14 +555,7 @@ impl<'a> TearsApp<'a> {
                     // Set reply context
                     self.state.editor.start_reply(note.as_event().clone());
 
-                    // Show status message
-                    self.state
-                        .system
-                        .set_status_message(format!("Replying to note {note1}",));
-
                     log::info!("Starting reply to event: {note1}");
-                } else {
-                    self.state.system.set_status_message("No note selected");
                 }
             }
             EditorMsg::CancelComposing => {
@@ -568,15 +581,22 @@ impl<'a> TearsApp<'a> {
                 // Send the event
                 match self.state.nostr.send_event_builder(event_builder) {
                     Ok(()) => {
-                        self.state.system.set_status_message(format!(
-                            "[Posted] {}",
-                            content.lines().collect::<Vec<&str>>().join(" ")
-                        ));
+                        self.state
+                            .status_bar
+                            .update(StatusBarMessage::MessageChanged {
+                                label: "Posted".to_owned(),
+                                message: content,
+                            });
                     }
                     Err(e) => {
-                        let message = format!("Failed to send event: {e}");
+                        let message = format!("failed to send: {e}");
                         log::error!("{message}");
-                        self.state.system.set_status_message(message);
+                        self.state
+                            .status_bar
+                            .update(StatusBarMessage::ErrorMessageChanged {
+                                label: "Post".to_owned(),
+                                message,
+                            });
                     }
                 }
 
@@ -629,13 +649,21 @@ impl<'a> TearsApp<'a> {
                         match self.state.nostr.send_event_builder(event_builder) {
                             Ok(()) => {
                                 self.state
-                                    .system
-                                    .set_status_message(format!("[Status Updated] {content}"));
+                                    .status_bar
+                                    .update(StatusBarMessage::MessageChanged {
+                                        label: "Status Updated".to_owned(),
+                                        message: content,
+                                    });
                             }
                             Err(e) => {
-                                let message = format!("Failed to update status: {e}");
+                                let message = format!("failed to update: {e}");
                                 log::error!("{message}");
-                                self.state.system.set_status_message(message);
+                                self.state
+                                    .status_bar
+                                    .update(StatusBarMessage::MessageChanged {
+                                        label: "Status".to_owned(),
+                                        message,
+                                    });
                             }
                         }
                     }
@@ -655,7 +683,12 @@ impl<'a> TearsApp<'a> {
             NostrSubscriptionMessage::Ready { sender } => {
                 log::info!("NostrEvents subscription ready");
                 self.state.nostr.set_command_sender(sender);
-                self.state.system.set_status_message("[Home] Loading...");
+                self.state
+                    .status_bar
+                    .update(StatusBarMessage::MessageChanged {
+                        label: "Home".to_owned(),
+                        message: "loading...".to_owned(),
+                    });
             }
             NostrSubscriptionMessage::SubscriptionCreated {
                 tab_type,
@@ -696,7 +729,12 @@ impl<'a> TearsApp<'a> {
                     } = message
                     {
                         if self.state.system.is_loading() {
-                            self.state.system.set_status_message("[Home] Loaded");
+                            self.state
+                                .status_bar
+                                .update(StatusBarMessage::MessageChanged {
+                                    label: "Home".to_owned(),
+                                    message: "loaded".to_owned(),
+                                });
                             self.state.system.stop_loading();
                         }
 
@@ -720,15 +758,20 @@ impl<'a> TearsApp<'a> {
                 RelayPoolNotification::Shutdown => {
                     log::info!("Nostr subscription shut down");
                     self.state
-                        .system
-                        .set_status_message("Disconnected from Nostr");
+                        .status_bar
+                        .update(StatusBarMessage::MessageChanged {
+                            label: "Nostr".to_owned(),
+                            message: "disconntected".to_owned(),
+                        });
                 }
             },
             NostrSubscriptionMessage::Error { error } => {
-                log::error!("NostrEvents error: {error:?}");
                 self.state
-                    .system
-                    .set_status_message(format!("Nostr error: {error:?}"));
+                    .status_bar
+                    .update(StatusBarMessage::ErrorMessageChanged {
+                        label: "Nostr".to_owned(),
+                        message: format!("{error:?}"),
+                    });
             }
         }
     }
@@ -748,28 +791,37 @@ impl<'a> TearsApp<'a> {
 
         // Get the active tab type
         let tab_type = self.state.timeline.active_tab().tab_type().clone();
+        let tab_title = match tab_type {
+            TimelineTabType::Home => "Home".to_string(),
+            TimelineTabType::UserTimeline { pubkey } => {
+                format!("User {}", &pubkey.to_hex()[..8])
+            }
+        };
 
         // Mark loading started
         match self
             .state
             .nostr
-            .load_more_timeline(tab_type.clone(), until_timestamp)
+            .load_more_timeline(tab_type, until_timestamp)
         {
             Ok(()) => {
                 // Set appropriate status message
-                let status_msg = match tab_type {
-                    TimelineTabType::Home => "[Home] Loading more ...".to_string(),
-                    TimelineTabType::UserTimeline { pubkey } => {
-                        format!("[User {}] Loading more ...", &pubkey.to_hex()[..8])
-                    }
-                };
-                self.state.system.set_status_message(status_msg);
-            }
-            Err(_) => {
-                log::warn!("No Nostr command sender available");
                 self.state
-                    .system
-                    .set_status_message("Not connected to Nostr");
+                    .status_bar
+                    .update(StatusBarMessage::MessageChanged {
+                        label: tab_title,
+                        message: "loading more...".to_owned(),
+                    });
+            }
+            Err(e) => {
+                let message = format!("failed to load more events: {e}");
+                log::warn!("{message}");
+                self.state
+                    .status_bar
+                    .update(StatusBarMessage::ErrorMessageChanged {
+                        label: tab_title,
+                        message,
+                    });
             }
         }
 
@@ -805,13 +857,18 @@ mod tests {
         app.state.system.stop_loading();
 
         // Set a status message
-        app.state.system.set_status_message("Test message");
+        app.state
+            .status_bar
+            .update(StatusBarMessage::MessageChanged {
+                label: "Test".to_owned(),
+                message: "test message".to_owned(),
+            });
 
         // Select a note (index 0)
         let _ = app.handle_timeline_msg(TimelineMsg::Select(0));
 
         // Status message should be cleared
-        assert_eq!(app.state.system.status_message(), None);
+        assert_eq!(app.state.status_bar.message(), &None);
     }
 
     #[test]
@@ -820,13 +877,18 @@ mod tests {
         app.state.system.stop_loading();
 
         // Set a status message
-        app.state.system.set_status_message("Test message");
+        app.state
+            .status_bar
+            .update(StatusBarMessage::MessageChanged {
+                label: "Test".to_owned(),
+                message: "test message".to_owned(),
+            });
 
         // Select with invalid index (timeline is empty)
         let _ = app.handle_timeline_msg(TimelineMsg::Select(999));
 
         // Status message should be cleared
-        assert_eq!(app.state.system.status_message(), None);
+        assert_eq!(app.state.status_bar.message(), &None);
         // Selection should be None
         assert_eq!(app.state.timeline.selected_note(), None);
     }
@@ -837,13 +899,18 @@ mod tests {
         app.state.system.stop_loading();
 
         // Set a status message
-        app.state.system.set_status_message("Test message");
+        app.state
+            .status_bar
+            .update(StatusBarMessage::MessageChanged {
+                label: "Test".to_owned(),
+                message: "test message".to_owned(),
+            });
 
         // Scroll up
         let _ = app.handle_timeline_msg(TimelineMsg::ScrollUp);
 
         // Status message should be cleared
-        assert_eq!(app.state.system.status_message(), None);
+        assert_eq!(app.state.status_bar.message(), &None);
     }
 
     #[test]
@@ -852,13 +919,18 @@ mod tests {
         app.state.system.stop_loading();
 
         // Set a status message
-        app.state.system.set_status_message("Test message");
+        app.state
+            .status_bar
+            .update(StatusBarMessage::MessageChanged {
+                label: "Test".to_owned(),
+                message: "test message".to_owned(),
+            });
 
         // Scroll down
         let _ = app.handle_timeline_msg(TimelineMsg::ScrollDown);
 
         // Status message should be cleared
-        assert_eq!(app.state.system.status_message(), None);
+        assert_eq!(app.state.status_bar.message(), &None);
     }
 
     #[test]
@@ -871,7 +943,12 @@ mod tests {
             .state
             .timeline
             .update(TimelineMessage::FirstItemSelected);
-        app.state.system.set_status_message("Test message");
+        app.state
+            .status_bar
+            .update(StatusBarMessage::MessageChanged {
+                label: "Test".to_owned(),
+                message: "test message".to_owned(),
+            });
 
         // KeyAction::Unselect should delegate to TimelineMsg::Deselect
         // We test the end result by calling TimelineMsg::Deselect directly
@@ -879,7 +956,7 @@ mod tests {
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
-        assert_eq!(app.state.system.status_message(), None);
+        assert_eq!(app.state.status_bar.message(), &None);
     }
 
     #[test]
@@ -888,15 +965,20 @@ mod tests {
         app.state.system.start_loading();
 
         // Set selection and status message
-        app.state.system.set_status_message("Test message");
+        app.state
+            .status_bar
+            .update(StatusBarMessage::MessageChanged {
+                label: "Test".to_owned(),
+                message: "test message".to_owned(),
+            });
 
         // Execute the TimelineMsg::Deselect
         let _ = app.update(AppMsg::Timeline(TimelineMsg::Deselect));
 
         // Status message should remain
         assert_eq!(
-            app.state.system.status_message(),
-            Some(&"Test message".to_owned())
+            app.state.status_bar.message(),
+            &Some("[Test] test message".to_owned())
         );
     }
 
@@ -910,14 +992,19 @@ mod tests {
             .state
             .timeline
             .update(TimelineMessage::ItemSelected { index: 5 });
-        app.state.system.set_status_message("Test message");
+        app.state
+            .status_bar
+            .update(StatusBarMessage::MessageChanged {
+                label: "Test".to_owned(),
+                message: "test message".to_owned(),
+            });
 
         // Simulate Escape key press and execute the TimelineMsg::Deselect directly
         let _ = app.update(AppMsg::Timeline(TimelineMsg::Deselect));
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
-        assert_eq!(app.state.system.status_message(), None);
+        assert_eq!(app.state.status_bar.message(), &None);
     }
 
     #[test]
@@ -930,14 +1017,19 @@ mod tests {
             .state
             .timeline
             .update(TimelineMessage::ItemSelected { index: 3 });
-        app.state.system.set_status_message("Test message");
+        app.state
+            .status_bar
+            .update(StatusBarMessage::MessageChanged {
+                label: "Test".to_owned(),
+                message: "test message".to_owned(),
+            });
 
         // Deselect
         let _ = app.handle_timeline_msg(TimelineMsg::Deselect);
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
-        assert_eq!(app.state.system.status_message(), None);
+        assert_eq!(app.state.status_bar.message(), &None);
     }
 
     #[test]

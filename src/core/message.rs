@@ -36,8 +36,6 @@ pub enum SystemMsg {
     ShowError(String),
     /// Key input event
     KeyInput(KeyEvent),
-    /// Terminal event error
-    TerminalError(String),
 }
 
 /// Timeline messages

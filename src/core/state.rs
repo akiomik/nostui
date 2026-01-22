@@ -3,7 +3,10 @@ use nostr_sdk::prelude::*;
 use crate::{
     domain::nostr::Profile,
     infrastructure::config::Config,
-    model::timeline::{tab::TimelineTabType, Message as TimelineMessage, Timeline},
+    model::{
+        status_bar::{Message, StatusBar},
+        timeline::{tab::TimelineTabType, Message as TimelineMessage, Timeline},
+    },
 };
 
 pub mod editor;
@@ -28,6 +31,7 @@ pub struct AppState {
     pub nostr: NostrState,
     pub config: ConfigState,
     pub fps: FpsState,
+    pub status_bar: StatusBar,
 }
 
 /// Configuration state - holds all user-configurable settings
@@ -73,10 +77,16 @@ impl AppState {
                 {
                     match tab_type {
                         TimelineTabType::Home => {
-                            self.system.set_status_message("[Home] Loaded more");
+                            self.status_bar.update(Message::MessageChanged {
+                                label: "Home".to_owned(),
+                                message: "loaded more".to_owned(),
+                            });
                         }
                         TimelineTabType::UserTimeline { .. } => {
-                            self.system.set_status_message("[User] Loaded more");
+                            self.status_bar.update(Message::MessageChanged {
+                                label: "Author Timeline".to_owned(),
+                                message: "loaded more".to_owned(),
+                            });
                         }
                     }
                 }
@@ -167,7 +177,7 @@ mod tests {
         assert_eq!(state.timeline.len(), 1);
 
         // No loading_more => no status message update.
-        assert_eq!(state.system.status_message(), None);
+        assert_eq!(state.status_bar.message(), &None);
 
         Ok(())
     }
@@ -204,8 +214,8 @@ mod tests {
         state.process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         assert_eq!(
-            state.system.status_message(),
-            Some(&"[Home] Loaded more".to_owned())
+            state.status_bar.message(),
+            &Some("[Home] loaded more".to_owned())
         );
         assert_eq!(
             state
@@ -249,8 +259,8 @@ mod tests {
         state.process_nostr_event_for_tab(event2, &user_tab);
 
         assert_eq!(
-            state.system.status_message(),
-            Some(&"[User] Loaded more".to_owned())
+            state.status_bar.message(),
+            &Some("[Author Timeline] loaded more".to_owned())
         );
         assert_eq!(
             state.timeline.is_loading_more_for_tab(&user_tab),

@@ -42,6 +42,7 @@ impl Profile {
         } else if let Some(handle) = self.handle() {
             handle
         } else {
+            // TODO: Use shortened when fallback
             let Ok(npub) = self.pubkey.to_bech32();
             npub
         }
