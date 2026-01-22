@@ -801,7 +801,7 @@ mod tests {
         app.state.system.set_status_message("Test message");
 
         // Select a note (index 0)
-        app.handle_timeline_msg(TimelineMsg::Select(0));
+        let _ = app.handle_timeline_msg(TimelineMsg::Select(0));
 
         // Status message should be cleared
         assert_eq!(app.state.system.status_message(), None);
@@ -816,7 +816,7 @@ mod tests {
         app.state.system.set_status_message("Test message");
 
         // Select with invalid index (timeline is empty)
-        app.handle_timeline_msg(TimelineMsg::Select(999));
+        let _ = app.handle_timeline_msg(TimelineMsg::Select(999));
 
         // Status message should be cleared
         assert_eq!(app.state.system.status_message(), None);
@@ -833,7 +833,7 @@ mod tests {
         app.state.system.set_status_message("Test message");
 
         // Scroll up
-        app.handle_timeline_msg(TimelineMsg::ScrollUp);
+        let _ = app.handle_timeline_msg(TimelineMsg::ScrollUp);
 
         // Status message should be cleared
         assert_eq!(app.state.system.status_message(), None);
@@ -848,7 +848,7 @@ mod tests {
         app.state.system.set_status_message("Test message");
 
         // Scroll down
-        app.handle_timeline_msg(TimelineMsg::ScrollDown);
+        let _ = app.handle_timeline_msg(TimelineMsg::ScrollDown);
 
         // Status message should be cleared
         assert_eq!(app.state.system.status_message(), None);
@@ -867,7 +867,7 @@ mod tests {
 
         // KeyAction::Unselect should delegate to TimelineMsg::Deselect
         // We test the end result by calling TimelineMsg::Deselect directly
-        app.update(AppMsg::Timeline(TimelineMsg::Deselect));
+        let _ = app.update(AppMsg::Timeline(TimelineMsg::Deselect));
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
@@ -883,7 +883,7 @@ mod tests {
         app.state.system.set_status_message("Test message");
 
         // Execute the TimelineMsg::Deselect
-        app.update(AppMsg::Timeline(TimelineMsg::Deselect));
+        let _ = app.update(AppMsg::Timeline(TimelineMsg::Deselect));
 
         // Status message should remain
         assert_eq!(
@@ -904,7 +904,7 @@ mod tests {
         app.state.system.set_status_message("Test message");
 
         // Simulate Escape key press and execute the TimelineMsg::Deselect directly
-        app.update(AppMsg::Timeline(TimelineMsg::Deselect));
+        let _ = app.update(AppMsg::Timeline(TimelineMsg::Deselect));
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
@@ -923,7 +923,7 @@ mod tests {
         app.state.system.set_status_message("Test message");
 
         // Deselect
-        app.handle_timeline_msg(TimelineMsg::Deselect);
+        let _ = app.handle_timeline_msg(TimelineMsg::Deselect);
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
@@ -939,7 +939,7 @@ mod tests {
         assert!(app.state.timeline.is_empty());
 
         // Try to select first
-        app.handle_timeline_msg(TimelineMsg::SelectFirst);
+        let _ = app.handle_timeline_msg(TimelineMsg::SelectFirst);
 
         // Selection should remain None
         assert_eq!(app.state.timeline.selected_note(), None);
@@ -969,7 +969,7 @@ mod tests {
             .update(TimelineMessage::ItemSelected { index: 1 });
 
         // Select first
-        app.handle_timeline_msg(TimelineMsg::SelectFirst);
+        let _ = app.handle_timeline_msg(TimelineMsg::SelectFirst);
 
         // Selection should be at index 0
         assert_eq!(app.state.timeline.selected_index(), Some(0));
@@ -984,7 +984,7 @@ mod tests {
         assert!(app.state.timeline.is_empty());
 
         // Try to select last
-        app.handle_timeline_msg(TimelineMsg::SelectLast);
+        let _ = app.handle_timeline_msg(TimelineMsg::SelectLast);
 
         // Selection should remain None
         assert_eq!(app.state.timeline.selected_note(), None);
@@ -1014,7 +1014,7 @@ mod tests {
             .update(TimelineMessage::ItemSelectionCleared);
 
         // Select last
-        app.handle_timeline_msg(TimelineMsg::SelectLast);
+        let _ = app.handle_timeline_msg(TimelineMsg::SelectLast);
 
         // Selection should be at the last index
         let expected_index = app.state.timeline.len() - 1;
@@ -1035,7 +1035,7 @@ mod tests {
             .process_nostr_event_for_tab(event, &TimelineTabType::Home);
 
         // Directly test the delegation by calling SelectFirst
-        app.update(AppMsg::Timeline(TimelineMsg::SelectFirst));
+        let _ = app.update(AppMsg::Timeline(TimelineMsg::SelectFirst));
 
         // Selection should be at index 0
         assert_eq!(app.state.timeline.selected_index(), Some(0));
@@ -1060,7 +1060,7 @@ mod tests {
             .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         // Directly test the delegation by calling SelectLast
-        app.update(AppMsg::Timeline(TimelineMsg::SelectLast));
+        let _ = app.update(AppMsg::Timeline(TimelineMsg::SelectLast));
 
         // Selection should be at the last index
         let expected_index = app.state.timeline.len() - 1;
@@ -1079,7 +1079,8 @@ mod tests {
         // Note: We can't directly inspect Command contents, but we can test
         // the message handling instead
         let quit_msg = AppMsg::System(SystemMsg::Quit);
-        let _cmd = app.update(quit_msg);
+        let cmd = app.update(quit_msg);
+        assert!(cmd.is_some());
 
         // Command should be Action::Quit effect (we can't directly test this,
         // but the system should have processed it)
@@ -1102,7 +1103,7 @@ mod tests {
         assert!(app.state.editor.is_composing());
 
         // The textarea should contain 'q' after processing
-        app.update(AppMsg::Editor(EditorMsg::ProcessTextAreaInput(q_key)));
+        let _ = app.update(AppMsg::Editor(EditorMsg::ProcessTextAreaInput(q_key)));
         assert_eq!(app.components.borrow().home.input.get_content(), "q");
     }
 
@@ -1125,7 +1126,7 @@ mod tests {
         let _cmd = app.handle_key_input(esc_key);
 
         // Should return to normal mode
-        app.update(AppMsg::Editor(EditorMsg::CancelComposing));
+        let _ = app.update(AppMsg::Editor(EditorMsg::CancelComposing));
         assert!(app.state.editor.is_normal());
         assert!(app.components.borrow().home.input.get_content().is_empty());
     }
@@ -1302,11 +1303,11 @@ mod tests {
         assert_eq!(app.state.timeline.active_tab_index(), 0);
 
         // Select tab 0 (only tab available)
-        app.handle_timeline_msg(TimelineMsg::SelectTab(0));
+        let _ = app.handle_timeline_msg(TimelineMsg::SelectTab(0));
         assert_eq!(app.state.timeline.active_tab_index(), 0);
 
         // Try to select tab beyond max (stub does nothing)
-        app.handle_timeline_msg(TimelineMsg::SelectTab(5));
+        let _ = app.handle_timeline_msg(TimelineMsg::SelectTab(5));
         assert_eq!(app.state.timeline.active_tab_index(), 0);
     }
 }
