@@ -11,7 +11,7 @@
 //! - The `update` function handles both simple delegation and complex coordination
 //!   (e.g., `NoteAdded` updates pagination, notes, and selection together)
 
-use std::cmp::Reverse;
+use std::{cmp::Reverse, collections::HashMap};
 
 use nostr_sdk::prelude::*;
 use sorted_vec::{FindOrInsert, ReverseSortedSet};
@@ -19,7 +19,10 @@ use tears::Command;
 
 use crate::{
     core::message::{AppMsg, TimelineMsg},
-    domain::nostr::SortableEventId,
+    domain::{
+        nostr::{Profile, SortableEventId},
+        text::shorten_npub,
+    },
 };
 
 use super::{
@@ -93,6 +96,19 @@ impl TimelineTab {
 
     pub fn tab_type(&self) -> &TimelineTabType {
         &self.tab_type
+    }
+
+    pub fn tab_title(&self, profiles: &HashMap<PublicKey, Profile>) -> String {
+        match self.tab_type {
+            TimelineTabType::Home => "Home".to_string(),
+            TimelineTabType::UserTimeline { pubkey } => profiles
+                .get(&pubkey)
+                .and_then(|profile| profile.handle())
+                .unwrap_or_else(|| {
+                    let Ok(npub) = pubkey.to_bech32();
+                    shorten_npub(npub)
+                }),
+        }
     }
 
     pub fn event_id_by_index(&self, index: usize) -> Option<SortableEventId> {
@@ -246,6 +262,7 @@ impl TimelineTab {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::nostr::Profile;
 
     fn create_test_event_id(timestamp: u64, id_suffix: u8) -> SortableEventId {
         let mut id_bytes = [0u8; 32];
@@ -587,5 +604,57 @@ mod tests {
         let cmd = tab.update(Message::LastItemSelected);
         assert_eq!(tab.selected_index(), Some(0));
         assert!(cmd.is_none());
+    }
+
+    #[test]
+    fn test_tab_title_home() {
+        let tab = TimelineTab::new_home();
+        let profiles = HashMap::new();
+
+        assert_eq!(tab.tab_title(&profiles), "Home");
+    }
+
+    #[test]
+    fn test_tab_title_user_timeline_with_handle() {
+        let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
+        let tab = TimelineTab::new(TimelineTabType::UserTimeline { pubkey });
+
+        let mut metadata = Metadata::new();
+        metadata = metadata.name("alice");
+        let profile = Profile::new(pubkey, Timestamp::from(1000), metadata);
+
+        let mut profiles = HashMap::new();
+        profiles.insert(pubkey, profile);
+
+        assert_eq!(tab.tab_title(&profiles), "@alice");
+    }
+
+    #[test]
+    fn test_tab_title_user_timeline_with_empty_name() {
+        let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
+        let tab = TimelineTab::new(TimelineTabType::UserTimeline { pubkey });
+
+        let mut metadata = Metadata::new();
+        metadata = metadata.name("");
+        let profile = Profile::new(pubkey, Timestamp::from(1000), metadata);
+
+        let mut profiles = HashMap::new();
+        profiles.insert(pubkey, profile);
+
+        let npub = pubkey.to_bech32().expect("Valid bech32");
+        let expected = shorten_npub(npub);
+        assert_eq!(tab.tab_title(&profiles), expected);
+    }
+
+    #[test]
+    fn test_tab_title_user_timeline_without_profile() {
+        let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
+        let tab = TimelineTab::new(TimelineTabType::UserTimeline { pubkey });
+
+        let profiles = HashMap::new();
+
+        let npub = pubkey.to_bech32().expect("Valid bech32");
+        let expected = shorten_npub(npub);
+        assert_eq!(tab.tab_title(&profiles), expected);
     }
 }

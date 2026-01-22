@@ -1,11 +1,8 @@
 //! Tab bar component for displaying timeline tabs
 
-use nostr_sdk::ToBech32;
 use ratatui::prelude::*;
 
 use crate::core::state::AppState;
-use crate::domain::text::shorten_npub;
-use crate::model::timeline::tab::TimelineTabType;
 
 /// Tab bar component
 ///
@@ -25,24 +22,7 @@ impl TabBarComponent {
             .timeline
             .tabs()
             .iter()
-            .map(|tab| match tab.tab_type() {
-                TimelineTabType::Home => "Home".to_string(),
-                TimelineTabType::UserTimeline { pubkey } => {
-                    // Try to get the handle from profile, fallback to shortened npub
-                    state
-                        .user
-                        .get_profile(pubkey)
-                        .and_then(|profile| {
-                            // Use handle if available (already includes @)
-                            profile.handle()
-                        })
-                        .unwrap_or_else(|| {
-                            // Fallback to shortened npub
-                            let Ok(npub) = pubkey.to_bech32();
-                            shorten_npub(npub)
-                        })
-                }
-            })
+            .map(|tab| tab.tab_title(state.user.profiles()))
             .collect();
 
         let tabs = ratatui::widgets::Tabs::new(tab_titles)
