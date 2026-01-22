@@ -6,5 +6,6 @@
 pub mod name_with_handle;
 pub mod public_key;
 pub mod shrink_text;
+pub mod status_bar;
 pub mod text_note;
 pub mod text_note_stats;

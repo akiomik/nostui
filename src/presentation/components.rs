@@ -5,15 +5,16 @@
 
 use ratatui::prelude::*;
 
-use crate::core::state::AppState;
+use crate::{
+    core::state::AppState,
+    presentation::widgets::status_bar::{StatusBarWidget, ViewContext as StatusBarViewContext},
+};
 
 pub mod fps;
 pub mod home;
-pub mod status_bar;
 
 pub use fps::FpsComponent;
 pub use home::HomeComponent;
-pub use status_bar::StatusBarComponent;
 
 /// Collection of all components
 ///
@@ -22,7 +23,6 @@ pub use status_bar::StatusBarComponent;
 pub struct Components<'a> {
     pub home: HomeComponent<'a>,
     pub fps: FpsComponent,
-    pub status_bar: StatusBarComponent,
 }
 
 impl<'a> Components<'a> {
@@ -31,7 +31,6 @@ impl<'a> Components<'a> {
         Self {
             home: HomeComponent::new(),
             fps: FpsComponent::new(),
-            status_bar: StatusBarComponent::new(),
         }
     }
 
@@ -58,7 +57,12 @@ impl<'a> Components<'a> {
         self.home.view(state, frame, layout[1]);
 
         // Render status bar at bottom
-        self.status_bar.view(state, frame, layout[2]);
+        let status_bar_ctx = StatusBarViewContext {
+            user_pubkey: state.user.current_user_pubkey(),
+            user_profile: state.user.current_user(),
+        };
+        let status_bar = StatusBarWidget::new(state.status_bar.clone(), status_bar_ctx);
+        frame.render_widget(status_bar, layout[2]);
     }
 }
 
