@@ -3248,8 +3248,8 @@ dependencies = [
 
 [[package]]
 name = "tears"
-version = "0.7.0"
-source = "git+https://github.com/akiomik/tears?branch=ratatui-0.29#560d17574e9f5feb8e1855bfb6f2745c8f535572"
+version = "0.8.0"
+source = "git+https://github.com/akiomik/tears?branch=ratatui-0.29#39a98a1509a1c4ef7876a0fde43c5d96780bf07f"
 dependencies = [
  "color-eyre",
  "crossterm",
