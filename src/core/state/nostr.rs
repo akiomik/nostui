@@ -5,7 +5,9 @@ use nowhear::Track;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
-use crate::{infrastructure::subscription::nostr::NostrCommand, model::timeline::TimelineTabType};
+use crate::{
+    infrastructure::subscription::nostr::NostrCommand, model::timeline::tab::TimelineTabType,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct NostrState {

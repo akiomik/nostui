@@ -1,27 +1,27 @@
 use nostr_sdk::prelude::*;
 
 use crate::{
-    domain::nostr::Profile, infrastructure::config::Config, model::timeline::TimelineTabType,
+    domain::nostr::Profile,
+    infrastructure::config::Config,
+    model::timeline::{tab::TimelineTabType, Message as TimelineMessage, Timeline},
 };
 
 pub mod editor;
 pub mod fps;
 pub mod nostr;
 pub mod system;
-pub mod timeline;
 pub mod user;
 
 pub use editor::EditorState;
 pub use fps::FpsState;
 pub use nostr::NostrState;
 pub use system::SystemState;
-pub use timeline::TimelineState;
 pub use user::UserState;
 
 /// Unified application state
 #[derive(Debug, Default)]
 pub struct AppState {
-    pub timeline: TimelineState,
+    pub timeline: Timeline,
     pub editor: EditorState,
     pub user: UserState,
     pub system: SystemState,
@@ -59,9 +59,17 @@ impl AppState {
     pub fn process_nostr_event_for_tab(&mut self, event: Event, tab_type: &TimelineTabType) {
         match event.kind {
             Kind::TextNote => {
-                let loading_completed = self.timeline.add_note_to_tab(event, tab_type);
+                let current_loading_more_state = self.timeline.is_loading_more_for_tab(tab_type);
 
-                if loading_completed {
+                self.timeline.update(TimelineMessage::NoteAddedToTab {
+                    event,
+                    tab_type: tab_type.clone(),
+                });
+
+                let new_loading_more_state = self.timeline.is_loading_more_for_tab(tab_type);
+
+                if current_loading_more_state == Some(true) && new_loading_more_state == Some(false)
+                {
                     match tab_type {
                         TimelineTabType::Home => {
                             self.system.set_status_message("[Home] Loaded more");
@@ -79,15 +87,13 @@ impl AppState {
                     self.user.insert_newer_profile(profile);
                 }
             }
-            Kind::Repost => {
-                self.timeline.add_repost(event);
-            }
-            Kind::Reaction => {
-                self.timeline.add_reaction(event);
-            }
-            Kind::ZapReceipt => {
-                self.timeline.add_zap_receipt(event);
-            }
+            Kind::Repost => self.timeline.update(TimelineMessage::RepostAdded { event }),
+            Kind::Reaction => self
+                .timeline
+                .update(TimelineMessage::ReactionAdded { event }),
+            Kind::ZapReceipt => self
+                .timeline
+                .update(TimelineMessage::ZapReceiptAdded { event }),
             _ => {}
         }
     }
@@ -96,6 +102,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::nostr::Profile;
 
     fn create_text_note(keys: &Keys, content: &str, created_at: Timestamp) -> Result<Event> {
         Ok(EventBuilder::text_note(content)
@@ -134,16 +141,22 @@ mod tests {
         let user_tab = TimelineTabType::UserTimeline {
             pubkey: author_pubkey,
         };
-        state.timeline.add_tab(user_tab.clone())?;
+        state.timeline.update(TimelineMessage::TabAdded {
+            tab_type: user_tab.clone(),
+        });
 
         let event = create_text_note(&author_keys, "hello", Timestamp::from(1000))?;
         state.process_nostr_event_for_tab(event, &user_tab);
 
         // Verify it was inserted only into the user timeline.
-        state.timeline.select_tab(0);
+        state
+            .timeline
+            .update(TimelineMessage::TabSelected { index: 0 });
         assert_eq!(state.timeline.len(), 0);
 
-        state.timeline.select_tab(1);
+        state
+            .timeline
+            .update(TimelineMessage::TabSelected { index: 1 });
         assert_eq!(state.timeline.len(), 1);
 
         // No loading_more => no status message update.
@@ -160,7 +173,9 @@ mod tests {
         state.system.stop_loading();
 
         // Ensure Home tab is active.
-        state.timeline.select_tab(0);
+        state
+            .timeline
+            .update(TimelineMessage::TabSelected { index: 0 });
 
         // Insert an initial note so oldest_timestamp exists.
         let keys = Keys::generate();
@@ -168,8 +183,13 @@ mod tests {
         state.process_nostr_event_for_tab(event1, &TimelineTabType::Home);
 
         // Start loading more. (loading_more_since = oldest_timestamp = 1000)
-        state.timeline.start_loading_more();
-        assert!(state.timeline.is_loading_more());
+        state.timeline.update(TimelineMessage::LoadingMoreStarted);
+        assert_eq!(
+            state
+                .timeline
+                .is_loading_more_for_tab(&TimelineTabType::Home),
+            Some(true)
+        );
 
         // An older event completes the LoadMore operation.
         let event2 = create_text_note(&keys, "older", Timestamp::from(500))?;
@@ -179,7 +199,12 @@ mod tests {
             state.system.status_message(),
             Some(&"[Home] Loaded more".to_owned())
         );
-        assert!(!state.timeline.is_loading_more());
+        assert_eq!(
+            state
+                .timeline
+                .is_loading_more_for_tab(&TimelineTabType::Home),
+            Some(false)
+        );
 
         Ok(())
     }
@@ -196,17 +221,19 @@ mod tests {
         let user_tab = TimelineTabType::UserTimeline {
             pubkey: author_pubkey,
         };
-        state.timeline.add_tab(user_tab.clone())?;
-
-        // Make the user tab active because loading state is tracked per active tab.
-        state.timeline.select_tab(1);
+        state.timeline.update(TimelineMessage::TabAdded {
+            tab_type: user_tab.clone(),
+        });
 
         // Insert an initial note so oldest_timestamp exists.
         let event1 = create_text_note(&author_keys, "newer", Timestamp::from(1000))?;
         state.process_nostr_event_for_tab(event1, &user_tab);
 
-        state.timeline.start_loading_more();
-        assert!(state.timeline.is_loading_more());
+        state.timeline.update(TimelineMessage::LoadingMoreStarted);
+        assert_eq!(
+            state.timeline.is_loading_more_for_tab(&user_tab),
+            Some(true)
+        );
 
         // An older event completes the LoadMore operation.
         let event2 = create_text_note(&author_keys, "older", Timestamp::from(500))?;
@@ -216,7 +243,10 @@ mod tests {
             state.system.status_message(),
             Some(&"[User] Loaded more".to_owned())
         );
-        assert!(!state.timeline.is_loading_more());
+        assert_eq!(
+            state.timeline.is_loading_more_for_tab(&user_tab),
+            Some(false)
+        );
 
         Ok(())
     }

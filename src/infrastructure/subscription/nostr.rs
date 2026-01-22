@@ -9,7 +9,7 @@ use nostr_sdk::prelude::*;
 use tears::{SubscriptionId, SubscriptionSource};
 use tokio::sync::{broadcast, mpsc, RwLock};
 
-use crate::model::timeline::TimelineTabType;
+use crate::model::timeline::tab::TimelineTabType;
 
 const DEFAULT_CONTACT_LIST_TIMEOUT_SECS: u64 = 10;
 const DEFAULT_TIMELINE_LIMIT: usize = 50;

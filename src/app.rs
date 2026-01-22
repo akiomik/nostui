@@ -18,7 +18,8 @@ use crate::infrastructure::subscription::media::MediaEvents;
 use crate::infrastructure::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrEvents,
 };
-use crate::model::timeline::TimelineTabType;
+use crate::model::timeline::tab::TimelineTabType;
+use crate::model::timeline::Message as TimelineMessage;
 use crate::presentation::components::Components;
 use crate::presentation::config::keybindings::Action as KeyAction;
 
@@ -323,11 +324,16 @@ impl<'a> TearsApp<'a> {
         self.state.system.clear_status_message();
 
         match msg {
-            TimelineMsg::ScrollUp => self.state.timeline.scroll_up(),
+            TimelineMsg::ScrollUp => self
+                .state
+                .timeline
+                .update(TimelineMessage::PreviousItemSelected),
             TimelineMsg::ScrollDown => {
                 // Check if at bottom before scrolling
                 let was_at_bottom = self.state.timeline.is_at_bottom();
-                self.state.timeline.scroll_down();
+                self.state
+                    .timeline
+                    .update(TimelineMessage::NextItemSelected);
 
                 // If we were at bottom and still at bottom (can't scroll further), load more
                 if was_at_bottom && self.state.timeline.is_at_bottom() {
@@ -335,13 +341,25 @@ impl<'a> TearsApp<'a> {
                 }
             }
             // Select the note
-            TimelineMsg::Select(index) => self.state.timeline.select(index),
+            TimelineMsg::Select(index) => self
+                .state
+                .timeline
+                .update(TimelineMessage::ItemSelected { index }),
             // Deselect the current note
-            TimelineMsg::Deselect => self.state.timeline.deselect(),
+            TimelineMsg::Deselect => self
+                .state
+                .timeline
+                .update(TimelineMessage::ItemSelectionCleared),
             // Select the first note in the timeline
-            TimelineMsg::SelectFirst => self.state.timeline.select_first(),
+            TimelineMsg::SelectFirst => self
+                .state
+                .timeline
+                .update(TimelineMessage::FirstItemSelected),
             // Select the last note in the timeline
-            TimelineMsg::SelectLast => self.state.timeline.select_last(),
+            TimelineMsg::SelectLast => self
+                .state
+                .timeline
+                .update(TimelineMessage::LastItemSelected),
             // Load more older events
             TimelineMsg::LoadMore => {
                 return self.load_more_timeline_events();
@@ -396,8 +414,9 @@ impl<'a> TearsApp<'a> {
             }
             TimelineMsg::SelectTab(index) => {
                 // Select a specific tab by index
-                // Delegate to TimelineState
-                self.state.timeline.select_tab(index);
+                self.state
+                    .timeline
+                    .update(TimelineMessage::TabSelected { index });
                 log::debug!(
                     "Selected tab index: {}",
                     self.state.timeline.active_tab_index()
@@ -405,8 +424,7 @@ impl<'a> TearsApp<'a> {
             }
             TimelineMsg::NextTab => {
                 // Switch to the next tab (wraps around)
-                // Delegate to TimelineState
-                self.state.timeline.next_tab();
+                self.state.timeline.update(TimelineMessage::NextTabSelected);
                 log::debug!(
                     "Switched to next tab: {}",
                     self.state.timeline.active_tab_index()
@@ -414,8 +432,9 @@ impl<'a> TearsApp<'a> {
             }
             TimelineMsg::PrevTab => {
                 // Switch to the previous tab (wraps around)
-                // Delegate to TimelineState
-                self.state.timeline.prev_tab();
+                self.state
+                    .timeline
+                    .update(TimelineMessage::PreviousTabSelected);
                 log::debug!(
                     "Switched to previous tab: {}",
                     self.state.timeline.active_tab_index()
@@ -425,6 +444,7 @@ impl<'a> TearsApp<'a> {
                 // Open author timeline for the selected note's author
                 if let Some(event) = self.state.timeline.selected_note() {
                     let author_pubkey = event.author_pubkey();
+                    let Ok(author_npub) = author_pubkey.to_bech32();
                     let tab_type = TimelineTabType::UserTimeline {
                         pubkey: author_pubkey,
                     };
@@ -432,48 +452,45 @@ impl<'a> TearsApp<'a> {
                     // Check if tab already exists
                     if let Some(index) = self.state.timeline.find_tab_by_type(&tab_type) {
                         // Tab exists, just switch to it
-                        self.state.timeline.select_tab(index);
-                        log::info!("Switched to existing author timeline for {author_pubkey}");
-                        let short_hex = &author_pubkey.to_hex()[..8];
+                        self.state
+                            .timeline
+                            .update(TimelineMessage::TabSelected { index });
+
+                        log::info!("Switched to existing author timeline for {author_npub}");
                         self.state
                             .system
-                            .set_status_message(format!("Switched to timeline for {short_hex}"));
+                            .set_status_message(format!("Switched to timeline for {author_npub}"));
                     } else {
                         // Tab doesn't exist, create a new one
-                        match self.state.timeline.add_tab(tab_type.clone()) {
-                            Ok(new_index) => {
-                                self.state.timeline.select_tab(new_index);
-                                log::info!("Created new author timeline for {author_pubkey}");
-                                let short_hex = &author_pubkey.to_hex()[..8];
+                        self.state.timeline.update(TimelineMessage::TabAdded {
+                            tab_type: tab_type.clone(),
+                        });
 
-                                // Send subscription command
-                                match self.state.nostr.subscribe_tab(&tab_type) {
-                                    Ok(()) => {
-                                        log::info!(
-                                            "Sent SubscribeTimeline command for user: {author_pubkey}"
-                                        );
-                                        self.state.system.set_status_message(format!(
-                                            "Opening timeline for {short_hex}"
-                                        ));
-                                    }
-                                    Err(_e) => {
-                                        // NOTE: UI already opened the tab, so this is best-effort.
-                                        // If not connected yet, the subscription will not start.
-                                        log::warn!(
-                                            "Cannot subscribe: {author_pubkey} (nostr not ready)"
-                                        );
-                                        self.state.system.set_status_message(format!(
-                                            "Opened timeline for {short_hex}"
-                                        ));
-                                    }
+                        if let Some(_index) = self.state.timeline.find_tab_by_type(&tab_type) {
+                            log::info!("Created new author timeline for {author_npub}");
+
+                            // Send subscription command
+                            match self.state.nostr.subscribe_tab(&tab_type) {
+                                Ok(()) => {
+                                    log::info!(
+                                        "Sent SubscribeTimeline command for user: {author_npub}"
+                                    );
+                                    self.state.system.set_status_message(format!(
+                                        "Opening timeline for {author_npub}"
+                                    ));
+                                }
+                                Err(_e) => {
+                                    // NOTE: UI already opened the tab, so this is best-effort.
+                                    // If not connected yet, the subscription will not start.
+                                    log::warn!("Cannot subscribe: {author_npub} (nostr not ready)");
+                                    self.state.system.set_status_message(format!(
+                                        "Opened timeline for {author_npub}"
+                                    ));
                                 }
                             }
-                            Err(e) => {
-                                log::error!("Failed to create author timeline: {e}");
-                                self.state
-                                    .system
-                                    .set_status_message(format!("Failed to create tab: {e}"));
-                            }
+                        } else {
+                            log::error!("Failed to create author timeline");
+                            self.state.system.set_status_message("Failed to create tab");
                         }
                     }
                 } else {
@@ -487,20 +504,13 @@ impl<'a> TearsApp<'a> {
                 // Get the tab type before closing
                 let tab_type = self.state.timeline.active_tab().tab_type().clone();
 
-                // Try to close the tab
-                match self.state.timeline.remove_tab(current_index) {
-                    Ok(()) => {
-                        // Unsubscribe subscriptions associated with this tab.
-                        self.state.nostr.unsubscribe_tab(&tab_type);
+                // Close the tab
+                self.state.timeline.update(TimelineMessage::TabRemoved {
+                    index: current_index,
+                });
 
-                        log::info!("Closed tab at index {current_index}");
-                        self.state.system.set_status_message("Tab closed");
-                    }
-                    Err(e) => {
-                        log::warn!("Cannot close tab: {e}");
-                        self.state.system.set_status_message(e);
-                    }
-                }
+                // Unsubscribe subscriptions associated with this tab.
+                self.state.nostr.unsubscribe_tab(&tab_type);
             }
         }
         Command::none()
@@ -850,7 +860,9 @@ mod tests {
         app.state.system.stop_loading();
 
         // Set selection and status message
-        app.state.timeline.select_first();
+        app.state
+            .timeline
+            .update(TimelineMessage::FirstItemSelected);
         app.state.system.set_status_message("Test message");
 
         // KeyAction::Unselect should delegate to TimelineMsg::Deselect
@@ -886,7 +898,9 @@ mod tests {
         app.state.system.stop_loading();
 
         // Set selection and status message
-        app.state.timeline.select(5);
+        app.state
+            .timeline
+            .update(TimelineMessage::ItemSelected { index: 5 });
         app.state.system.set_status_message("Test message");
 
         // Simulate Escape key press and execute the TimelineMsg::Deselect directly
@@ -903,7 +917,9 @@ mod tests {
         app.state.system.stop_loading();
 
         // Set selection and status message
-        app.state.timeline.select(3);
+        app.state
+            .timeline
+            .update(TimelineMessage::ItemSelected { index: 3 });
         app.state.system.set_status_message("Test message");
 
         // Deselect
@@ -948,7 +964,9 @@ mod tests {
             .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         // Select somewhere in the middle
-        app.state.timeline.select(1);
+        app.state
+            .timeline
+            .update(TimelineMessage::ItemSelected { index: 1 });
 
         // Select first
         app.handle_timeline_msg(TimelineMsg::SelectFirst);
@@ -991,7 +1009,9 @@ mod tests {
             .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         // Start with no selection
-        app.state.timeline.deselect();
+        app.state
+            .timeline
+            .update(TimelineMessage::ItemSelectionCleared);
 
         // Select last
         app.handle_timeline_msg(TimelineMsg::SelectLast);
@@ -1164,7 +1184,9 @@ mod tests {
 
         // Timeline should be: [event3 (newest), event2 (middle), event1 (oldest)]
         // User selects index 1 (middle note - event2)
-        app.state.timeline.select(1);
+        app.state
+            .timeline
+            .update(TimelineMessage::ItemSelected { index: 1 });
 
         let selected_event_id = app
             .state
@@ -1219,7 +1241,9 @@ mod tests {
 
         // Timeline should be: [event2 (newest), event1 (oldest)]
         // User selects index 0 (newest note - event2)
-        app.state.timeline.select_first();
+        app.state
+            .timeline
+            .update(TimelineMessage::FirstItemSelected);
         let selected_event_id = app
             .state
             .timeline
@@ -1254,7 +1278,9 @@ mod tests {
         let mut app = create_test_app();
 
         // No selection
-        app.state.timeline.deselect();
+        app.state
+            .timeline
+            .update(TimelineMessage::ItemSelectionCleared);
 
         let keys = Keys::generate();
         let event = EventBuilder::text_note("test note")
