@@ -56,12 +56,13 @@ impl AppState {
     }
 
     /// Process a received Nostr event for a specific tab
+    // TODO: Handle commands
     pub fn process_nostr_event_for_tab(&mut self, event: Event, tab_type: &TimelineTabType) {
         match event.kind {
             Kind::TextNote => {
                 let current_loading_more_state = self.timeline.is_loading_more_for_tab(tab_type);
 
-                self.timeline.update(TimelineMessage::NoteAddedToTab {
+                let _ = self.timeline.update(TimelineMessage::NoteAddedToTab {
                     event,
                     tab_type: tab_type.clone(),
                 });
@@ -87,13 +88,19 @@ impl AppState {
                     self.user.insert_newer_profile(profile);
                 }
             }
-            Kind::Repost => self.timeline.update(TimelineMessage::RepostAdded { event }),
-            Kind::Reaction => self
-                .timeline
-                .update(TimelineMessage::ReactionAdded { event }),
-            Kind::ZapReceipt => self
-                .timeline
-                .update(TimelineMessage::ZapReceiptAdded { event }),
+            Kind::Repost => {
+                let _ = self.timeline.update(TimelineMessage::RepostAdded { event });
+            }
+            Kind::Reaction => {
+                let _ = self
+                    .timeline
+                    .update(TimelineMessage::ReactionAdded { event });
+            }
+            Kind::ZapReceipt => {
+                let _ = self
+                    .timeline
+                    .update(TimelineMessage::ZapReceiptAdded { event });
+            }
             _ => {}
         }
     }
@@ -141,7 +148,7 @@ mod tests {
         let user_tab = TimelineTabType::UserTimeline {
             pubkey: author_pubkey,
         };
-        state.timeline.update(TimelineMessage::TabAdded {
+        let _ = state.timeline.update(TimelineMessage::TabAdded {
             tab_type: user_tab.clone(),
         });
 
@@ -149,12 +156,12 @@ mod tests {
         state.process_nostr_event_for_tab(event, &user_tab);
 
         // Verify it was inserted only into the user timeline.
-        state
+        let _ = state
             .timeline
             .update(TimelineMessage::TabSelected { index: 0 });
         assert_eq!(state.timeline.len(), 0);
 
-        state
+        let _ = state
             .timeline
             .update(TimelineMessage::TabSelected { index: 1 });
         assert_eq!(state.timeline.len(), 1);
@@ -173,7 +180,7 @@ mod tests {
         state.system.stop_loading();
 
         // Ensure Home tab is active.
-        state
+        let _ = state
             .timeline
             .update(TimelineMessage::TabSelected { index: 0 });
 
@@ -183,7 +190,8 @@ mod tests {
         state.process_nostr_event_for_tab(event1, &TimelineTabType::Home);
 
         // Start loading more. (loading_more_since = oldest_timestamp = 1000)
-        state.timeline.update(TimelineMessage::LoadingMoreStarted);
+        let _ = state.timeline.update(TimelineMessage::LastItemSelected);
+        let _ = state.timeline.update(TimelineMessage::NextItemSelected);
         assert_eq!(
             state
                 .timeline
@@ -221,7 +229,7 @@ mod tests {
         let user_tab = TimelineTabType::UserTimeline {
             pubkey: author_pubkey,
         };
-        state.timeline.update(TimelineMessage::TabAdded {
+        let _ = state.timeline.update(TimelineMessage::TabAdded {
             tab_type: user_tab.clone(),
         });
 
@@ -229,7 +237,8 @@ mod tests {
         let event1 = create_text_note(&author_keys, "newer", Timestamp::from(1000))?;
         state.process_nostr_event_for_tab(event1, &user_tab);
 
-        state.timeline.update(TimelineMessage::LoadingMoreStarted);
+        let _ = state.timeline.update(TimelineMessage::LastItemSelected);
+        let _ = state.timeline.update(TimelineMessage::NextItemSelected);
         assert_eq!(
             state.timeline.is_loading_more_for_tab(&user_tab),
             Some(true)

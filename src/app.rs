@@ -324,42 +324,46 @@ impl<'a> TearsApp<'a> {
         self.state.system.clear_status_message();
 
         match msg {
-            TimelineMsg::ScrollUp => self
-                .state
-                .timeline
-                .update(TimelineMessage::PreviousItemSelected),
+            TimelineMsg::ScrollUp => {
+                return self
+                    .state
+                    .timeline
+                    .update(TimelineMessage::PreviousItemSelected);
+            }
             TimelineMsg::ScrollDown => {
-                // Check if at bottom before scrolling
-                let was_at_bottom = self.state.timeline.is_at_bottom();
-                self.state
+                return self
+                    .state
                     .timeline
                     .update(TimelineMessage::NextItemSelected);
-
-                // If we were at bottom and still at bottom (can't scroll further), load more
-                if was_at_bottom && self.state.timeline.is_at_bottom() {
-                    return Command::message(AppMsg::Timeline(TimelineMsg::LoadMore));
-                }
             }
             // Select the note
-            TimelineMsg::Select(index) => self
-                .state
-                .timeline
-                .update(TimelineMessage::ItemSelected { index }),
+            TimelineMsg::Select(index) => {
+                return self
+                    .state
+                    .timeline
+                    .update(TimelineMessage::ItemSelected { index });
+            }
             // Deselect the current note
-            TimelineMsg::Deselect => self
-                .state
-                .timeline
-                .update(TimelineMessage::ItemSelectionCleared),
+            TimelineMsg::Deselect => {
+                return self
+                    .state
+                    .timeline
+                    .update(TimelineMessage::ItemSelectionCleared);
+            }
             // Select the first note in the timeline
-            TimelineMsg::SelectFirst => self
-                .state
-                .timeline
-                .update(TimelineMessage::FirstItemSelected),
+            TimelineMsg::SelectFirst => {
+                return self
+                    .state
+                    .timeline
+                    .update(TimelineMessage::FirstItemSelected);
+            }
             // Select the last note in the timeline
-            TimelineMsg::SelectLast => self
-                .state
-                .timeline
-                .update(TimelineMessage::LastItemSelected),
+            TimelineMsg::SelectLast => {
+                return self
+                    .state
+                    .timeline
+                    .update(TimelineMessage::LastItemSelected);
+            }
             // Load more older events
             TimelineMsg::LoadMore => {
                 return self.load_more_timeline_events();
@@ -414,7 +418,8 @@ impl<'a> TearsApp<'a> {
             }
             TimelineMsg::SelectTab(index) => {
                 // Select a specific tab by index
-                self.state
+                let _ = self
+                    .state
                     .timeline
                     .update(TimelineMessage::TabSelected { index });
                 log::debug!(
@@ -424,7 +429,7 @@ impl<'a> TearsApp<'a> {
             }
             TimelineMsg::NextTab => {
                 // Switch to the next tab (wraps around)
-                self.state.timeline.update(TimelineMessage::NextTabSelected);
+                let _ = self.state.timeline.update(TimelineMessage::NextTabSelected);
                 log::debug!(
                     "Switched to next tab: {}",
                     self.state.timeline.active_tab_index()
@@ -432,7 +437,8 @@ impl<'a> TearsApp<'a> {
             }
             TimelineMsg::PrevTab => {
                 // Switch to the previous tab (wraps around)
-                self.state
+                let _ = self
+                    .state
                     .timeline
                     .update(TimelineMessage::PreviousTabSelected);
                 log::debug!(
@@ -452,7 +458,8 @@ impl<'a> TearsApp<'a> {
                     // Check if tab already exists
                     if let Some(index) = self.state.timeline.find_tab_by_type(&tab_type) {
                         // Tab exists, just switch to it
-                        self.state
+                        let _ = self
+                            .state
                             .timeline
                             .update(TimelineMessage::TabSelected { index });
 
@@ -462,7 +469,7 @@ impl<'a> TearsApp<'a> {
                             .set_status_message(format!("Switched to timeline for {author_npub}"));
                     } else {
                         // Tab doesn't exist, create a new one
-                        self.state.timeline.update(TimelineMessage::TabAdded {
+                        let _ = self.state.timeline.update(TimelineMessage::TabAdded {
                             tab_type: tab_type.clone(),
                         });
 
@@ -505,7 +512,7 @@ impl<'a> TearsApp<'a> {
                 let tab_type = self.state.timeline.active_tab().tab_type().clone();
 
                 // Close the tab
-                self.state.timeline.update(TimelineMessage::TabRemoved {
+                let _ = self.state.timeline.update(TimelineMessage::TabRemoved {
                     index: current_index,
                 });
 
@@ -860,7 +867,8 @@ mod tests {
         app.state.system.stop_loading();
 
         // Set selection and status message
-        app.state
+        let _ = app
+            .state
             .timeline
             .update(TimelineMessage::FirstItemSelected);
         app.state.system.set_status_message("Test message");
@@ -898,7 +906,8 @@ mod tests {
         app.state.system.stop_loading();
 
         // Set selection and status message
-        app.state
+        let _ = app
+            .state
             .timeline
             .update(TimelineMessage::ItemSelected { index: 5 });
         app.state.system.set_status_message("Test message");
@@ -917,7 +926,8 @@ mod tests {
         app.state.system.stop_loading();
 
         // Set selection and status message
-        app.state
+        let _ = app
+            .state
             .timeline
             .update(TimelineMessage::ItemSelected { index: 3 });
         app.state.system.set_status_message("Test message");
@@ -964,7 +974,8 @@ mod tests {
             .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         // Select somewhere in the middle
-        app.state
+        let _ = app
+            .state
             .timeline
             .update(TimelineMessage::ItemSelected { index: 1 });
 
@@ -1009,7 +1020,8 @@ mod tests {
             .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         // Start with no selection
-        app.state
+        let _ = app
+            .state
             .timeline
             .update(TimelineMessage::ItemSelectionCleared);
 
@@ -1185,7 +1197,8 @@ mod tests {
 
         // Timeline should be: [event3 (newest), event2 (middle), event1 (oldest)]
         // User selects index 1 (middle note - event2)
-        app.state
+        let _ = app
+            .state
             .timeline
             .update(TimelineMessage::ItemSelected { index: 1 });
 
@@ -1242,7 +1255,8 @@ mod tests {
 
         // Timeline should be: [event2 (newest), event1 (oldest)]
         // User selects index 0 (newest note - event2)
-        app.state
+        let _ = app
+            .state
             .timeline
             .update(TimelineMessage::FirstItemSelected);
         let selected_event_id = app
@@ -1279,7 +1293,8 @@ mod tests {
         let mut app = create_test_app();
 
         // No selection
-        app.state
+        let _ = app
+            .state
             .timeline
             .update(TimelineMessage::ItemSelectionCleared);
 
