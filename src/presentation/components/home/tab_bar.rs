@@ -5,7 +5,7 @@ use ratatui::prelude::*;
 
 use crate::core::state::AppState;
 use crate::domain::text::shorten_npub;
-use crate::model::timeline::TimelineTabType;
+use crate::model::timeline::tab::TimelineTabType;
 
 /// Tab bar component
 ///

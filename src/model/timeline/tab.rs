@@ -39,6 +39,7 @@ pub enum TimelineTabType {
 /// - Selection-related: Control which item is currently selected
 /// - Pagination-related: Control loading more items
 /// - Tab-specific: Coordinate multiple children (e.g., adding a note)
+// TODO: NextItemSelected and LoadingMoreStarted
 pub enum Message {
     // Selection-related messages (delegated to Selection)
     /// A specific item was selected by index
@@ -125,6 +126,16 @@ impl TimelineTab {
 
     pub fn is_empty(&self) -> bool {
         self.notes.is_empty()
+    }
+
+    /// Check if the user has scrolled to the bottom of the timeline
+    pub fn is_at_bottom(&self) -> bool {
+        if self.is_empty() {
+            return false;
+        }
+
+        let max_index = self.len().saturating_sub(1);
+        self.selected_index() == Some(max_index)
     }
 
     /// Update the timeline tab state based on a message
