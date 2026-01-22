@@ -4,15 +4,16 @@
 
 use ratatui::prelude::*;
 
-use crate::core::state::AppState;
+use crate::{
+    core::state::AppState,
+    presentation::widgets::tab_bar::{TabBarWidget, ViewContext as TabBarViewContext},
+};
 
 pub mod input;
 pub mod list;
-pub mod tab_bar;
 
 pub use input::HomeInputComponent;
 pub use list::HomeListComponent;
-pub use tab_bar::TabBarComponent;
 
 /// Home component
 ///
@@ -24,8 +25,6 @@ pub struct HomeComponent<'a> {
     pub(crate) input: HomeInputComponent<'a>,
     /// Timeline list component
     list: HomeListComponent,
-    /// Tab bar component
-    tab_bar: TabBarComponent,
 }
 
 impl<'a> HomeComponent<'a> {
@@ -34,7 +33,6 @@ impl<'a> HomeComponent<'a> {
         Self {
             input: HomeInputComponent::new(),
             list: HomeListComponent::new(),
-            tab_bar: TabBarComponent::new(),
         }
     }
 
@@ -52,7 +50,11 @@ impl<'a> HomeComponent<'a> {
             .split(area);
 
         // Render tabs using the tab bar component
-        self.tab_bar.view(state, frame, chunks[0]);
+        let tab_bar_ctx = TabBarViewContext {
+            profiles: state.user.profiles(),
+        };
+        let tab_bar = TabBarWidget::new(&state.timeline, tab_bar_ctx);
+        frame.render_widget(tab_bar, chunks[0]);
 
         // Render timeline in the content area
         self.list.view(state, frame, chunks[1]);
