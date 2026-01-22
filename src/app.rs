@@ -682,11 +682,16 @@ impl<'a> TearsApp<'a> {
         match msg {
             NostrSubscriptionMessage::Ready { sender } => {
                 log::info!("NostrEvents subscription ready");
+                let tab_title = self
+                    .state
+                    .timeline
+                    .active_tab()
+                    .tab_title(self.state.user.profiles());
                 self.state.nostr.set_command_sender(sender);
                 self.state
                     .status_bar
                     .update(StatusBarMessage::MessageChanged {
-                        label: "Home".to_owned(),
+                        label: tab_title,
                         message: "loading...".to_owned(),
                     });
             }
@@ -729,10 +734,15 @@ impl<'a> TearsApp<'a> {
                     } = message
                     {
                         if self.state.system.is_loading() {
+                            let tab_title = self
+                                .state
+                                .timeline
+                                .active_tab()
+                                .tab_title(self.state.user.profiles());
                             self.state
                                 .status_bar
                                 .update(StatusBarMessage::MessageChanged {
-                                    label: "Home".to_owned(),
+                                    label: tab_title,
                                     message: "loaded".to_owned(),
                                 });
                             self.state.system.stop_loading();
@@ -790,13 +800,9 @@ impl<'a> TearsApp<'a> {
         };
 
         // Get the active tab type
-        let tab_type = self.state.timeline.active_tab().tab_type().clone();
-        let tab_title = match tab_type {
-            TimelineTabType::Home => "Home".to_string(),
-            TimelineTabType::UserTimeline { pubkey } => {
-                format!("User {}", &pubkey.to_hex()[..8])
-            }
-        };
+        let tab = self.state.timeline.active_tab();
+        let tab_type = tab.tab_type().clone();
+        let tab_title = tab.tab_title(self.state.user.profiles());
 
         // Mark loading started
         match self

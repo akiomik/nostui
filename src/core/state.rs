@@ -75,20 +75,11 @@ impl AppState {
 
                 if current_loading_more_state == Some(true) && new_loading_more_state == Some(false)
                 {
-                    match tab_type {
-                        TimelineTabType::Home => {
-                            self.status_bar.update(Message::MessageChanged {
-                                label: "Home".to_owned(),
-                                message: "loaded more".to_owned(),
-                            });
-                        }
-                        TimelineTabType::UserTimeline { .. } => {
-                            self.status_bar.update(Message::MessageChanged {
-                                label: "Author Timeline".to_owned(),
-                                message: "loaded more".to_owned(),
-                            });
-                        }
-                    }
+                    let tab_title = self.timeline.active_tab().tab_title(self.user.profiles());
+                    self.status_bar.update(Message::MessageChanged {
+                        label: tab_title,
+                        message: "loaded more".to_owned(),
+                    });
                 }
             }
             Kind::Metadata => {
@@ -119,7 +110,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::nostr::Profile;
+    use crate::domain::{nostr::Profile, text::shorten_npub};
 
     fn create_text_note(keys: &Keys, content: &str, created_at: Timestamp) -> Result<Event> {
         Ok(EventBuilder::text_note(content)
@@ -236,6 +227,7 @@ mod tests {
 
         let author_keys = Keys::generate();
         let author_pubkey = author_keys.public_key();
+        let Ok(author_npub) = author_pubkey.to_bech32();
         let user_tab = TimelineTabType::UserTimeline {
             pubkey: author_pubkey,
         };
@@ -260,7 +252,7 @@ mod tests {
 
         assert_eq!(
             state.status_bar.message(),
-            &Some("[Author Timeline] loaded more".to_owned())
+            &Some(format!("[{}] loaded more", shorten_npub(author_npub)))
         );
         assert_eq!(
             state.timeline.is_loading_more_for_tab(&user_tab),
