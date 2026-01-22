@@ -118,7 +118,7 @@ mod tests {
         let note_keys = Keys::generate();
         let japanese_text = "初force pushめでたい";
         let event = EventBuilder::text_note(japanese_text).sign_with_keys(&note_keys)?;
-        state.timeline.update(Message::NoteAddedToTab {
+        let _ = state.timeline.update(Message::NoteAddedToTab {
             event,
             tab_type: TimelineTabType::Home,
         });

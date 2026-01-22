@@ -6,8 +6,10 @@ pub mod text_note;
 use std::collections::HashMap;
 
 use nostr_sdk::prelude::*;
+use tears::Command;
 
 use crate::{
+    core::message::AppMsg,
     domain::nostr::SortableEventId,
     model::timeline::{
         tab::{Message as TabMessage, TimelineTab, TimelineTabType},
@@ -37,7 +39,6 @@ pub enum Message {
         index: usize,
     },
     ItemSelectionCleared,
-    LoadingMoreStarted,
     TabAdded {
         tab_type: TimelineTabType,
     },
@@ -162,7 +163,7 @@ impl Timeline {
         tab.is_at_bottom()
     }
 
-    pub fn update(&mut self, message: Message) {
+    pub fn update(&mut self, message: Message) -> Command<AppMsg> {
         match message {
             Message::NoteAddedToTab { event, tab_type } => {
                 // Find the tab index for the specified tab type
@@ -171,7 +172,7 @@ impl Timeline {
                     None => {
                         // Tab not found - cannot add note
                         log::warn!("Cannot add note: tab {tab_type:?} not found");
-                        return;
+                        return Command::none();
                     }
                 };
 
@@ -187,15 +188,7 @@ impl Timeline {
                 let tab = &mut self.tabs[tab_index];
 
                 // Store the insert result
-                tab.update(TabMessage::NoteAdded(sortable_id));
-
-                // Check if this event completes a LoadMore operation
-                if let Some(loading_since) = tab.loading_more_since() {
-                    if created_at < loading_since {
-                        // An older event arrived - loading completed
-                        tab.update(TabMessage::LoadingMoreFinished);
-                    }
-                }
+                return tab.update(TabMessage::NoteAdded(sortable_id));
             }
             Message::ReactionAdded { event } => {
                 if let Some(target_event_id) = Self::find_event_id_from_last_e_tag(&event) {
@@ -220,37 +213,33 @@ impl Timeline {
             }
             Message::PreviousItemSelected => {
                 let tab = self.active_tab_mut();
-                tab.update(TabMessage::PreviousItemSelected);
+                return tab.update(TabMessage::PreviousItemSelected);
             }
             Message::NextItemSelected => {
                 let tab = self.active_tab_mut();
-                tab.update(TabMessage::NextItemSelected);
+                return tab.update(TabMessage::NextItemSelected);
             }
             Message::FirstItemSelected => {
                 let tab = self.active_tab_mut();
-                tab.update(TabMessage::FirstItemSelected)
+                return tab.update(TabMessage::FirstItemSelected);
             }
             Message::LastItemSelected => {
                 let tab = self.active_tab_mut();
-                tab.update(TabMessage::LastItemSelected);
+                return tab.update(TabMessage::LastItemSelected);
             }
             Message::ItemSelected { index } => {
                 let tab = self.active_tab_mut();
-                tab.update(TabMessage::ItemSelected(index));
+                return tab.update(TabMessage::ItemSelected(index));
             }
             Message::ItemSelectionCleared => {
                 let tab = self.active_tab_mut();
-                tab.update(TabMessage::SelectionCleared);
-            }
-            Message::LoadingMoreStarted => {
-                let tab = self.active_tab_mut();
-                tab.update(TabMessage::LoadingMoreStarted);
+                return tab.update(TabMessage::SelectionCleared);
             }
             Message::TabAdded { tab_type } => {
                 // Check if a tab with the same type already exists
                 if self.find_tab_by_type(&tab_type).is_some() {
                     log::warn!("Tab with this type already exists");
-                    return;
+                    return Command::none();
                 }
 
                 // Create and add the new tab
@@ -264,13 +253,13 @@ impl Timeline {
                 // Validate index
                 if index >= self.tabs.len() {
                     log::warn!("Tab index out of bounds");
-                    return;
+                    return Command::none();
                 }
 
                 // Cannot remove the Home tab
                 if matches!(self.tabs[index].tab_type(), TimelineTabType::Home) {
                     log::warn!("Cannot remove the Home tab");
-                    return;
+                    return Command::none();
                 }
 
                 // Remove the tab
@@ -305,6 +294,8 @@ impl Timeline {
                 self.active_tab_index = self.active_tab_index.saturating_sub(1);
             }
         }
+
+        Command::none()
     }
 }
 
@@ -399,7 +390,7 @@ mod tests {
         );
 
         // Add a user timeline tab
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
 
@@ -415,7 +406,7 @@ mod tests {
         let event = create_test_event(1000, 1, "Hello, Nostr!");
         let event_id = event.id;
 
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event,
             tab_type: TimelineTabType::Home,
         });
@@ -432,7 +423,7 @@ mod tests {
         let event = create_test_event(1000, 1, "Hello, Nostr!");
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event,
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
@@ -448,7 +439,7 @@ mod tests {
 
         // Add a user timeline tab
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
 
@@ -456,12 +447,12 @@ mod tests {
         let event = create_test_event(1000, 1, "Shared note");
         let event_id = event.id;
 
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event: event.clone(),
             tab_type: TimelineTabType::Home,
         });
 
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event,
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
@@ -484,17 +475,17 @@ mod tests {
         let event2 = create_test_event(1000, 2, "Oldest");
         let event3 = create_test_event(2000, 3, "Middle");
 
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event: event2,
             tab_type: TimelineTabType::Home,
         });
 
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event: event1,
             tab_type: TimelineTabType::Home,
         });
 
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event: event3,
             tab_type: TimelineTabType::Home,
         });
@@ -511,14 +502,14 @@ mod tests {
         let text_event = create_test_event(1000, 1, "Original note");
         let text_event_id = text_event.id;
 
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event: text_event.clone(),
             tab_type: TimelineTabType::Home,
         });
 
         // Add a reaction to the text note
         let reaction_event = create_reaction_event(&text_event, 1001);
-        timeline.update(Message::ReactionAdded {
+        let _ = timeline.update(Message::ReactionAdded {
             event: reaction_event,
         });
 
@@ -538,7 +529,7 @@ mod tests {
         let nonexistent_event = create_test_event(999, 99, "Nonexistent");
         let reaction_event = create_reaction_event(&nonexistent_event, 1000);
 
-        timeline.update(Message::ReactionAdded {
+        let _ = timeline.update(Message::ReactionAdded {
             event: reaction_event,
         });
 
@@ -554,14 +545,14 @@ mod tests {
         let text_event = create_test_event(1000, 1, "Original note");
         let text_event_id = text_event.id;
 
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event: text_event.clone(),
             tab_type: TimelineTabType::Home,
         });
 
         // Add a repost
         let repost_event = create_repost_event(&text_event, 1001);
-        timeline.update(Message::RepostAdded {
+        let _ = timeline.update(Message::RepostAdded {
             event: repost_event,
         });
 
@@ -581,14 +572,14 @@ mod tests {
         let text_event = create_test_event(1000, 1, "Original note");
         let text_event_id = text_event.id;
 
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event: text_event,
             tab_type: TimelineTabType::Home,
         });
 
         // Add a zap receipt
         let zap_event = create_zap_receipt_event(text_event_id, 1001);
-        timeline.update(Message::ZapReceiptAdded { event: zap_event });
+        let _ = timeline.update(Message::ZapReceiptAdded { event: zap_event });
 
         // Verify the zap receipt was added
         let note = timeline
@@ -605,18 +596,18 @@ mod tests {
         // Add some notes
         for i in 0..5 {
             let event = create_test_event(1000 + i, i as u8, &format!("Note {i}"));
-            timeline.update(Message::NoteAddedToTab {
+            let _ = timeline.update(Message::NoteAddedToTab {
                 event,
                 tab_type: TimelineTabType::Home,
             });
         }
 
         // Test selecting an item
-        timeline.update(Message::ItemSelected { index: 2 });
+        let _ = timeline.update(Message::ItemSelected { index: 2 });
         assert_eq!(timeline.selected_index(), Some(2));
 
         // Test clearing selection
-        timeline.update(Message::ItemSelectionCleared);
+        let _ = timeline.update(Message::ItemSelectionCleared);
         assert_eq!(timeline.selected_index(), None);
     }
 
@@ -627,26 +618,26 @@ mod tests {
         // Add some notes
         for i in 0..5 {
             let event = create_test_event(1000 + i, i as u8, &format!("Note {i}"));
-            timeline.update(Message::NoteAddedToTab {
+            let _ = timeline.update(Message::NoteAddedToTab {
                 event,
                 tab_type: TimelineTabType::Home,
             });
         }
 
         // Select first item
-        timeline.update(Message::FirstItemSelected);
+        let _ = timeline.update(Message::FirstItemSelected);
         assert_eq!(timeline.selected_index(), Some(0));
 
         // Move to next item
-        timeline.update(Message::NextItemSelected);
+        let _ = timeline.update(Message::NextItemSelected);
         assert_eq!(timeline.selected_index(), Some(1));
 
         // Move to previous item
-        timeline.update(Message::PreviousItemSelected);
+        let _ = timeline.update(Message::PreviousItemSelected);
         assert_eq!(timeline.selected_index(), Some(0));
 
         // Move to last item
-        timeline.update(Message::LastItemSelected);
+        let _ = timeline.update(Message::LastItemSelected);
         assert_eq!(timeline.selected_index(), Some(4));
     }
 
@@ -657,12 +648,12 @@ mod tests {
         let event = create_test_event(1000, 1, "Test note");
         let event_id = event.id;
 
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event,
             tab_type: TimelineTabType::Home,
         });
 
-        timeline.update(Message::ItemSelected { index: 0 });
+        let _ = timeline.update(Message::ItemSelected { index: 0 });
 
         let selected = timeline.selected_note();
         assert!(selected.is_some());
@@ -679,7 +670,7 @@ mod tests {
         let event = create_test_event(1000, 1, "Test note");
         let event_id = event.id;
 
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event,
             tab_type: TimelineTabType::Home,
         });
@@ -693,18 +684,24 @@ mod tests {
     }
 
     #[test]
-    fn test_loading_more_started() {
+    fn test_loading_more_started_when_scrolling_to_bottom() {
         let mut timeline = Timeline::default();
 
-        // Add a note to establish a timestamp
-        let event = create_test_event(1000, 1, "Test note");
-        timeline.update(Message::NoteAddedToTab {
-            event,
-            tab_type: TimelineTabType::Home,
-        });
+        // Add some notes
+        for i in 0..3 {
+            let event = create_test_event(1000 + i, i as u8, &format!("Note {i}"));
+            let _ = timeline.update(Message::NoteAddedToTab {
+                event,
+                tab_type: TimelineTabType::Home,
+            });
+        }
 
-        // Start loading more
-        timeline.update(Message::LoadingMoreStarted);
+        // Select the last item (bottom)
+        let _ = timeline.update(Message::LastItemSelected);
+        assert!(timeline.is_at_bottom());
+
+        // Try to scroll down - this should trigger loading more
+        let _ = timeline.update(Message::NextItemSelected);
 
         // Verify loading state
         let is_loading = timeline.is_loading_more_for_tab(&TimelineTabType::Home);
@@ -717,13 +714,14 @@ mod tests {
 
         // Add initial note
         let event1 = create_test_event(2000, 1, "Recent note");
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event: event1,
             tab_type: TimelineTabType::Home,
         });
 
-        // Start loading more
-        timeline.update(Message::LoadingMoreStarted);
+        // Select the last item and scroll down to trigger loading more
+        let _ = timeline.update(Message::LastItemSelected);
+        let _ = timeline.update(Message::NextItemSelected);
         assert_eq!(
             timeline.is_loading_more_for_tab(&TimelineTabType::Home),
             Some(true)
@@ -731,7 +729,7 @@ mod tests {
 
         // Add an older note (timestamp < loading_more_since)
         let event2 = create_test_event(1000, 2, "Older note");
-        timeline.update(Message::NoteAddedToTab {
+        let _ = timeline.update(Message::NoteAddedToTab {
             event: event2,
             tab_type: TimelineTabType::Home,
         });
@@ -753,18 +751,18 @@ mod tests {
         // Add some notes
         for i in 0..5 {
             let event = create_test_event(1000 + i, i as u8, &format!("Note {i}"));
-            timeline.update(Message::NoteAddedToTab {
+            let _ = timeline.update(Message::NoteAddedToTab {
                 event,
                 tab_type: TimelineTabType::Home,
             });
         }
 
         // Select first item - not at bottom
-        timeline.update(Message::FirstItemSelected);
+        let _ = timeline.update(Message::FirstItemSelected);
         assert!(!timeline.is_at_bottom());
 
         // Select last item - at bottom
-        timeline.update(Message::LastItemSelected);
+        let _ = timeline.update(Message::LastItemSelected);
         assert!(timeline.is_at_bottom());
     }
 
@@ -774,7 +772,7 @@ mod tests {
         assert_eq!(timeline.tabs().len(), 1);
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
 
@@ -791,12 +789,12 @@ mod tests {
         let mut timeline = Timeline::default();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
 
         // Try to add the same tab again
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
 
@@ -809,7 +807,7 @@ mod tests {
         let mut timeline = Timeline::default();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
 
@@ -817,7 +815,7 @@ mod tests {
         assert_eq!(timeline.active_tab_index(), 1);
 
         // Remove the user timeline tab
-        timeline.update(Message::TabRemoved { index: 1 });
+        let _ = timeline.update(Message::TabRemoved { index: 1 });
 
         assert_eq!(timeline.tabs().len(), 1);
         assert_eq!(timeline.active_tab_index(), 0);
@@ -828,7 +826,7 @@ mod tests {
         let mut timeline = Timeline::default();
 
         // Try to remove the Home tab
-        timeline.update(Message::TabRemoved { index: 0 });
+        let _ = timeline.update(Message::TabRemoved { index: 0 });
 
         // Home tab should still exist
         assert_eq!(timeline.tabs().len(), 1);
@@ -840,7 +838,7 @@ mod tests {
         let mut timeline = Timeline::default();
 
         // Try to remove a non-existent tab
-        timeline.update(Message::TabRemoved { index: 10 });
+        let _ = timeline.update(Message::TabRemoved { index: 10 });
 
         // Should have no effect
         assert_eq!(timeline.tabs().len(), 1);
@@ -853,10 +851,10 @@ mod tests {
         let pubkey1 = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let pubkey2 = PublicKey::from_slice(&[2u8; 32]).expect("Valid pubkey");
 
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey: pubkey1 },
         });
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey: pubkey2 },
         });
 
@@ -865,7 +863,7 @@ mod tests {
         assert_eq!(timeline.active_tab_index(), 2);
 
         // Remove the middle tab
-        timeline.update(Message::TabRemoved { index: 1 });
+        let _ = timeline.update(Message::TabRemoved { index: 1 });
 
         // Now we have: [Home, User2], active should be adjusted to 1
         assert_eq!(timeline.tabs().len(), 2);
@@ -877,7 +875,7 @@ mod tests {
         let mut timeline = Timeline::default();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
 
@@ -885,7 +883,7 @@ mod tests {
         assert_eq!(timeline.active_tab_index(), 1);
 
         // Remove the active tab
-        timeline.update(Message::TabRemoved { index: 1 });
+        let _ = timeline.update(Message::TabRemoved { index: 1 });
 
         // Should fall back to index 0 (Home)
         assert_eq!(timeline.tabs().len(), 1);
@@ -897,16 +895,16 @@ mod tests {
         let mut timeline = Timeline::default();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
 
         // Switch to Home tab
-        timeline.update(Message::TabSelected { index: 0 });
+        let _ = timeline.update(Message::TabSelected { index: 0 });
         assert_eq!(timeline.active_tab_index(), 0);
 
         // Switch back to user timeline
-        timeline.update(Message::TabSelected { index: 1 });
+        let _ = timeline.update(Message::TabSelected { index: 1 });
         assert_eq!(timeline.active_tab_index(), 1);
     }
 
@@ -914,7 +912,7 @@ mod tests {
     fn test_tab_selected_out_of_bounds() {
         let mut timeline = Timeline::default();
 
-        timeline.update(Message::TabSelected { index: 10 });
+        let _ = timeline.update(Message::TabSelected { index: 10 });
 
         // Should have no effect
         assert_eq!(timeline.active_tab_index(), 0);
@@ -925,20 +923,20 @@ mod tests {
         let mut timeline = Timeline::default();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
 
         // Start at Home (index 0)
-        timeline.update(Message::TabSelected { index: 0 });
+        let _ = timeline.update(Message::TabSelected { index: 0 });
         assert_eq!(timeline.active_tab_index(), 0);
 
         // Move to next tab
-        timeline.update(Message::NextTabSelected);
+        let _ = timeline.update(Message::NextTabSelected);
         assert_eq!(timeline.active_tab_index(), 1);
 
         // Try to move beyond last tab
-        timeline.update(Message::NextTabSelected);
+        let _ = timeline.update(Message::NextTabSelected);
         assert_eq!(timeline.active_tab_index(), 1); // Should stay at last tab
     }
 
@@ -947,7 +945,7 @@ mod tests {
         let mut timeline = Timeline::default();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
 
@@ -955,11 +953,11 @@ mod tests {
         assert_eq!(timeline.active_tab_index(), 1);
 
         // Move to previous tab
-        timeline.update(Message::PreviousTabSelected);
+        let _ = timeline.update(Message::PreviousTabSelected);
         assert_eq!(timeline.active_tab_index(), 0);
 
         // Try to move before first tab
-        timeline.update(Message::PreviousTabSelected);
+        let _ = timeline.update(Message::PreviousTabSelected);
         assert_eq!(timeline.active_tab_index(), 0); // Should stay at first tab
     }
 
@@ -969,15 +967,15 @@ mod tests {
 
         // Add a user timeline tab
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
 
         // Add notes to Home tab
-        timeline.update(Message::TabSelected { index: 0 });
+        let _ = timeline.update(Message::TabSelected { index: 0 });
         for i in 0..3 {
             let event = create_test_event(1000 + i, i as u8, &format!("Home note {i}"));
-            timeline.update(Message::NoteAddedToTab {
+            let _ = timeline.update(Message::NoteAddedToTab {
                 event,
                 tab_type: TimelineTabType::Home,
             });
@@ -986,7 +984,7 @@ mod tests {
         // Add notes to user timeline tab
         for i in 3..6 {
             let event = create_test_event(2000 + i, i as u8, &format!("User note {i}"));
-            timeline.update(Message::NoteAddedToTab {
+            let _ = timeline.update(Message::NoteAddedToTab {
                 event,
                 tab_type: TimelineTabType::UserTimeline { pubkey },
             });
@@ -1002,12 +1000,12 @@ mod tests {
         assert_eq!(timeline.notes.len(), 6);
 
         // Switch to user timeline and select an item
-        timeline.update(Message::TabSelected { index: 1 });
-        timeline.update(Message::FirstItemSelected);
+        let _ = timeline.update(Message::TabSelected { index: 1 });
+        let _ = timeline.update(Message::FirstItemSelected);
         assert_eq!(timeline.selected_index(), Some(0));
 
         // Switch back to Home - selection should be independent
-        timeline.update(Message::TabSelected { index: 0 });
+        let _ = timeline.update(Message::TabSelected { index: 0 });
         assert_eq!(timeline.selected_index(), None);
     }
 
@@ -1059,7 +1057,7 @@ mod tests {
         assert_eq!(timeline.last_tab_index(), 0);
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        timeline.update(Message::TabAdded {
+        let _ = timeline.update(Message::TabAdded {
             tab_type: TimelineTabType::UserTimeline { pubkey },
         });
 
