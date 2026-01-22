@@ -7,13 +7,14 @@ use ratatui::prelude::*;
 
 use crate::{
     core::state::AppState,
-    presentation::widgets::status_bar::{StatusBarWidget, ViewContext as StatusBarViewContext},
+    presentation::widgets::{
+        fps::FpsWidget,
+        status_bar::{StatusBarWidget, ViewContext as StatusBarViewContext},
+    },
 };
 
-pub mod fps;
 pub mod home;
 
-pub use fps::FpsComponent;
 pub use home::HomeComponent;
 
 /// Collection of all components
@@ -22,7 +23,6 @@ pub use home::HomeComponent;
 /// Components are stateless and receive state as parameters during render.
 pub struct Components<'a> {
     pub home: HomeComponent<'a>,
-    pub fps: FpsComponent,
 }
 
 impl<'a> Components<'a> {
@@ -30,7 +30,6 @@ impl<'a> Components<'a> {
     pub fn new() -> Self {
         Self {
             home: HomeComponent::new(),
-            fps: FpsComponent::new(),
         }
     }
 
@@ -51,7 +50,8 @@ impl<'a> Components<'a> {
             .split(area);
 
         // Render FPS counter in top row
-        self.fps.view(state, frame, layout[0]);
+        let fps = FpsWidget::new(state.fps.clone());
+        frame.render_widget(fps, layout[0]);
 
         // Render home component in main area
         self.home.view(state, frame, layout[1]);
