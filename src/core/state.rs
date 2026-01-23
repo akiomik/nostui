@@ -6,16 +6,15 @@ use crate::{
     model::{
         editor::Editor,
         fps::Fps,
+        nostr::Nostr,
         status_bar::{Message, StatusBar},
         timeline::{tab::TimelineTabType, Message as TimelineMessage, Timeline},
     },
 };
 
-pub mod nostr;
 pub mod system;
 pub mod user;
 
-pub use nostr::NostrState;
 pub use system::SystemState;
 pub use user::UserState;
 
@@ -26,7 +25,7 @@ pub struct AppState<'a> {
     pub editor: Editor<'a>,
     pub user: UserState,
     pub system: SystemState,
-    pub nostr: NostrState,
+    pub nostr: Nostr,
     pub config: ConfigState,
     pub fps: Fps,
     pub status_bar: StatusBar,

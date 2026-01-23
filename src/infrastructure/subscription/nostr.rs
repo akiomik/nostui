@@ -32,7 +32,7 @@ pub enum NostrCommand {
     /// Load more timeline events before the specified timestamp for a specific tab
     LoadMoreTimeline {
         tab_type: TimelineTabType,
-        until: Timestamp,
+        since: Timestamp,
     },
     /// Subscribe to a specific timeline tab
     SubscribeTimeline { tab_type: TimelineTabType },
@@ -215,7 +215,7 @@ impl NostrEvents {
                     });
                 }
             }
-            NostrCommand::LoadMoreTimeline { tab_type, until } => {
+            NostrCommand::LoadMoreTimeline { tab_type, since } => {
                 // Load more timeline events before the specified timestamp
                 let filter = match &tab_type {
                     TimelineTabType::Home => {
@@ -234,13 +234,13 @@ impl NostrEvents {
                         Filter::new()
                             .authors(followings)
                             .kinds(TIMELINE_KINDS)
-                            .until(until)
+                            .until(since) // flipped
                             .limit(DEFAULT_TIMELINE_LIMIT)
                     }
                     TimelineTabType::UserTimeline { pubkey } => Filter::new()
                         .authors(vec![*pubkey])
                         .kinds(vec![Kind::TextNote, Kind::Repost])
-                        .until(until)
+                        .until(since) // flipped
                         .limit(DEFAULT_TIMELINE_LIMIT),
                 };
 
