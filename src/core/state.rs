@@ -12,10 +12,8 @@ use crate::{
     },
 };
 
-pub mod system;
 pub mod user;
 
-pub use system::SystemState;
 pub use user::UserState;
 
 /// Unified application state
@@ -24,7 +22,6 @@ pub struct AppState<'a> {
     pub timeline: Timeline,
     pub editor: Editor<'a>,
     pub user: UserState,
-    pub system: SystemState,
     pub nostr: Nostr,
     pub config: ConfigState,
     pub fps: Fps,
@@ -121,7 +118,7 @@ mod tests {
 
         assert_eq!(state.timeline.len(), 0);
         assert!(!state.editor.is_active());
-        assert!(state.system.is_loading());
+        assert!(state.timeline.is_loading());
     }
 
     #[test]
@@ -138,9 +135,8 @@ mod tests {
     fn test_process_nostr_event_for_tab_text_note_routes_to_specified_tab() -> Result<()> {
         let current_user_pubkey = Keys::generate().public_key();
         let mut state = AppState::new(current_user_pubkey);
-        state.system.stop_loading();
 
-        // Add a user timeline tab.
+        // Add a user timeline tab first (before adding any events)
         let author_keys = Keys::generate();
         let author_pubkey = author_keys.public_key();
         let user_tab = TimelineTabType::UserTimeline {
@@ -150,6 +146,7 @@ mod tests {
             tab_type: user_tab.clone(),
         });
 
+        // Add event only to user timeline tab (this also stops loading)
         let event = create_text_note(&author_keys, "hello", Timestamp::from(1000))?;
         state.process_nostr_event_for_tab(event, &user_tab);
 
@@ -175,7 +172,9 @@ mod tests {
     ) -> Result<()> {
         let current_user_pubkey = Keys::generate().public_key();
         let mut state = AppState::new(current_user_pubkey);
-        state.system.stop_loading();
+
+        // Use pre-loaded timeline for testing
+        state.timeline = Timeline::new_loaded();
 
         // Ensure Home tab is active.
         let _ = state
@@ -217,7 +216,9 @@ mod tests {
     ) -> Result<()> {
         let current_user_pubkey = Keys::generate().public_key();
         let mut state = AppState::new(current_user_pubkey);
-        state.system.stop_loading();
+
+        // Use pre-loaded timeline for testing
+        state.timeline = Timeline::new_loaded();
 
         let author_keys = Keys::generate();
         let author_pubkey = author_keys.public_key();

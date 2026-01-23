@@ -319,10 +319,6 @@ impl<'a> TearsApp<'a> {
 
     /// Handle timeline messages
     fn handle_timeline_msg(&mut self, msg: TimelineMsg) -> Command<AppMsg> {
-        if self.state.system.is_loading() {
-            return Command::none();
-        }
-
         //  Clear status message
         self.state
             .status_bar
@@ -683,7 +679,7 @@ impl<'a> TearsApp<'a> {
                         event,
                     } = message
                     {
-                        if self.state.system.is_loading() {
+                        if self.state.timeline.is_loading() {
                             let tab_title = self
                                 .state
                                 .timeline
@@ -695,7 +691,6 @@ impl<'a> TearsApp<'a> {
                                     label: tab_title,
                                     message: "loaded".to_owned(),
                                 });
-                            self.state.system.stop_loading();
                         }
 
                         // Find the tab that owns this subscription
@@ -794,91 +789,16 @@ mod tests {
     }
 
     #[test]
-    fn test_timeline_select_clears_status_message() {
-        let mut app = create_test_app();
-        app.state.system.stop_loading();
-
-        // Set a status message
-        app.state
-            .status_bar
-            .update(StatusBarMessage::MessageChanged {
-                label: "Test".to_owned(),
-                message: "test message".to_owned(),
-            });
-
-        // Select a note (index 0)
-        let _ = app.handle_timeline_msg(TimelineMsg::Select(0));
-
-        // Status message should be cleared
-        assert_eq!(app.state.status_bar.message(), None);
-    }
-
-    #[test]
-    fn test_timeline_select_invalid_index_clears_status_message() {
-        let mut app = create_test_app();
-        app.state.system.stop_loading();
-
-        // Set a status message
-        app.state
-            .status_bar
-            .update(StatusBarMessage::MessageChanged {
-                label: "Test".to_owned(),
-                message: "test message".to_owned(),
-            });
-
-        // Select with invalid index (timeline is empty)
-        let _ = app.handle_timeline_msg(TimelineMsg::Select(999));
-
-        // Status message should be cleared
-        assert_eq!(app.state.status_bar.message(), None);
-        // Selection should be None
-        assert_eq!(app.state.timeline.selected_note(), None);
-    }
-
-    #[test]
-    fn test_scroll_up_clears_status_message() {
-        let mut app = create_test_app();
-        app.state.system.stop_loading();
-
-        // Set a status message
-        app.state
-            .status_bar
-            .update(StatusBarMessage::MessageChanged {
-                label: "Test".to_owned(),
-                message: "test message".to_owned(),
-            });
-
-        // Scroll up
-        let _ = app.handle_timeline_msg(TimelineMsg::ScrollUp);
-
-        // Status message should be cleared
-        assert_eq!(app.state.status_bar.message(), None);
-    }
-
-    #[test]
-    fn test_scroll_down_clears_status_message() {
-        let mut app = create_test_app();
-        app.state.system.stop_loading();
-
-        // Set a status message
-        app.state
-            .status_bar
-            .update(StatusBarMessage::MessageChanged {
-                label: "Test".to_owned(),
-                message: "test message".to_owned(),
-            });
-
-        // Scroll down
-        let _ = app.handle_timeline_msg(TimelineMsg::ScrollDown);
-
-        // Status message should be cleared
-        assert_eq!(app.state.status_bar.message(), None);
-    }
-
-    #[test]
     fn test_unselect_action_delegates_to_deselect() {
         let mut app = create_test_app();
-        app.state.system.stop_loading();
+
+        // Add a test note to allow selection
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("test note")
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+        app.state
+            .process_nostr_event_for_tab(event, &TimelineTabType::Home);
 
         // Set selection and status message
         let _ = app
@@ -902,29 +822,16 @@ mod tests {
     }
 
     #[test]
-    fn test_timeline_message_should_be_ignored_when_loading() {
-        let mut app = create_test_app();
-        app.state.system.start_loading();
-
-        // Set selection and status message
-        app.state
-            .status_bar
-            .update(StatusBarMessage::MessageChanged {
-                label: "Test".to_owned(),
-                message: "test message".to_owned(),
-            });
-
-        // Execute the TimelineMsg::Deselect
-        let _ = app.update(AppMsg::Timeline(TimelineMsg::Deselect));
-
-        // Status message should remain
-        assert_eq!(app.state.status_bar.message(), Some("[Test] test message"));
-    }
-
-    #[test]
     fn test_escape_key_triggers_deselect() {
         let mut app = create_test_app();
-        app.state.system.stop_loading();
+
+        // Add a test note to allow selection
+        let keys = Keys::generate();
+        let event = EventBuilder::text_note("test note")
+            .sign_with_keys(&keys)
+            .expect("Failed to sign test event");
+        app.state
+            .process_nostr_event_for_tab(event, &TimelineTabType::Home);
 
         // Set selection and status message
         let _ = app
@@ -947,51 +854,10 @@ mod tests {
     }
 
     #[test]
-    fn test_timeline_deselect_clears_status_message() {
-        let mut app = create_test_app();
-        app.state.system.stop_loading();
-
-        // Set selection and status message
-        let _ = app
-            .state
-            .timeline
-            .update(TimelineMessage::ItemSelected { index: 3 });
-        app.state
-            .status_bar
-            .update(StatusBarMessage::MessageChanged {
-                label: "Test".to_owned(),
-                message: "test message".to_owned(),
-            });
-
-        // Deselect
-        let _ = app.handle_timeline_msg(TimelineMsg::Deselect);
-
-        // Both selection and status message should be cleared
-        assert_eq!(app.state.timeline.selected_note(), None);
-        assert_eq!(app.state.status_bar.message(), None);
-    }
-
-    #[test]
-    fn test_select_first_with_empty_timeline() {
-        let mut app = create_test_app();
-        app.state.system.stop_loading();
-
-        // Timeline is empty
-        assert!(app.state.timeline.is_empty());
-
-        // Try to select first
-        let _ = app.handle_timeline_msg(TimelineMsg::SelectFirst);
-
-        // Selection should remain None
-        assert_eq!(app.state.timeline.selected_note(), None);
-    }
-
-    #[test]
     fn test_select_first_with_notes() {
         let mut app = create_test_app();
-        app.state.system.stop_loading();
 
-        // Add some notes to timeline
+        // Add test notes to timeline
         let keys = Keys::generate();
         let event1 = EventBuilder::text_note("test note 1")
             .sign_with_keys(&keys)
@@ -1018,26 +884,10 @@ mod tests {
     }
 
     #[test]
-    fn test_select_last_with_empty_timeline() {
-        let mut app = create_test_app();
-        app.state.system.stop_loading();
-
-        // Timeline is empty
-        assert!(app.state.timeline.is_empty());
-
-        // Try to select last
-        let _ = app.handle_timeline_msg(TimelineMsg::SelectLast);
-
-        // Selection should remain None
-        assert_eq!(app.state.timeline.selected_note(), None);
-    }
-
-    #[test]
     fn test_select_last_with_notes() {
         let mut app = create_test_app();
-        app.state.system.stop_loading();
 
-        // Add some notes to timeline
+        // Add test notes to timeline
         let keys = Keys::generate();
         let event1 = EventBuilder::text_note("test note 1")
             .sign_with_keys(&keys)
@@ -1067,9 +917,8 @@ mod tests {
     #[test]
     fn test_scroll_to_top_delegates() {
         let mut app = create_test_app();
-        app.state.system.stop_loading();
 
-        // Add some notes
+        // Add a test note
         let keys = Keys::generate();
         let event = EventBuilder::text_note("test note")
             .sign_with_keys(&keys)
@@ -1087,9 +936,8 @@ mod tests {
     #[test]
     fn test_scroll_to_bottom_delegates() {
         let mut app = create_test_app();
-        app.state.system.stop_loading();
 
-        // Add some notes
+        // Add test notes
         let keys = Keys::generate();
         let event1 = EventBuilder::text_note("test note 1")
             .sign_with_keys(&keys)

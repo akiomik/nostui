@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     fn test_render_switching_tabs() {
-        let mut timeline = Timeline::default();
+        let mut timeline = Timeline::new_loaded();
         let pubkey = create_test_pubkey();
 
         // Add a user timeline tab

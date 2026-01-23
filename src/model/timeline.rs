@@ -52,6 +52,28 @@ pub enum Message {
     PreviousTabSelected,
 }
 
+impl Message {
+    /// Check if this message represents a user operation
+    ///
+    /// User operations are navigation and selection actions that should be blocked during loading.
+    /// Data updates (notes, reactions, etc.) and tab management (adding/removing tabs) are not
+    /// considered user operations and are allowed during loading.
+    pub fn is_user_operation(&self) -> bool {
+        matches!(
+            self,
+            Message::PreviousItemSelected
+                | Message::NextItemSelected
+                | Message::FirstItemSelected
+                | Message::LastItemSelected
+                | Message::ItemSelected { .. }
+                | Message::ItemSelectionCleared
+                | Message::TabSelected { .. }
+                | Message::NextTabSelected
+                | Message::PreviousTabSelected
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Timeline {
     // Tab management
@@ -61,6 +83,9 @@ pub struct Timeline {
     // Centralized event storage (shared across all tabs)
     // Each event is stored once here and referenced by EventId from tabs
     notes: HashMap<EventId, TextNote>,
+
+    // Loading state for initial load
+    is_loading: bool,
 }
 
 impl Timeline {
@@ -78,6 +103,11 @@ impl Timeline {
             })
     }
 
+    /// Create a Timeline
+    pub fn new(&self) -> Self {
+        Self::default()
+    }
+
     /// Get all tabs
     pub fn tabs(&self) -> &[TimelineTab] {
         &self.tabs
@@ -86,6 +116,11 @@ impl Timeline {
     /// Get the active tab index
     pub fn active_tab_index(&self) -> usize {
         self.active_tab_index
+    }
+
+    /// Check if timeline is loading
+    pub fn is_loading(&self) -> bool {
+        self.is_loading
     }
 
     /// Get the last tab index
@@ -164,8 +199,16 @@ impl Timeline {
     }
 
     pub fn update(&mut self, message: Message) -> Command<AppMsg> {
+        // Block user operations during initial loading
+        if self.is_loading && message.is_user_operation() {
+            return Command::none();
+        }
+
         match message {
             Message::NoteAddedToTab { event, tab_type } => {
+                // Mark initial loading as complete when first note arrives
+                self.is_loading = false;
+
                 // Find the tab index for the specified tab type
                 let tab_index = match self.find_tab_by_type(&tab_type) {
                     Some(index) => index,
@@ -305,6 +348,22 @@ impl Default for Timeline {
             tabs: vec![TimelineTab::new_home()],
             active_tab_index: 0,
             notes: HashMap::new(),
+            is_loading: true,
+        }
+    }
+}
+
+#[cfg(test)]
+impl Timeline {
+    /// Create a Timeline for testing with loading completed
+    ///
+    /// This is a convenience method for tests that don't need to test loading behavior.
+    pub fn new_loaded() -> Self {
+        Self {
+            tabs: vec![TimelineTab::new_home()],
+            active_tab_index: 0,
+            notes: HashMap::new(),
+            is_loading: false,
         }
     }
 }
@@ -364,6 +423,7 @@ mod tests {
         assert_eq!(timeline.len(), 0);
         assert!(timeline.is_empty());
         assert_eq!(timeline.selected_index(), None);
+        assert!(timeline.is_loading());
     }
 
     #[test]
@@ -415,6 +475,7 @@ mod tests {
         assert!(!timeline.is_empty());
         assert!(timeline.notes.contains_key(&event_id));
         assert_eq!(timeline.oldest_timestamp(), Some(Timestamp::from(1000)));
+        assert!(!timeline.is_loading());
     }
 
     #[test]
@@ -892,7 +953,7 @@ mod tests {
 
     #[test]
     fn test_tab_selected() {
-        let mut timeline = Timeline::default();
+        let mut timeline = Timeline::new_loaded();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
@@ -920,7 +981,7 @@ mod tests {
 
     #[test]
     fn test_next_tab_selected() {
-        let mut timeline = Timeline::default();
+        let mut timeline = Timeline::new_loaded();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
@@ -942,7 +1003,7 @@ mod tests {
 
     #[test]
     fn test_previous_tab_selected() {
-        let mut timeline = Timeline::default();
+        let mut timeline = Timeline::new_loaded();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
@@ -1062,5 +1123,200 @@ mod tests {
         });
 
         assert_eq!(timeline.last_tab_index(), 1);
+    }
+
+    #[test]
+    fn test_is_loading_changes_on_first_note() {
+        let mut timeline = Timeline::default();
+        assert!(timeline.is_loading());
+
+        let event = create_test_event(1000, 1, "First note");
+        let _ = timeline.update(Message::NoteAddedToTab {
+            event,
+            tab_type: TimelineTabType::Home,
+        });
+
+        assert!(!timeline.is_loading());
+    }
+
+    #[test]
+    fn test_is_loading_remains_false_after_first_note() {
+        let mut timeline = Timeline::default();
+
+        // Add first note
+        let event1 = create_test_event(1000, 1, "First note");
+        let _ = timeline.update(Message::NoteAddedToTab {
+            event: event1,
+            tab_type: TimelineTabType::Home,
+        });
+
+        assert!(!timeline.is_loading());
+
+        // Add second note
+        let event2 = create_test_event(2000, 2, "Second note");
+        let _ = timeline.update(Message::NoteAddedToTab {
+            event: event2,
+            tab_type: TimelineTabType::Home,
+        });
+
+        assert!(!timeline.is_loading());
+    }
+
+    #[test]
+    fn test_user_operations_blocked_when_loading() {
+        let mut timeline = Timeline::default();
+        // Timeline starts in loading state
+        assert!(timeline.is_loading());
+
+        // Try to select an item - should be ignored
+        let _ = timeline.update(Message::ItemSelected { index: 0 });
+        assert_eq!(timeline.selected_index(), None);
+
+        // Try to navigate - should be ignored
+        let _ = timeline.update(Message::PreviousItemSelected);
+        assert_eq!(timeline.selected_index(), None);
+
+        let _ = timeline.update(Message::NextItemSelected);
+        assert_eq!(timeline.selected_index(), None);
+
+        // Try to select first/last - should be ignored
+        let _ = timeline.update(Message::FirstItemSelected);
+        assert_eq!(timeline.selected_index(), None);
+
+        let _ = timeline.update(Message::LastItemSelected);
+        assert_eq!(timeline.selected_index(), None);
+    }
+
+    #[test]
+    fn test_user_operations_allowed_after_loading() {
+        let mut timeline = Timeline::new_loaded();
+
+        // Add a note so we have something to select
+        let event = create_test_event(1000, 1, "Test note");
+        let _ = timeline.update(Message::NoteAddedToTab {
+            event,
+            tab_type: TimelineTabType::Home,
+        });
+
+        assert!(!timeline.is_loading());
+
+        // Now user operations should work
+        let _ = timeline.update(Message::ItemSelected { index: 0 });
+        assert_eq!(timeline.selected_index(), Some(0));
+    }
+
+    #[test]
+    fn test_tab_selection_blocked_when_loading() {
+        let mut timeline = Timeline::default();
+        assert!(timeline.is_loading());
+
+        let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
+
+        // Add tab should work during loading (it's data management)
+        let _ = timeline.update(Message::TabAdded {
+            tab_type: TimelineTabType::UserTimeline { pubkey },
+        });
+        assert_eq!(timeline.tabs().len(), 2); // Home + new tab
+
+        // But tab selection should be blocked
+        let original_index = timeline.active_tab_index();
+        let _ = timeline.update(Message::TabSelected { index: 0 });
+        assert_eq!(timeline.active_tab_index(), original_index);
+
+        // Tab navigation should also be blocked
+        let _ = timeline.update(Message::NextTabSelected);
+        assert_eq!(timeline.active_tab_index(), original_index);
+
+        let _ = timeline.update(Message::PreviousTabSelected);
+        assert_eq!(timeline.active_tab_index(), original_index);
+    }
+
+    #[test]
+    fn test_data_updates_allowed_when_loading() {
+        let mut timeline = Timeline::default();
+        assert!(timeline.is_loading());
+
+        // Data updates should work even during loading
+        let event = create_test_event(1000, 1, "Test note");
+        let event_id = event.id;
+
+        let _ = timeline.update(Message::NoteAddedToTab {
+            event,
+            tab_type: TimelineTabType::Home,
+        });
+
+        // Note should be added
+        assert_eq!(timeline.len(), 1);
+        assert!(timeline.notes.contains_key(&event_id));
+
+        // And loading should now be complete
+        assert!(!timeline.is_loading());
+    }
+
+    #[test]
+    fn test_reactions_allowed_when_loading() {
+        let mut timeline = Timeline::default();
+
+        // Add a note first (stops loading)
+        let text_event = create_test_event(1000, 1, "Original note");
+        let text_event_id = text_event.id;
+        let _ = timeline.update(Message::NoteAddedToTab {
+            event: text_event.clone(),
+            tab_type: TimelineTabType::Home,
+        });
+
+        // Manually set back to loading state for testing
+        timeline.is_loading = true;
+
+        // Reaction should still work during loading
+        let reaction_event = create_reaction_event(&text_event, 1001);
+        let _ = timeline.update(Message::ReactionAdded {
+            event: reaction_event,
+        });
+
+        let note = timeline
+            .notes
+            .get(&text_event_id)
+            .expect("Note should exist");
+        assert_eq!(note.reactions_count(), 1);
+    }
+
+    #[test]
+    fn test_message_is_user_operation() {
+        // User operations (should return true)
+        assert!(Message::PreviousItemSelected.is_user_operation());
+        assert!(Message::NextItemSelected.is_user_operation());
+        assert!(Message::FirstItemSelected.is_user_operation());
+        assert!(Message::LastItemSelected.is_user_operation());
+        assert!(Message::ItemSelected { index: 0 }.is_user_operation());
+        assert!(Message::ItemSelectionCleared.is_user_operation());
+        assert!(Message::TabSelected { index: 0 }.is_user_operation());
+        assert!(Message::NextTabSelected.is_user_operation());
+        assert!(Message::PreviousTabSelected.is_user_operation());
+
+        // Data operations (should return false)
+        let event = create_test_event(1000, 1, "Test");
+        assert!(!Message::NoteAddedToTab {
+            event: event.clone(),
+            tab_type: TimelineTabType::Home,
+        }
+        .is_user_operation());
+        assert!(!Message::ReactionAdded {
+            event: event.clone(),
+        }
+        .is_user_operation());
+        assert!(!Message::RepostAdded {
+            event: event.clone(),
+        }
+        .is_user_operation());
+        assert!(!Message::ZapReceiptAdded { event }.is_user_operation());
+
+        // Tab management (should return false)
+        let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
+        assert!(!Message::TabAdded {
+            tab_type: TimelineTabType::UserTimeline { pubkey },
+        }
+        .is_user_operation());
+        assert!(!Message::TabRemoved { index: 0 }.is_user_operation());
     }
 }
