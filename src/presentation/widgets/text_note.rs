@@ -87,7 +87,7 @@ impl<'a> Widget for TextNoteWidget<'a> {
         if let Some(TagStandard::Event { event_id, .. }) = self.text_note.find_reply_tag() {
             let mentioned_names = self.mentioned_names();
             let reply_text = if mentioned_names.is_empty() {
-                let note1 = event_id.to_bech32().unwrap(); // Infallible
+                let Ok(note1) = event_id.to_bech32();
                 format!("Reply to {note1}")
             } else {
                 format!("Reply to {}", mentioned_names.join(", "))
