@@ -227,25 +227,11 @@ impl<'a> TearsApp<'a> {
         }
     }
 
-    /// Resolve keybinding to KeyAction
-    /// Returns the KeyAction if the key matches a configured keybinding
-    fn resolve_keybinding(&self, key: KeyEvent) -> Option<KeyAction> {
-        // Check for single-key binding in Home screen keybindings
-        if let Some(action) = self.config.keybindings.home.get(&vec![key]) {
-            return Some(action.clone());
-        }
-
-        // TODO: Support multi-key sequences in the future
-        // For now, only single-key bindings are supported
-
-        None
-    }
-
     /// Handle key input in Normal mode
     fn handle_normal_mode_key(&mut self, key: KeyEvent) -> Command<AppMsg> {
         // First, try to resolve from configured keybindings
-        if let Some(action) = self.resolve_keybinding(key) {
-            return self.handle_action(action);
+        if let Some(action) = self.config.keybindings.home.get(&vec![key]) {
+            return self.handle_action(action.clone());
         }
 
         // Fallback: handle special keys not in config
