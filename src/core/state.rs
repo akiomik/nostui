@@ -166,7 +166,7 @@ mod tests {
         assert_eq!(state.timeline.len(), 1);
 
         // No loading_more => no status message update.
-        assert_eq!(state.status_bar.message(), &None);
+        assert_eq!(state.status_bar.message(), None);
 
         Ok(())
     }
@@ -202,10 +202,7 @@ mod tests {
         let event2 = create_text_note(&keys, "older", Timestamp::from(500))?;
         state.process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
-        assert_eq!(
-            state.status_bar.message(),
-            &Some("[Home] loaded more".to_owned())
-        );
+        assert_eq!(state.status_bar.message(), Some("[Home] loaded more"));
         assert_eq!(
             state
                 .timeline
@@ -250,7 +247,7 @@ mod tests {
 
         assert_eq!(
             state.status_bar.message(),
-            &Some(format!("[{}] loaded more", shorten_npub(author_npub)))
+            Some(format!("[{}] loaded more", shorten_npub(author_npub)).as_ref())
         );
         assert_eq!(
             state.timeline.is_loading_more_for_tab(&user_tab),

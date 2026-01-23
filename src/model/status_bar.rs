@@ -11,8 +11,8 @@ pub struct StatusBar {
 }
 
 impl StatusBar {
-    pub fn message(&self) -> &Option<String> {
-        &self.message
+    pub fn message(&self) -> Option<&str> {
+        self.message.as_deref()
     }
 
     fn set_message(&mut self, label: String, message: String) {
@@ -42,13 +42,13 @@ mod tests {
         let status_bar = StatusBar {
             message: Some("test message".to_string()),
         };
-        assert_eq!(status_bar.message(), &Some("test message".to_string()));
+        assert_eq!(status_bar.message(), Some("test message"));
     }
 
     #[test]
     fn test_message_getter_none() {
         let status_bar = StatusBar::default();
-        assert_eq!(status_bar.message(), &None);
+        assert_eq!(status_bar.message(), None);
     }
 
     #[test]

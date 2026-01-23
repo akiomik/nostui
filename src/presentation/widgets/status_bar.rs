@@ -54,10 +54,7 @@ impl<'a> Widget for StatusBarWidget<'a> {
             .render(layout[1], buf);
 
         // Render status message line
-        let message = match self.status_bar.message() {
-            Some(message) => message.clone(),
-            None => "".to_string(),
-        };
+        let message = self.status_bar.message().unwrap_or_default();
         Paragraph::new(message).render(layout[2], buf);
     }
 }

@@ -874,7 +874,7 @@ mod tests {
         let _ = app.handle_timeline_msg(TimelineMsg::Select(0));
 
         // Status message should be cleared
-        assert_eq!(app.state.status_bar.message(), &None);
+        assert_eq!(app.state.status_bar.message(), None);
     }
 
     #[test]
@@ -894,7 +894,7 @@ mod tests {
         let _ = app.handle_timeline_msg(TimelineMsg::Select(999));
 
         // Status message should be cleared
-        assert_eq!(app.state.status_bar.message(), &None);
+        assert_eq!(app.state.status_bar.message(), None);
         // Selection should be None
         assert_eq!(app.state.timeline.selected_note(), None);
     }
@@ -916,7 +916,7 @@ mod tests {
         let _ = app.handle_timeline_msg(TimelineMsg::ScrollUp);
 
         // Status message should be cleared
-        assert_eq!(app.state.status_bar.message(), &None);
+        assert_eq!(app.state.status_bar.message(), None);
     }
 
     #[test]
@@ -936,7 +936,7 @@ mod tests {
         let _ = app.handle_timeline_msg(TimelineMsg::ScrollDown);
 
         // Status message should be cleared
-        assert_eq!(app.state.status_bar.message(), &None);
+        assert_eq!(app.state.status_bar.message(), None);
     }
 
     #[test]
@@ -962,7 +962,7 @@ mod tests {
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
-        assert_eq!(app.state.status_bar.message(), &None);
+        assert_eq!(app.state.status_bar.message(), None);
     }
 
     #[test]
@@ -982,10 +982,7 @@ mod tests {
         let _ = app.update(AppMsg::Timeline(TimelineMsg::Deselect));
 
         // Status message should remain
-        assert_eq!(
-            app.state.status_bar.message(),
-            &Some("[Test] test message".to_owned())
-        );
+        assert_eq!(app.state.status_bar.message(), Some("[Test] test message"));
     }
 
     #[test]
@@ -1010,7 +1007,7 @@ mod tests {
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
-        assert_eq!(app.state.status_bar.message(), &None);
+        assert_eq!(app.state.status_bar.message(), None);
     }
 
     #[test]
@@ -1035,7 +1032,7 @@ mod tests {
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
-        assert_eq!(app.state.status_bar.message(), &None);
+        assert_eq!(app.state.status_bar.message(), None);
     }
 
     #[test]
