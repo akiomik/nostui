@@ -10,12 +10,10 @@ pub struct NameWithHandle {
 }
 
 impl NameWithHandle {
-    pub fn new(pubkey: nostr_sdk::PublicKey, profile: &Option<Profile>, highlighted: bool) -> Self {
+    pub fn new(pubkey: nostr_sdk::PublicKey, profile: Option<&Profile>, highlighted: bool) -> Self {
         Self {
             pubkey,
-            display_name: profile
-                .as_ref()
-                .and_then(|profile| profile.display_name().cloned()),
+            display_name: profile.and_then(|profile| profile.display_name()).cloned(),
             handle: profile.as_ref().and_then(|profile| profile.handle()),
             highlighted,
         }
@@ -85,7 +83,7 @@ mod tests {
     fn test_from_no_profile() {
         // Test From trait with no profile
         let keys = Keys::generate();
-        let widget = NameWithHandle::new(keys.public_key(), &None, false);
+        let widget = NameWithHandle::new(keys.public_key(), None, false);
 
         let text: Text = widget.into();
 
@@ -102,7 +100,7 @@ mod tests {
         let metadata = Metadata::new().display_name("Alice");
         let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
 
-        let widget = NameWithHandle::new(keys.public_key(), &Some(profile), false);
+        let widget = NameWithHandle::new(keys.public_key(), Some(&profile), false);
 
         let text: Text = widget.into();
 
@@ -116,7 +114,7 @@ mod tests {
         let metadata = Metadata::new().display_name("Alice Smith").name("alice");
         let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
 
-        let widget = NameWithHandle::new(keys.public_key(), &Some(profile), false);
+        let widget = NameWithHandle::new(keys.public_key(), Some(&profile), false);
 
         let text: Text = widget.into();
 
@@ -132,7 +130,7 @@ mod tests {
         let metadata = Metadata::new().display_name("Alice");
         let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
 
-        let widget = NameWithHandle::new(keys.public_key(), &Some(profile), true);
+        let widget = NameWithHandle::new(keys.public_key(), Some(&profile), true);
 
         let text: Text = widget.into();
 
@@ -159,7 +157,7 @@ mod tests {
     fn test_no_profile_shows_hex() {
         // No profile - should show shortened hex public key
         let keys = Keys::generate();
-        let widget = NameWithHandle::new(keys.public_key(), &None, false);
+        let widget = NameWithHandle::new(keys.public_key(), None, false);
 
         let area = Rect::new(0, 0, 20, 1);
         let mut buffer = Buffer::empty(area);
@@ -184,7 +182,7 @@ mod tests {
         let metadata = Metadata::new().display_name("Alice");
         let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
 
-        let widget = NameWithHandle::new(keys.public_key(), &Some(profile), false);
+        let widget = NameWithHandle::new(keys.public_key(), Some(&profile), false);
 
         let area = Rect::new(0, 0, 20, 1);
         let mut buffer = Buffer::empty(area);
@@ -211,7 +209,7 @@ mod tests {
         let metadata = Metadata::new().name("alice");
         let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
 
-        let widget = NameWithHandle::new(keys.public_key(), &Some(profile), false);
+        let widget = NameWithHandle::new(keys.public_key(), Some(&profile), false);
 
         let area = Rect::new(0, 0, 20, 1);
         let mut buffer = Buffer::empty(area);
@@ -239,7 +237,7 @@ mod tests {
         let metadata = Metadata::new().display_name("Alice Smith").name("alice");
         let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
 
-        let widget = NameWithHandle::new(keys.public_key(), &Some(profile), false);
+        let widget = NameWithHandle::new(keys.public_key(), Some(&profile), false);
 
         let area = Rect::new(0, 0, 30, 1);
         let mut buffer = Buffer::empty(area);
@@ -271,7 +269,7 @@ mod tests {
         let metadata = Metadata::new().display_name("alice").name("alice");
         let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
 
-        let widget = NameWithHandle::new(keys.public_key(), &Some(profile), false);
+        let widget = NameWithHandle::new(keys.public_key(), Some(&profile), false);
 
         let area = Rect::new(0, 0, 30, 1);
         let mut buffer = Buffer::empty(area);
@@ -299,7 +297,7 @@ mod tests {
         let metadata = Metadata::new().display_name("Alice");
         let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
 
-        let widget = NameWithHandle::new(keys.public_key(), &Some(profile), true);
+        let widget = NameWithHandle::new(keys.public_key(), Some(&profile), true);
 
         let area = Rect::new(0, 0, 20, 1);
         let mut buffer = Buffer::empty(area);
@@ -321,7 +319,7 @@ mod tests {
     fn test_highlighted_without_profile() {
         // Test highlighting when no profile (hex display)
         let keys = Keys::generate();
-        let widget = NameWithHandle::new(keys.public_key(), &None, true);
+        let widget = NameWithHandle::new(keys.public_key(), None, true);
 
         let area = Rect::new(0, 0, 20, 1);
         let mut buffer = Buffer::empty(area);
@@ -346,7 +344,7 @@ mod tests {
         let metadata = Metadata::new().name("alice");
         let profile = Profile::new(keys.public_key(), Timestamp::now(), metadata);
 
-        let widget = NameWithHandle::new(keys.public_key(), &Some(profile), true);
+        let widget = NameWithHandle::new(keys.public_key(), Some(&profile), true);
 
         let area = Rect::new(0, 0, 20, 1);
         let mut buffer = Buffer::empty(area);

@@ -101,11 +101,7 @@ impl<'a> Widget for TextNoteWidget<'a> {
 
         let name_with_handle = NameWithHandle::new(
             self.text_note.author_pubkey(),
-            &self
-                .ctx
-                .profiles
-                .get(&self.text_note.author_pubkey())
-                .cloned(),
+            self.ctx.profiles.get(&self.text_note.author_pubkey()),
             self.ctx.selected,
         );
         text.extend::<Text>(name_with_handle.into());
