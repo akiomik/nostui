@@ -4,27 +4,26 @@ use crate::{
     domain::nostr::Profile,
     infrastructure::config::Config,
     model::{
+        editor::Editor,
         fps::Fps,
         status_bar::{Message, StatusBar},
         timeline::{tab::TimelineTabType, Message as TimelineMessage, Timeline},
     },
 };
 
-pub mod editor;
 pub mod nostr;
 pub mod system;
 pub mod user;
 
-pub use editor::EditorState;
 pub use nostr::NostrState;
 pub use system::SystemState;
 pub use user::UserState;
 
 /// Unified application state
 #[derive(Debug, Default)]
-pub struct AppState {
+pub struct AppState<'a> {
     pub timeline: Timeline,
-    pub editor: EditorState,
+    pub editor: Editor<'a>,
     pub user: UserState,
     pub system: SystemState,
     pub nostr: NostrState,
@@ -40,7 +39,7 @@ pub struct ConfigState {
     pub config: Config,
 }
 
-impl AppState {
+impl<'a> AppState<'a> {
     /// Initialize AppState with the specified public key
     pub fn new(current_user_pubkey: PublicKey) -> Self {
         Self {
@@ -122,7 +121,7 @@ mod tests {
         let state = AppState::default();
 
         assert_eq!(state.timeline.len(), 0);
-        assert!(!state.editor.is_composing());
+        assert!(!state.editor.is_active());
         assert!(state.system.is_loading());
     }
 

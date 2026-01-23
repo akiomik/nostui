@@ -18,6 +18,7 @@ use crate::infrastructure::subscription::media::MediaEvents;
 use crate::infrastructure::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrEvents,
 };
+use crate::model::editor::Message as EditorMessage;
 use crate::model::fps::Message as FpsMessage;
 use crate::model::status_bar::Message as StatusBarMessage;
 use crate::model::timeline::tab::TimelineTabType;
@@ -41,9 +42,9 @@ pub struct InitFlags {
 /// - Component instances (stateless renderers/processors)
 pub struct TearsApp<'a> {
     /// Global application state
-    state: AppState,
+    state: AppState<'a>,
     /// Component collection (wrapped in RefCell for interior mutability during view)
-    components: RefCell<Components<'a>>,
+    components: RefCell<Components>,
     /// Nostr client (wrapped in Arc for sharing across subscriptions)
     nostr_client: Arc<Client>,
     /// Configuration (including keybindings)
@@ -219,7 +220,7 @@ impl<'a> TearsApp<'a> {
         // properly separates OS signals from application keybindings
 
         // Mode-specific keybindings
-        if self.state.editor.is_composing() {
+        if self.state.editor.is_active() {
             self.handle_composing_mode_key(key)
         } else {
             self.handle_normal_mode_key(key)
@@ -547,25 +548,28 @@ impl<'a> TearsApp<'a> {
     /// Handle editor messages
     fn handle_editor_msg(&mut self, msg: EditorMsg) -> Command<AppMsg> {
         match msg {
-            EditorMsg::StartComposing => self.state.editor.start_composing(),
+            EditorMsg::StartComposing => self.state.editor.update(EditorMessage::ComposingStarted),
             EditorMsg::StartReply => {
                 // Get the selected note
                 if let Some(note) = self.state.timeline.selected_note() {
                     let note1 = note.bech32_id();
+                    log::info!("Starting reply to event: {note1}");
 
                     // Set reply context
-                    self.state.editor.start_reply(note.as_event().clone());
-
-                    log::info!("Starting reply to event: {note1}");
+                    self.state.editor.update(EditorMessage::ReplyStarted {
+                        to: Box::new(note.as_event().clone()),
+                        profile: Box::new(
+                            self.state.user.get_profile(&note.author_pubkey()).cloned(),
+                        ),
+                    });
                 }
             }
             EditorMsg::CancelComposing => {
-                self.state.editor.cancel_composing();
-                self.components.borrow_mut().home.input.clear();
+                self.state.editor.update(EditorMessage::ComposingCanceled);
             }
             EditorMsg::SubmitNote => {
                 // Get content from Component's TextArea
-                let content = self.components.borrow().home.input.get_content();
+                let content = self.state.editor.get_content();
 
                 // Build event with appropriate tags
                 let event_builder = if let Some(reply_to_event) = self.state.editor.reply_target() {
@@ -602,17 +606,12 @@ impl<'a> TearsApp<'a> {
                 }
 
                 // Clear UI state
-                self.state.editor.cancel_composing();
-                self.components.borrow_mut().home.input.clear();
+                self.state.editor.update(EditorMessage::ComposingCanceled);
             }
             EditorMsg::ProcessTextAreaInput(key_event) => {
-                // Process key input directly on the Component's TextArea
-                // This avoids the expensive State → TextArea → State round-trip
-                self.components
-                    .borrow_mut()
-                    .home
-                    .input
-                    .process_input(key_event);
+                self.state
+                    .editor
+                    .update(EditorMessage::KeyEventReceived { event: key_event });
             }
         }
         Command::none()
@@ -1203,7 +1202,7 @@ mod tests {
         let mut app = create_test_app();
 
         // Start composing mode
-        app.state.editor.start_composing();
+        app.state.editor.update(EditorMessage::ComposingStarted);
 
         // In composing mode, 'q' key should be passed to textarea, not trigger quit
         let q_key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
@@ -1211,11 +1210,11 @@ mod tests {
 
         // Should produce ProcessTextAreaInput command
         // The application should still be in composing mode
-        assert!(app.state.editor.is_composing());
+        assert!(app.state.editor.is_active());
 
         // The textarea should contain 'q' after processing
         let _ = app.update(AppMsg::Editor(EditorMsg::ProcessTextAreaInput(q_key)));
-        assert_eq!(app.components.borrow().home.input.get_content(), "q");
+        assert_eq!(app.state.editor.get_content(), "q");
     }
 
     #[test]
@@ -1223,14 +1222,12 @@ mod tests {
         let mut app = create_test_app();
 
         // Start composing mode with some content
-        app.state.editor.start_composing();
+        app.state.editor.update(EditorMessage::ComposingStarted);
 
         // Set content directly on the component (simulating user input)
-        app.components
-            .borrow_mut()
-            .home
-            .input
-            .process_input(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE));
+        app.state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
+        });
 
         // Escape key should cancel composing
         let esc_key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
@@ -1238,8 +1235,7 @@ mod tests {
 
         // Should return to normal mode
         let _ = app.update(AppMsg::Editor(EditorMsg::CancelComposing));
-        assert!(app.state.editor.is_normal());
-        assert!(app.components.borrow().home.input.get_content().is_empty());
+        assert!(!app.state.editor.is_active());
     }
 
     #[test]
@@ -1247,7 +1243,7 @@ mod tests {
         let mut app = create_test_app();
 
         // Start composing mode with some content
-        app.state.editor.start_composing();
+        app.state.editor.update(EditorMessage::ComposingStarted);
 
         // Note: In real usage, content would be set via ProcessTextAreaInput messages
         // For this test, we're just verifying the key handling produces the right command
