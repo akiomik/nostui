@@ -21,11 +21,11 @@ pub use home::HomeComponent;
 ///
 /// This struct holds instances of all components used in the application.
 /// Components are stateless and receive state as parameters during render.
-pub struct Components<'a> {
-    pub home: HomeComponent<'a>,
+pub struct Components {
+    pub home: HomeComponent,
 }
 
-impl<'a> Components<'a> {
+impl Components {
     /// Create a new component collection
     pub fn new() -> Self {
         Self {
@@ -66,7 +66,7 @@ impl<'a> Components<'a> {
     }
 }
 
-impl<'a> Default for Components<'a> {
+impl Default for Components {
     fn default() -> Self {
         Self::new()
     }

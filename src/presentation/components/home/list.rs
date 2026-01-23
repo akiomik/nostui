@@ -27,6 +27,8 @@ impl HomeListComponent {
     ///
     /// This renders a scrollable list of text notes from the timeline state.
     pub fn view(&self, state: &AppState, frame: &mut Frame, area: Rect) {
+        frame.render_widget(Clear, area);
+
         let padding = Padding::new(1, 1, 1, 1);
         let item_count = state.timeline.len();
 

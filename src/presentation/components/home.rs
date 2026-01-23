@@ -2,17 +2,18 @@
 //!
 //! Main view component that displays the timeline and handles user input.
 
-use ratatui::prelude::*;
+use ratatui::{prelude::*, widgets::Clear};
 
 use crate::{
     core::state::AppState,
-    presentation::widgets::tab_bar::{TabBarWidget, ViewContext as TabBarViewContext},
+    presentation::widgets::{
+        editor::EditorWidget,
+        tab_bar::{TabBarWidget, ViewContext as TabBarViewContext},
+    },
 };
 
-pub mod input;
 pub mod list;
 
-pub use input::HomeInputComponent;
 pub use list::HomeListComponent;
 
 /// Home component
@@ -20,18 +21,15 @@ pub use list::HomeListComponent;
 /// This is the main view that contains the timeline list and input area.
 /// It delegates to child components for rendering.
 #[derive(Debug)]
-pub struct HomeComponent<'a> {
-    /// Input area component
-    pub(crate) input: HomeInputComponent<'a>,
+pub struct HomeComponent {
     /// Timeline list component
     list: HomeListComponent,
 }
 
-impl<'a> HomeComponent<'a> {
+impl HomeComponent {
     /// Create a new home component
     pub fn new() -> Self {
         Self {
-            input: HomeInputComponent::new(),
             list: HomeListComponent::new(),
         }
     }
@@ -60,18 +58,20 @@ impl<'a> HomeComponent<'a> {
         self.list.view(state, frame, chunks[1]);
 
         // Render input area as overlay if composing (matching old architecture)
-        if state.editor.is_composing() {
+        if state.editor.is_active() {
             // Calculate overlay input area (take bottom half of the screen)
             let mut input_area = chunks[1];
             input_area.height /= 2;
             input_area.y += input_area.height;
 
-            self.input.view(state, frame, input_area);
+            let widget = EditorWidget::new(&state.editor);
+            frame.render_widget(Clear, input_area);
+            frame.render_widget(widget, input_area);
         }
     }
 }
 
-impl<'a> Default for HomeComponent<'a> {
+impl Default for HomeComponent {
     fn default() -> Self {
         Self::new()
     }
