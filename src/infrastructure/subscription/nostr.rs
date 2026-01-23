@@ -79,12 +79,12 @@ pub enum Message {
 pub struct NostrEvents {
     client: Arc<Client>,
     /// Cached contact list (following) fetched during initialization
-    /// Shared across all instances via Arc<RwLock<>>
+    /// Shared across all instances via `Arc<RwLock<>>`
     contact_list: Arc<RwLock<Option<Vec<PublicKey>>>>,
 }
 
 impl NostrEvents {
-    /// Create a new NostrEvents subscription from an Arc<Client>.
+    /// Create a new NostrEvents subscription from an `Arc<Client>`.
     ///
     /// The same Arc should be reused across subscriptions to maintain subscription identity.
     /// This ensures that the subscription ID remains constant and the subscription is not
