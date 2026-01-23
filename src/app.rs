@@ -12,7 +12,8 @@ use tears::subscription::terminal::TerminalEvents;
 use tears::subscription::time::{Message as TimerMessage, Timer};
 
 use crate::core::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
-use crate::core::state::{AppState, NostrState};
+use crate::core::state::AppState;
+use crate::domain::nostr::nip38::MusicStatus;
 use crate::infrastructure::config::Config;
 use crate::infrastructure::subscription::media::MediaEvents;
 use crate::infrastructure::subscription::nostr::{
@@ -20,6 +21,7 @@ use crate::infrastructure::subscription::nostr::{
 };
 use crate::model::editor::Message as EditorMessage;
 use crate::model::fps::Message as FpsMessage;
+use crate::model::nostr::Message as NostrMessage;
 use crate::model::status_bar::Message as StatusBarMessage;
 use crate::model::timeline::tab::TimelineTabType;
 use crate::model::timeline::Message as TimelineMessage;
@@ -179,10 +181,8 @@ impl<'a> TearsApp<'a> {
         match msg {
             SystemMsg::Quit => {
                 log::info!("Quit requested - initiating graceful shutdown");
-
-                // Graceful shutdown: unsubscribe from all timeline subscriptions
-                // and disconnect from relays.
-                self.state.nostr.shutdown();
+                // Unsubscribe from all timeline subscriptions and disconnect from relays
+                self.state.nostr.update(NostrMessage::ConnectionClosed);
 
                 // Trigger the quit action
                 return Command::effect(Action::Quit);
@@ -381,26 +381,16 @@ impl<'a> TearsApp<'a> {
 
                     // Send the event
                     let event_builder = EventBuilder::reaction(note.as_event(), "+");
-                    match self.state.nostr.send_event_builder(event_builder) {
-                        Ok(()) => {
-                            self.state
-                                .status_bar
-                                .update(StatusBarMessage::MessageChanged {
-                                    label: "Reacted".to_string(),
-                                    message: note1,
-                                });
-                        }
-                        Err(e) => {
-                            let message = format!("failed to send reaction: {e}");
-                            log::error!("{message}");
-                            self.state
-                                .status_bar
-                                .update(StatusBarMessage::ErrorMessageChanged {
-                                    label: "Reaction".to_string(),
-                                    message,
-                                });
-                        }
-                    }
+                    self.state
+                        .nostr
+                        .update(NostrMessage::EventSubmitted { event_builder });
+
+                    self.state
+                        .status_bar
+                        .update(StatusBarMessage::MessageChanged {
+                            label: "Reacted".to_string(),
+                            message: note1,
+                        });
                 }
             }
             TimelineMsg::RepostSelected => {
@@ -411,26 +401,16 @@ impl<'a> TearsApp<'a> {
 
                     // Send the event
                     let event_builder = EventBuilder::repost(note.as_event(), None);
-                    match self.state.nostr.send_event_builder(event_builder) {
-                        Ok(()) => {
-                            self.state
-                                .status_bar
-                                .update(StatusBarMessage::MessageChanged {
-                                    label: "Reposted".to_owned(),
-                                    message: note1,
-                                });
-                        }
-                        Err(e) => {
-                            let message = format!("failed to send repost: {e}");
-                            log::error!("{message}");
-                            self.state
-                                .status_bar
-                                .update(StatusBarMessage::ErrorMessageChanged {
-                                    label: "Repost".to_string(),
-                                    message,
-                                });
-                        }
-                    }
+                    self.state
+                        .nostr
+                        .update(NostrMessage::EventSubmitted { event_builder });
+
+                    self.state
+                        .status_bar
+                        .update(StatusBarMessage::MessageChanged {
+                            label: "Reposted".to_owned(),
+                            message: note1,
+                        });
                 }
             }
             TimelineMsg::SelectTab(index) => {
@@ -489,31 +469,18 @@ impl<'a> TearsApp<'a> {
                             log::info!("Created new author timeline for {author_npub}");
 
                             // Send subscription command
-                            match self.state.nostr.subscribe_tab(&tab_type) {
-                                Ok(()) => {
-                                    log::info!(
-                                        "Sent SubscribeTimeline command for user: {author_npub}"
-                                    );
+                            self.state
+                                .nostr
+                                .update(NostrMessage::SubscriptionRequested { tab_type });
 
-                                    self.state.status_bar.update(
-                                        StatusBarMessage::MessageChanged {
-                                            label: author_npub,
-                                            message: "loading...".to_owned(),
-                                        },
-                                    );
-                                }
-                                Err(e) => {
-                                    // NOTE: UI already opened the tab, so this is best-effort.
-                                    // If not connected yet, the subscription will not start.
-                                    log::warn!("Cannot subscribe: {author_npub} ({e:?})");
-                                    self.state.status_bar.update(
-                                        StatusBarMessage::ErrorMessageChanged {
-                                            label: author_npub,
-                                            message: format!("failed to subscribe timeline: {e:?}"),
-                                        },
-                                    );
-                                }
-                            }
+                            log::info!("Sent SubscribeTimeline command for user: {author_npub}");
+
+                            self.state
+                                .status_bar
+                                .update(StatusBarMessage::MessageChanged {
+                                    label: author_npub,
+                                    message: "loading...".to_owned(),
+                                });
                         } else {
                             log::error!("Failed to create author timeline");
                             self.state
@@ -539,7 +506,9 @@ impl<'a> TearsApp<'a> {
                 });
 
                 // Unsubscribe subscriptions associated with this tab.
-                self.state.nostr.unsubscribe_tab(&tab_type);
+                self.state
+                    .nostr
+                    .update(NostrMessage::SubscriptionClosed { tab_type });
             }
         }
         Command::none()
@@ -584,26 +553,16 @@ impl<'a> TearsApp<'a> {
                 };
 
                 // Send the event
-                match self.state.nostr.send_event_builder(event_builder) {
-                    Ok(()) => {
-                        self.state
-                            .status_bar
-                            .update(StatusBarMessage::MessageChanged {
-                                label: "Posted".to_owned(),
-                                message: content,
-                            });
-                    }
-                    Err(e) => {
-                        let message = format!("failed to send: {e}");
-                        log::error!("{message}");
-                        self.state
-                            .status_bar
-                            .update(StatusBarMessage::ErrorMessageChanged {
-                                label: "Post".to_owned(),
-                                message,
-                            });
-                    }
-                }
+                self.state
+                    .nostr
+                    .update(NostrMessage::EventSubmitted { event_builder });
+
+                self.state
+                    .status_bar
+                    .update(StatusBarMessage::MessageChanged {
+                        label: "Posted".to_owned(),
+                        message: content,
+                    });
 
                 // Clear UI state
                 self.state.editor.update(EditorMessage::ComposingCanceled);
@@ -626,9 +585,7 @@ impl<'a> TearsApp<'a> {
             }
             NostrMsg::Disconnect => {
                 log::info!("Disconnected from Nostr");
-
-                // Send shutdown command through the sender
-                self.state.nostr.shutdown();
+                self.state.nostr.update(NostrMessage::ConnectionClosed);
             }
             NostrMsg::SubscriptionMessage(sub_msg) => {
                 self.handle_nostr_subscription_message(sub_msg);
@@ -641,31 +598,21 @@ impl<'a> TearsApp<'a> {
         match msg {
             Ok(event) => {
                 if let MediaEvent::TrackChanged { track, .. } = event {
-                    if let Some((status, content)) =
-                        NostrState::live_status_with_content_from_track(track)
-                    {
-                        let event_builder = EventBuilder::live_status(status, content.clone());
+                    if let Some(status) = MusicStatus::new(track) {
+                        let content = status.content();
+                        let event_builder =
+                            EventBuilder::live_status(status.into(), content.clone());
 
-                        match self.state.nostr.send_event_builder(event_builder) {
-                            Ok(()) => {
-                                self.state
-                                    .status_bar
-                                    .update(StatusBarMessage::MessageChanged {
-                                        label: "Status Updated".to_owned(),
-                                        message: content,
-                                    });
-                            }
-                            Err(e) => {
-                                let message = format!("failed to update: {e}");
-                                log::error!("{message}");
-                                self.state
-                                    .status_bar
-                                    .update(StatusBarMessage::MessageChanged {
-                                        label: "Status".to_owned(),
-                                        message,
-                                    });
-                            }
-                        }
+                        self.state
+                            .nostr
+                            .update(NostrMessage::EventSubmitted { event_builder });
+
+                        self.state
+                            .status_bar
+                            .update(StatusBarMessage::MessageChanged {
+                                label: "Music".to_owned(),
+                                message: content,
+                            });
                     }
                 }
             }
@@ -687,7 +634,9 @@ impl<'a> TearsApp<'a> {
                     .timeline
                     .active_tab()
                     .tab_title(self.state.user.profiles());
-                self.state.nostr.set_command_sender(sender);
+                self.state.nostr.update(NostrMessage::ConnectionReady {
+                    command_sender: sender,
+                });
                 self.state
                     .status_bar
                     .update(StatusBarMessage::MessageChanged {
@@ -700,9 +649,10 @@ impl<'a> TearsApp<'a> {
                 subscription_id,
             } => {
                 log::info!("Subscription created for {tab_type:?}: {subscription_id:?}");
-                self.state
-                    .nostr
-                    .add_timeline_subscription(tab_type, subscription_id);
+                self.state.nostr.update(NostrMessage::SubscriptionCreated {
+                    tab_type,
+                    sub_id: subscription_id,
+                });
             }
             NostrSubscriptionMessage::Notification(notif) => match *notif {
                 // NOTE: We use `RelayPoolNotification::Message` instead of `RelayPoolNotification::Event`
@@ -791,7 +741,7 @@ impl<'a> TearsApp<'a> {
         log::info!("Loading more timeline events");
 
         // Get the oldest timestamp from the active timeline
-        let until_timestamp = match self.state.timeline.oldest_timestamp() {
+        let since = match self.state.timeline.oldest_timestamp() {
             Some(ts) => ts,
             None => {
                 log::warn!("No oldest timestamp available, cannot load more");
@@ -805,31 +755,17 @@ impl<'a> TearsApp<'a> {
         let tab_title = tab.tab_title(self.state.user.profiles());
 
         // Mark loading started
-        match self
-            .state
+        self.state
             .nostr
-            .load_more_timeline(tab_type, until_timestamp)
-        {
-            Ok(()) => {
-                // Set appropriate status message
-                self.state
-                    .status_bar
-                    .update(StatusBarMessage::MessageChanged {
-                        label: tab_title,
-                        message: "loading more...".to_owned(),
-                    });
-            }
-            Err(e) => {
-                let message = format!("failed to load more events: {e}");
-                log::warn!("{message}");
-                self.state
-                    .status_bar
-                    .update(StatusBarMessage::ErrorMessageChanged {
-                        label: tab_title,
-                        message,
-                    });
-            }
-        }
+            .update(NostrMessage::HistoryRequested { tab_type, since });
+
+        // Set appropriate status message
+        self.state
+            .status_bar
+            .update(StatusBarMessage::MessageChanged {
+                label: tab_title,
+                message: "loading more...".to_owned(),
+            });
 
         Command::none()
     }
