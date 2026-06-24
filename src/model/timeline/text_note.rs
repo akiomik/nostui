@@ -302,14 +302,11 @@ mod tests {
         )?;
 
         let text_note = TextNote::new(reply_event);
-        let reply_tag = text_note.find_reply_tag();
 
-        assert!(reply_tag.is_some());
-        if let Some(TagStandard::Event { event_id, .. }) = reply_tag {
-            assert_eq!(*event_id, original_event.id);
-        } else {
-            panic!("Expected Event tag");
-        }
+        assert!(matches!(
+            text_note.find_reply_tag(),
+            Some(TagStandard::Event { event_id, .. }) if *event_id == original_event.id
+        ));
 
         Ok(())
     }

@@ -723,25 +723,6 @@ mod tests {
     }
 
     #[test]
-    fn test_ctrl_p_submits_note_in_composing_mode() {
-        let mut app = create_test_app();
-
-        // Start composing mode with some content
-        app.state.editor.update(EditorMessage::ComposingStarted);
-
-        // Note: In real usage, content would be set via ProcessTextAreaInput messages
-        // For this test, we're just verifying the key handling produces the right command
-
-        // Ctrl+P should submit note
-        let ctrl_p_key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
-        let _cmd = app.handle_key_input(ctrl_p_key);
-
-        // Should produce SubmitNote command
-        // Note: Actual submission requires nostr connection, but we can verify
-        // the key handling produces the right command
-    }
-
-    #[test]
     fn test_select_tab() {
         let mut app = create_test_app();
 

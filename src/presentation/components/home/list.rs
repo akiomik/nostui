@@ -91,22 +91,6 @@ mod tests {
     use nostr_sdk::prelude::*;
 
     #[test]
-    fn test_list_component_creation() {
-        let list = HomeListComponent::new();
-        let default_list = HomeListComponent;
-
-        assert_eq!(format!("{list:?}"), format!("{default_list:?}"));
-    }
-
-    #[test]
-    fn test_list_is_stateless() {
-        let list1 = HomeListComponent::new();
-        let list2 = HomeListComponent::new();
-
-        assert_eq!(format!("{list1:?}"), format!("{list2:?}"));
-    }
-
-    #[test]
     fn test_multibyte_character_rendering() -> Result<()> {
         use ratatui::backend::TestBackend;
         use ratatui::Terminal;

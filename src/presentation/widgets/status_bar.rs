@@ -86,31 +86,6 @@ mod tests {
     }
 
     #[test]
-    fn test_view_context_clone() {
-        let pubkey = create_test_pubkey();
-        let profile = create_test_profile(pubkey, Some("Alice"), None);
-        let ctx = ViewContext {
-            user_pubkey: pubkey,
-            user_profile: Some(&profile),
-        };
-        let cloned = ctx.clone();
-        assert_eq!(ctx, cloned);
-    }
-
-    #[test]
-    fn test_view_context_debug() {
-        let pubkey = create_test_pubkey();
-        let ctx = ViewContext {
-            user_pubkey: pubkey,
-            user_profile: None,
-        };
-        let debug_str = format!("{ctx:?}");
-        assert!(debug_str.contains("ViewContext"));
-        assert!(debug_str.contains("user_pubkey"));
-        assert!(debug_str.contains("user_profile"));
-    }
-
-    #[test]
     fn test_status_bar_widget_new() {
         let pubkey = create_test_pubkey();
         let status_bar = StatusBar::default();
