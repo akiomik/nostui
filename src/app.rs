@@ -358,7 +358,7 @@ impl<'a> TearsApp<'a> {
             }
             // Load more older events
             TimelineMsg::LoadMore => {
-                return self.load_more_timeline_events();
+                return self.state.load_more_timeline();
             }
             TimelineMsg::ReactToSelected => {
                 return self.state.react_to_selected();
@@ -540,40 +540,6 @@ impl<'a> TearsApp<'a> {
                 Command::none()
             }
         }
-    }
-
-    /// Load more older timeline events for the active tab
-    fn load_more_timeline_events(&mut self) -> Command<AppMsg> {
-        log::info!("Loading more timeline events");
-
-        // Get the oldest timestamp from the active timeline
-        let since = match self.state.timeline.oldest_timestamp() {
-            Some(ts) => ts,
-            None => {
-                log::warn!("No oldest timestamp available, cannot load more");
-                return Command::none();
-            }
-        };
-
-        // Get the active tab type
-        let tab = self.state.timeline.active_tab();
-        let tab_type = tab.tab_type().clone();
-        let tab_title = tab.tab_title(self.state.user.profiles());
-
-        // Mark loading started
-        self.state
-            .nostr
-            .update(NostrMessage::HistoryRequested { tab_type, since });
-
-        // Set appropriate status message
-        self.state
-            .status_bar
-            .update(StatusBarMessage::MessageChanged {
-                label: tab_title,
-                message: "loading more...".to_owned(),
-            });
-
-        Command::none()
     }
 }
 
