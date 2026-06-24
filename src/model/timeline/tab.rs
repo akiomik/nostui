@@ -18,7 +18,7 @@ use sorted_vec::{FindOrInsert, ReverseSortedSet};
 use tears::Command;
 
 use crate::{
-    core::message::{AppMsg, TimelineMsg},
+    application::message::{AppMsg, TimelineMsg},
     domain::{
         nostr::{Profile, SortableEventId},
         text::shorten_npub,

@@ -1,7 +1,7 @@
 //! Tears application messages
 //!
 //! This module defines the message types for the tears application.
-//! These are independent from the existing core::msg system.
+//! These are independent from the existing application::msg system.
 
 use crossterm::event::KeyEvent;
 use nowhear::{MediaEvent, MediaSourceError};

@@ -5,7 +5,7 @@
 use ratatui::{prelude::*, widgets::Clear};
 
 use crate::{
-    core::state::AppState,
+    application::state::AppState,
     presentation::widgets::{
         editor::EditorWidget,
         tab_bar::{TabBarWidget, ViewContext as TabBarViewContext},
