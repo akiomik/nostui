@@ -18,11 +18,6 @@ use crate::infrastructure::subscription::media::MediaEvents;
 use crate::infrastructure::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrEvents,
 };
-use crate::model::editor::Message as EditorMessage;
-use crate::model::fps::Message as FpsMessage;
-use crate::model::nostr::Message as NostrMessage;
-use crate::model::status_bar::Message as StatusBarMessage;
-use crate::model::timeline::Message as TimelineMessage;
 use crate::presentation::components::Components;
 use crate::presentation::config::keybindings::Action as KeyAction;
 
@@ -84,6 +79,16 @@ impl<'a> Application for TearsApp<'a> {
         (app, Command::none())
     }
 
+    // TODO: Move message dispatch into `AppState`.
+    //
+    // `TearsApp` now only routes messages to `AppState` command methods and never
+    // mutates a sub-state directly. The next step toward a self-contained state
+    // machine is to move the per-domain dispatch (`handle_timeline_msg`,
+    // `handle_editor_msg`, `handle_nostr_msg`, ...) into `AppState::update(AppMsg)`,
+    // leaving `TearsApp` as a thin tears adapter responsible only for IO-coupled
+    // concerns: key -> message mapping, subscriptions, and `Command::effect(Quit)`.
+    // That would make `AppState` own both state and transitions, and would let its
+    // fields become private (external code could only drive it via messages).
     fn update(&mut self, msg: AppMsg) -> Command<Self::Message> {
         log::debug!("update: {msg:?}");
 
@@ -180,35 +185,21 @@ impl<'a> TearsApp<'a> {
             SystemMsg::Quit => {
                 log::info!("Quit requested - initiating graceful shutdown");
                 // Unsubscribe from all timeline subscriptions and disconnect from relays
-                self.state.nostr.update(NostrMessage::ConnectionClosed);
+                let _ = self.state.close_connection();
 
                 // Trigger the quit action
-                return Command::effect(Action::Quit);
+                Command::effect(Action::Quit)
             }
             SystemMsg::Resize(width, height) => {
                 log::debug!("Terminal resized to {width}x{height}");
                 // Terminal resize is handled automatically by ratatui
+                Command::none()
             }
-            SystemMsg::Tick => {
-                // Track app FPS based on tick events (approximately matches render FPS)
-                self.state
-                    .fps
-                    .update(FpsMessage::FrameRecorded { now: None });
-            }
-            SystemMsg::ShowError(error) => {
-                log::error!("{error}");
-                self.state
-                    .status_bar
-                    .update(StatusBarMessage::ErrorMessageChanged {
-                        label: "System".to_owned(),
-                        message: error,
-                    });
-            }
-            SystemMsg::KeyInput(key) => {
-                return self.handle_key_input(key);
-            }
+            // Track app FPS based on tick events (approximately matches render FPS)
+            SystemMsg::Tick => self.state.record_tick(),
+            SystemMsg::ShowError(error) => self.state.show_error(error),
+            SystemMsg::KeyInput(key) => self.handle_key_input(key),
         }
-        Command::none()
     }
 
     /// Handle key input based on current editor state
@@ -310,130 +301,47 @@ impl<'a> TearsApp<'a> {
             return Command::none();
         }
 
-        //  Clear status message
-        self.state
-            .status_bar
-            .update(StatusBarMessage::MessageCleared);
+        // Clear any status message before handling the operation.
+        let _ = self.state.clear_status_message();
 
         match msg {
-            TimelineMsg::ScrollUp => {
-                return self
-                    .state
-                    .timeline
-                    .update(TimelineMessage::PreviousItemSelected);
-            }
-            TimelineMsg::ScrollDown => {
-                return self
-                    .state
-                    .timeline
-                    .update(TimelineMessage::NextItemSelected);
-            }
-            // Select the note
-            TimelineMsg::Select(index) => {
-                return self
-                    .state
-                    .timeline
-                    .update(TimelineMessage::ItemSelected { index });
-            }
-            // Deselect the current note
-            TimelineMsg::Deselect => {
-                return self
-                    .state
-                    .timeline
-                    .update(TimelineMessage::ItemSelectionCleared);
-            }
-            // Select the first note in the timeline
-            TimelineMsg::SelectFirst => {
-                return self
-                    .state
-                    .timeline
-                    .update(TimelineMessage::FirstItemSelected);
-            }
-            // Select the last note in the timeline
-            TimelineMsg::SelectLast => {
-                return self
-                    .state
-                    .timeline
-                    .update(TimelineMessage::LastItemSelected);
-            }
-            // Load more older events
-            TimelineMsg::LoadMore => {
-                return self.state.load_more_timeline();
-            }
-            TimelineMsg::ReactToSelected => {
-                return self.state.react_to_selected();
-            }
-            TimelineMsg::RepostSelected => {
-                return self.state.repost_selected();
-            }
-            TimelineMsg::SelectTab(index) => {
-                // Select a specific tab by index
-                let _ = self
-                    .state
-                    .timeline
-                    .update(TimelineMessage::TabSelected { index });
-                log::debug!(
-                    "Selected tab index: {}",
-                    self.state.timeline.active_tab_index()
-                );
-            }
-            TimelineMsg::NextTab => {
-                // Switch to the next tab (wraps around)
-                let _ = self.state.timeline.update(TimelineMessage::NextTabSelected);
-                log::debug!(
-                    "Switched to next tab: {}",
-                    self.state.timeline.active_tab_index()
-                );
-            }
-            TimelineMsg::PrevTab => {
-                // Switch to the previous tab (wraps around)
-                let _ = self
-                    .state
-                    .timeline
-                    .update(TimelineMessage::PreviousTabSelected);
-                log::debug!(
-                    "Switched to previous tab: {}",
-                    self.state.timeline.active_tab_index()
-                );
-            }
+            TimelineMsg::ScrollUp => self.state.scroll_up(),
+            TimelineMsg::ScrollDown => self.state.scroll_down(),
+            TimelineMsg::Select(index) => self.state.select_note(index),
+            TimelineMsg::Deselect => self.state.deselect_note(),
+            TimelineMsg::SelectFirst => self.state.select_first_note(),
+            TimelineMsg::SelectLast => self.state.select_last_note(),
+            TimelineMsg::LoadMore => self.state.load_more_timeline(),
+            TimelineMsg::ReactToSelected => self.state.react_to_selected(),
+            TimelineMsg::RepostSelected => self.state.repost_selected(),
+            TimelineMsg::SelectTab(index) => self.state.select_tab(index),
+            TimelineMsg::NextTab => self.state.next_tab(),
+            TimelineMsg::PrevTab => self.state.prev_tab(),
             TimelineMsg::OpenAuthorTimeline => {
-                // Open author timeline for the selected note's author
+                // Open author timeline for the selected note's author.
                 let author_pubkey = self
                     .state
                     .timeline
                     .selected_note()
                     .map(|note| note.author_pubkey());
-                if let Some(author_pubkey) = author_pubkey {
-                    return self.state.open_author_timeline(author_pubkey);
+                match author_pubkey {
+                    Some(author_pubkey) => self.state.open_author_timeline(author_pubkey),
+                    None => Command::none(),
                 }
             }
-            TimelineMsg::CloseCurrentTab => {
-                return self.state.close_current_tab();
-            }
+            TimelineMsg::CloseCurrentTab => self.state.close_current_tab(),
         }
-        Command::none()
     }
 
     /// Handle editor messages
     fn handle_editor_msg(&mut self, msg: EditorMsg) -> Command<AppMsg> {
         match msg {
-            EditorMsg::StartComposing => self.state.editor.update(EditorMessage::ComposingStarted),
-            EditorMsg::StartReply => {
-                return self.state.start_reply();
-            }
-            EditorMsg::CancelComposing => {
-                self.state.editor.update(EditorMessage::ComposingCanceled);
-            }
-            EditorMsg::SubmitNote => {
-                return self.state.submit_note();
-            }
-            EditorMsg::ProcessTextAreaInput(key_event) => {
-                self.state
-                    .editor
-                    .update(EditorMessage::KeyEventReceived { event: key_event });
-            }
+            EditorMsg::StartComposing => self.state.start_composing(),
+            EditorMsg::StartReply => self.state.start_reply(),
+            EditorMsg::CancelComposing => self.state.cancel_composing(),
+            EditorMsg::SubmitNote => self.state.submit_note(),
+            EditorMsg::ProcessTextAreaInput(key_event) => self.state.process_text_input(key_event),
         }
-        Command::none()
     }
 
     /// Handle Nostr messages from the subscription
@@ -442,16 +350,16 @@ impl<'a> TearsApp<'a> {
             NostrMsg::Connect => {
                 // NostrEvents subscription handles connection automatically
                 log::info!("NostrEvents subscription will handle connection");
+                Command::none()
             }
             NostrMsg::Disconnect => {
                 log::info!("Disconnected from Nostr");
-                self.state.nostr.update(NostrMessage::ConnectionClosed);
+                self.state.close_connection()
             }
             NostrMsg::SubscriptionMessage(sub_msg) => {
-                return self.handle_nostr_subscription_message(sub_msg);
+                self.handle_nostr_subscription_message(sub_msg)
             }
         }
-        Command::none()
     }
 
     fn handle_media_msg(&mut self, msg: Result<MediaEvent, MediaSourceError>) -> Command<AppMsg> {
@@ -475,14 +383,9 @@ impl<'a> TearsApp<'a> {
             NostrSubscriptionMessage::SubscriptionCreated {
                 tab_type,
                 subscription_id,
-            } => {
-                log::info!("Subscription created for {tab_type:?}: {subscription_id:?}");
-                self.state.nostr.update(NostrMessage::SubscriptionCreated {
-                    tab_type,
-                    sub_id: subscription_id,
-                });
-                Command::none()
-            }
+            } => self
+                .state
+                .track_subscription_created(tab_type, subscription_id),
             NostrSubscriptionMessage::Notification(notif) => match *notif {
                 // NOTE: We use `RelayPoolNotification::Message` instead of `RelayPoolNotification::Event`
                 // because:
@@ -519,25 +422,10 @@ impl<'a> TearsApp<'a> {
                         Command::none()
                     }
                 }
-                RelayPoolNotification::Shutdown => {
-                    log::info!("Nostr subscription shut down");
-                    self.state
-                        .status_bar
-                        .update(StatusBarMessage::MessageChanged {
-                            label: "Nostr".to_owned(),
-                            message: "disconntected".to_owned(),
-                        });
-                    Command::none()
-                }
+                RelayPoolNotification::Shutdown => self.state.notify_subscription_shutdown(),
             },
             NostrSubscriptionMessage::Error { error } => {
-                self.state
-                    .status_bar
-                    .update(StatusBarMessage::ErrorMessageChanged {
-                        label: "Nostr".to_owned(),
-                        message: format!("{error:?}"),
-                    });
-                Command::none()
+                self.state.notify_subscription_error(error)
             }
         }
     }
@@ -547,7 +435,10 @@ impl<'a> TearsApp<'a> {
 mod tests {
     use super::*;
     use crate::infrastructure::config::Config;
+    use crate::model::editor::Message as EditorMessage;
+    use crate::model::status_bar::Message as StatusBarMessage;
     use crate::model::timeline::tab::TimelineTabType;
+    use crate::model::timeline::Message as TimelineMessage;
 
     /// Create a test app instance
     fn create_test_app() -> TearsApp<'static> {
