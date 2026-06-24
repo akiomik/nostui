@@ -1,2 +1,5 @@
 /target
 .data/*.log
+.*.md
+flamegraph*.svg
+/tmp
