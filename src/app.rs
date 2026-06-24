@@ -582,8 +582,7 @@ impl<'a> TearsApp<'a> {
                 if let MediaEvent::TrackChanged { track, .. } = event {
                     if let Some(status) = MusicStatus::new(track) {
                         let content = status.content();
-                        let event_builder =
-                            EventBuilder::live_status(status.into(), content.clone());
+                        let event_builder = status.live_status_builder();
 
                         self.state
                             .nostr

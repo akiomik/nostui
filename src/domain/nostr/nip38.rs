@@ -29,15 +29,24 @@ impl MusicStatus {
             .duration
             .map(|duration| Timestamp::now() + duration)
     }
+
+    fn to_live_status(&self) -> LiveStatus {
+        LiveStatus {
+            status_type: StatusType::Music,
+            expiration: self.expiration(),
+            reference: Some(self.reference()),
+        }
+    }
+
+    /// Build a NIP-38 live status event for the currently playing track.
+    pub fn live_status_builder(&self) -> EventBuilder {
+        EventBuilder::live_status(self.to_live_status(), self.content())
+    }
 }
 
 impl From<MusicStatus> for LiveStatus {
     fn from(value: MusicStatus) -> Self {
-        LiveStatus {
-            status_type: StatusType::Music,
-            expiration: value.expiration(),
-            reference: Some(value.reference()),
-        }
+        value.to_live_status()
     }
 }
 
@@ -205,6 +214,22 @@ mod tests {
         assert_eq!(live_status.status_type, StatusType::Music);
         assert!(live_status.expiration.is_some());
         assert!(live_status.reference.is_some());
+    }
+
+    #[test]
+    fn test_live_status_builder() {
+        let track = create_valid_track();
+        let status = MusicStatus::new(track).expect("Failed to create MusicStatus");
+        let expected_content = status.content();
+
+        let keys = Keys::generate();
+        let event = status
+            .live_status_builder()
+            .sign_with_keys(&keys)
+            .expect("Failed to sign live status event");
+
+        assert_eq!(event.kind, Kind::UserStatus);
+        assert_eq!(event.content, expected_content);
     }
 
     #[test]
