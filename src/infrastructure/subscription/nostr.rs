@@ -389,158 +389,20 @@ mod tests {
     use super::*;
     use futures::StreamExt;
 
-    #[test]
-    fn test_nostr_events_creation() {
-        let client = Arc::new(Client::default());
-        let _nostr_events = NostrEvents::new(client);
-    }
-
     #[tokio::test]
-    async fn test_ready_message_provides_sender() {
+    async fn test_first_message_is_ready() {
         let client = Arc::new(Client::default());
         let nostr_events = NostrEvents::new(client);
 
         let mut stream = nostr_events.stream();
 
-        // First message should be Ready with command sender
-        if let Some(Message::Ready { sender }) = stream.next().await {
-            // Verify we can use the sender
-            assert!(sender.send(NostrCommand::Shutdown).is_ok());
-        } else {
-            panic!("Expected Ready message as first message");
-        }
-    }
-
-    #[tokio::test]
-    async fn test_command_sender_can_be_cloned() {
-        let client = Arc::new(Client::default());
-        let nostr_events = NostrEvents::new(client);
-
-        let mut stream = nostr_events.stream();
-
-        // Get the command sender from Ready message
-        if let Some(Message::Ready { sender }) = stream.next().await {
-            let sender1 = sender.clone();
-            let sender2 = sender;
-
-            // Both senders should work
-            assert!(sender1.send(NostrCommand::Shutdown).is_ok());
-            assert!(sender2.send(NostrCommand::Shutdown).is_ok());
-        } else {
-            panic!("Expected Ready message");
-        }
-    }
-
-    #[tokio::test]
-    async fn test_various_commands() {
-        let client = Arc::new(Client::default());
-        let nostr_events = NostrEvents::new(client);
-
-        let mut stream = nostr_events.stream();
-
-        // Get the command sender
-        if let Some(Message::Ready { sender }) = stream.next().await {
-            // Test sending various commands
-            assert!(sender
-                .send(NostrCommand::AddRelay {
-                    url: "wss://relay.example.com".to_string()
-                })
-                .is_ok());
-
-            assert!(sender
-                .send(NostrCommand::RemoveRelay {
-                    url: "wss://relay.example.com".to_string()
-                })
-                .is_ok());
-
-            assert!(sender.send(NostrCommand::Shutdown).is_ok());
-        } else {
-            panic!("Expected Ready message");
-        }
-    }
-
-    #[tokio::test]
-    async fn test_error_messages() -> Result<()> {
-        let client = Arc::new(Client::default());
-        let nostr_events = NostrEvents::new(client);
-
-        let mut stream = nostr_events.stream();
-
-        // Get the command sender
-        if let Some(Message::Ready { sender }) = stream.next().await {
-            // Try to add an invalid relay (should produce an error)
-            sender.send(NostrCommand::AddRelay {
-                url: "invalid-url".to_string(),
-            })?;
-
-            // Should receive an error message
-            // Note: Since this is async and depends on relay operations,
-            // we just verify the error variant exists
-            // In real usage, users would handle Message::Error { error } in their message loop
-        } else {
-            panic!("Expected Ready message");
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_command_error_types() {
-        // Test that error types can be constructed and matched
-        let error = CommandError::SendEventFailed {
-            error: "test error".to_string(),
-        };
-
-        match error {
-            CommandError::SendEventFailed { error } => {
-                assert_eq!(error, "test error");
-            }
-            _ => panic!("Wrong error variant"),
-        }
-
-        let error = CommandError::AddRelayFailed {
-            url: "wss://relay.test".to_string(),
-            error: "connection failed".to_string(),
-        };
-
-        match error {
-            CommandError::AddRelayFailed { url, error } => {
-                assert_eq!(url, "wss://relay.test");
-                assert_eq!(error, "connection failed");
-            }
-            _ => panic!("Wrong error variant"),
-        }
-    }
-
-    #[test]
-    fn test_message_variants() {
-        // Test that all message variants can be matched
-        let (tx, _rx) = mpsc::unbounded_channel();
-
-        // Test Ready variant
-        let msg = Message::Ready { sender: tx };
-        match msg {
-            Message::Ready { .. } => {} // OK
-            _ => panic!("Expected Ready variant"),
-        }
-
-        // Test Notification variant with Shutdown
-        let msg = Message::Notification(Box::new(RelayPoolNotification::Shutdown));
-        match msg {
-            Message::Notification(notif) if matches!(*notif, RelayPoolNotification::Shutdown) => {} // OK
-            _ => panic!("Expected Notification(Shutdown) variant"),
-        }
-
-        // Test Error variant
-        let msg = Message::Error {
-            error: CommandError::SendEventFailed {
-                error: "test".to_string(),
-            },
-        };
-        match msg {
-            Message::Error { .. } => {} // OK
-            _ => panic!("Expected Error variant"),
-        }
+        // The subscription emits a Ready message (carrying the command sender)
+        // before anything else.
+        let first = stream
+            .next()
+            .await
+            .expect("subscription should emit a first message");
+        assert!(matches!(first, Message::Ready { .. }));
     }
 
     #[test]

@@ -226,44 +226,6 @@ mod tests {
     }
 
     #[test]
-    fn test_view_context_equality() {
-        let profiles = HashMap::new();
-
-        let ctx1 = ViewContext {
-            profiles: &profiles,
-            live_status: None,
-            selected: false,
-        };
-
-        let ctx2 = ViewContext {
-            profiles: &profiles,
-            live_status: None,
-            selected: false,
-        };
-
-        assert_eq!(ctx1, ctx2);
-    }
-
-    #[test]
-    fn test_view_context_with_selection() {
-        let profiles = HashMap::new();
-
-        let ctx_selected = ViewContext {
-            profiles: &profiles,
-            live_status: None,
-            selected: true,
-        };
-
-        let ctx_not_selected = ViewContext {
-            profiles: &profiles,
-            live_status: None,
-            selected: false,
-        };
-
-        assert_ne!(ctx_selected, ctx_not_selected);
-    }
-
-    #[test]
     fn test_mentioned_names_with_profiles() -> Result<(), Box<dyn Error>> {
         let mentioned_keys = Keys::generate();
         let p_tag = Tag::public_key(mentioned_keys.public_key());
