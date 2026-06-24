@@ -9,7 +9,7 @@ use nostr_sdk::prelude::*;
 use tears::Command;
 
 use crate::{
-    core::message::AppMsg,
+    application::message::AppMsg,
     domain::nostr::{find_event_id_from_last_e_tag, SortableEventId},
     model::timeline::{
         tab::{Message as TabMessage, TimelineTab, TimelineTabType},

@@ -6,7 +6,7 @@
 use ratatui::prelude::*;
 
 use crate::{
-    core::state::AppState,
+    application::state::AppState,
     presentation::widgets::{
         fps::FpsWidget,
         status_bar::{StatusBarWidget, ViewContext as StatusBarViewContext},

@@ -1,9 +1,10 @@
 #![deny(warnings)]
 
-pub mod app;
+// TEA runtime driver (imperative shell)
+pub mod runtime;
 
-// Core Elm architecture modules
-pub mod core;
+// Application layer (use cases, messages, app state)
+pub mod application;
 
 // Infrastructure layer
 pub mod infrastructure;
@@ -21,8 +22,8 @@ pub mod utils;
 pub mod model;
 
 // Re-exports for convenience
+pub use application::state::AppState;
 pub use color_eyre::eyre::Result;
-pub use core::state::AppState;
 
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

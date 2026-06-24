@@ -11,9 +11,9 @@ use tears::prelude::*;
 use tears::subscription::terminal::TerminalEvents;
 use tears::subscription::time::{Message as TimerMessage, Timer};
 
-use crate::core::config::Config;
-use crate::core::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
-use crate::core::state::AppState;
+use crate::application::config::Config;
+use crate::application::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
+use crate::application::state::AppState;
 use crate::infrastructure::subscription::media::MediaEvents;
 use crate::infrastructure::subscription::nostr::{
     Message as NostrSubscriptionMessage, NostrEvents,
@@ -434,7 +434,7 @@ impl<'a> TearsApp<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::config::Config;
+    use crate::application::config::Config;
     use crate::model::editor::Message as EditorMessage;
     use crate::model::status_bar::Message as StatusBarMessage;
     use crate::model::timeline::tab::TimelineTabType;

@@ -6,7 +6,7 @@ use ratatui::{prelude::*, widgets::*};
 use tui_widget_list::{ListBuilder, ListView};
 
 use crate::{
-    core::state::AppState,
+    application::state::AppState,
     presentation::widgets::text_note::{TextNoteWidget, ViewContext},
 };
 

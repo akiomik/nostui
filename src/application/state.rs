@@ -5,8 +5,8 @@ use tears::prelude::*;
 use tokio::sync::mpsc;
 
 use crate::{
-    core::config::Config,
-    core::message::AppMsg,
+    application::config::Config,
+    application::message::AppMsg,
     domain::nostr::{nip10::ReplyTagsBuilder, nip38::MusicStatus, Profile},
     infrastructure::subscription::nostr::{CommandError, NostrCommand},
     model::{

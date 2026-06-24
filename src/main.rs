@@ -7,9 +7,9 @@ use secrecy::ExposeSecret;
 use tears::Runtime;
 
 use nostui::{
-    app::{InitFlags, TearsApp},
-    core::config::Config,
+    application::config::Config,
     infrastructure::{cli::Cli, nostr::PublicKeySigner},
+    runtime::{InitFlags, TearsApp},
     utils::{initialize_logging, initialize_panic_handler},
 };
 
