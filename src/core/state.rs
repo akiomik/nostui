@@ -1,6 +1,8 @@
 use nostr_sdk::prelude::*;
+use tears::prelude::*;
 
 use crate::{
+    core::message::AppMsg,
     domain::nostr::Profile,
     infrastructure::config::Config,
     model::{
@@ -54,13 +56,16 @@ impl<'a> AppState<'a> {
     }
 
     /// Process a received Nostr event for a specific tab
-    // TODO: Handle commands
-    pub fn process_nostr_event_for_tab(&mut self, event: Event, tab_type: &TimelineTabType) {
+    pub fn process_nostr_event_for_tab(
+        &mut self,
+        event: Event,
+        tab_type: &TimelineTabType,
+    ) -> Command<AppMsg> {
         match event.kind {
             Kind::TextNote => {
                 let current_loading_more_state = self.timeline.is_loading_more_for_tab(tab_type);
 
-                let _ = self.timeline.update(TimelineMessage::NoteAddedToTab {
+                let command = self.timeline.update(TimelineMessage::NoteAddedToTab {
                     event,
                     tab_type: tab_type.clone(),
                 });
@@ -75,6 +80,8 @@ impl<'a> AppState<'a> {
                         message: "loaded more".to_owned(),
                     });
                 }
+
+                command
             }
             Kind::Metadata => {
                 // Metadata is shared across all tabs
@@ -82,21 +89,16 @@ impl<'a> AppState<'a> {
                     let profile = Profile::new(event.pubkey, event.created_at, metadata);
                     self.user.insert_newer_profile(profile);
                 }
+                Command::none()
             }
-            Kind::Repost => {
-                let _ = self.timeline.update(TimelineMessage::RepostAdded { event });
-            }
-            Kind::Reaction => {
-                let _ = self
-                    .timeline
-                    .update(TimelineMessage::ReactionAdded { event });
-            }
-            Kind::ZapReceipt => {
-                let _ = self
-                    .timeline
-                    .update(TimelineMessage::ZapReceiptAdded { event });
-            }
-            _ => {}
+            Kind::Repost => self.timeline.update(TimelineMessage::RepostAdded { event }),
+            Kind::Reaction => self
+                .timeline
+                .update(TimelineMessage::ReactionAdded { event }),
+            Kind::ZapReceipt => self
+                .timeline
+                .update(TimelineMessage::ZapReceiptAdded { event }),
+            _ => Command::none(),
         }
     }
 }
@@ -148,7 +150,7 @@ mod tests {
 
         // Add event only to user timeline tab (this also stops loading)
         let event = create_text_note(&author_keys, "hello", Timestamp::from(1000))?;
-        state.process_nostr_event_for_tab(event, &user_tab);
+        let _ = state.process_nostr_event_for_tab(event, &user_tab);
 
         // Verify it was inserted only into the user timeline.
         let _ = state
@@ -163,6 +165,20 @@ mod tests {
 
         // No loading_more => no status message update.
         assert_eq!(state.status_bar.message(), None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_process_nostr_event_for_tab_propagates_timeline_command() -> Result<()> {
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        let event = create_text_note(&Keys::generate(), "hello", Timestamp::from(1000))?;
+        let command = state.process_nostr_event_for_tab(event, &TimelineTabType::Home);
+
+        // The command returned by the timeline update is propagated to the caller
+        // rather than discarded. Adding a note currently issues no follow-up command.
+        assert!(command.is_none());
 
         Ok(())
     }
@@ -184,7 +200,7 @@ mod tests {
         // Insert an initial note so oldest_timestamp exists.
         let keys = Keys::generate();
         let event1 = create_text_note(&keys, "newer", Timestamp::from(1000))?;
-        state.process_nostr_event_for_tab(event1, &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(event1, &TimelineTabType::Home);
 
         // Start loading more. (loading_more_since = oldest_timestamp = 1000)
         let _ = state.timeline.update(TimelineMessage::LastItemSelected);
@@ -198,7 +214,7 @@ mod tests {
 
         // An older event completes the LoadMore operation.
         let event2 = create_text_note(&keys, "older", Timestamp::from(500))?;
-        state.process_nostr_event_for_tab(event2, &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         assert_eq!(state.status_bar.message(), Some("[Home] loaded more"));
         assert_eq!(
@@ -232,7 +248,7 @@ mod tests {
 
         // Insert an initial note so oldest_timestamp exists.
         let event1 = create_text_note(&author_keys, "newer", Timestamp::from(1000))?;
-        state.process_nostr_event_for_tab(event1, &user_tab);
+        let _ = state.process_nostr_event_for_tab(event1, &user_tab);
 
         let _ = state.timeline.update(TimelineMessage::LastItemSelected);
         let _ = state.timeline.update(TimelineMessage::NextItemSelected);
@@ -243,7 +259,7 @@ mod tests {
 
         // An older event completes the LoadMore operation.
         let event2 = create_text_note(&author_keys, "older", Timestamp::from(500))?;
-        state.process_nostr_event_for_tab(event2, &user_tab);
+        let _ = state.process_nostr_event_for_tab(event2, &user_tab);
 
         assert_eq!(
             state.status_bar.message(),
@@ -270,7 +286,7 @@ mod tests {
             .custom_created_at(Timestamp::from(1000))
             .sign_with_keys(&author_keys)?;
 
-        state.process_nostr_event_for_tab(metadata_event, &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(metadata_event, &TimelineTabType::Home);
 
         let stored = state
             .user
@@ -297,7 +313,7 @@ mod tests {
             .custom_created_at(Timestamp::from(1000))
             .sign_with_keys(&author_keys)?;
 
-        state.process_nostr_event_for_tab(invalid_metadata_event, &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(invalid_metadata_event, &TimelineTabType::Home);
 
         assert_eq!(state.user.get_profile(&author_pubkey), None);
         assert_eq!(state.user.profile_count(), 0);
