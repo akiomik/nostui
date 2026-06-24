@@ -306,6 +306,13 @@ impl<'a> TearsApp<'a> {
 
     /// Handle timeline messages
     fn handle_timeline_msg(&mut self, msg: TimelineMsg) -> Command<AppMsg> {
+        // Ignore timeline operations while the initial load is in progress, so the
+        // "loading..." status message is preserved until the first event arrives.
+        // Quitting is handled via SystemMsg and is unaffected by this gate.
+        if self.state.initial_load.is_loading() {
+            return Command::none();
+        }
+
         //  Clear status message
         self.state
             .status_bar
@@ -670,7 +677,7 @@ impl<'a> TearsApp<'a> {
                         event,
                     } = message
                     {
-                        if self.state.timeline.is_loading() {
+                        if self.state.initial_load.is_loading() {
                             let tab_title = self
                                 .state
                                 .timeline
@@ -849,6 +856,31 @@ mod tests {
 
         // Both selection and status message should be cleared
         assert_eq!(app.state.timeline.selected_note(), None);
+        assert_eq!(app.state.status_bar.message(), None);
+    }
+
+    #[test]
+    fn test_timeline_ops_ignored_while_initial_loading() {
+        let mut app = create_test_app();
+        assert!(app.state.initial_load.is_loading());
+
+        // Simulate the "loading..." status message shown during initial load
+        app.state
+            .status_bar
+            .update(StatusBarMessage::MessageChanged {
+                label: "Home".to_owned(),
+                message: "loading...".to_owned(),
+            });
+
+        // While loading, a timeline operation is ignored and the status message
+        // is preserved (the gate returns before clearing it).
+        let _ = app.update(AppMsg::Timeline(TimelineMsg::Deselect));
+        assert_eq!(app.state.status_bar.message(), Some("[Home] loading..."));
+
+        // Once the initial load completes, the same operation goes through and
+        // clears the status message.
+        app.state.initial_load.mark_completed();
+        let _ = app.update(AppMsg::Timeline(TimelineMsg::Deselect));
         assert_eq!(app.state.status_bar.message(), None);
     }
 
