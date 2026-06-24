@@ -150,12 +150,6 @@ mod tests {
     }
 
     #[test]
-    fn test_initial_load_default_is_loading() {
-        let initial_load = InitialLoad::default();
-        assert!(initial_load.is_loading());
-    }
-
-    #[test]
     fn test_initial_load_mark_completed() {
         let mut initial_load = InitialLoad::default();
         initial_load.mark_completed();

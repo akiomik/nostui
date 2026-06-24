@@ -871,16 +871,11 @@ mod tests {
                 label: "Home".to_owned(),
                 message: "loading...".to_owned(),
             });
-        let loading_message = app.state.status_bar.message().map(str::to_owned);
-        assert!(loading_message.is_some());
 
         // While loading, a timeline operation is ignored and the status message
         // is preserved (the gate returns before clearing it).
         let _ = app.update(AppMsg::Timeline(TimelineMsg::Deselect));
-        assert_eq!(
-            app.state.status_bar.message().map(str::to_owned),
-            loading_message
-        );
+        assert_eq!(app.state.status_bar.message(), Some("[Home] loading..."));
 
         // Once the initial load completes, the same operation goes through and
         // clears the status message.
