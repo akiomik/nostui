@@ -13,10 +13,10 @@ impl Reference {
         Self { nip21, value }
     }
 
-    #[allow(clippy::unwrap_used)]
     pub fn find(text: &str) -> Vec<Self> {
         // TODO: Add nevent and nprofile support
-        let pattern = Regex::new(r"[^\w](nostr:(npub|note)1[a-z0-9]{58})[^\w]").unwrap();
+        let pattern = Regex::new(r"[^\w](nostr:(npub|note)1[a-z0-9]{58})[^\w]")
+            .expect("hardcoded NIP-27 reference regex must be valid");
         pattern
             .captures_iter(text)
             .filter_map(|capture| {
