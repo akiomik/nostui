@@ -18,6 +18,28 @@ pub mod user;
 
 pub use user::UserState;
 
+/// Tracks whether the initial timeline load is still in progress.
+///
+/// While loading, the application ignores timeline operations so the
+/// "loading..." status message is preserved until the first event arrives.
+/// `Default` starts in the loading state.
+#[derive(Debug, Clone, Default)]
+pub struct InitialLoad {
+    completed: bool,
+}
+
+impl InitialLoad {
+    /// Whether the initial load is still in progress
+    pub fn is_loading(&self) -> bool {
+        !self.completed
+    }
+
+    /// Mark the initial load as completed (idempotent)
+    pub fn mark_completed(&mut self) {
+        self.completed = true;
+    }
+}
+
 /// Unified application state
 #[derive(Debug, Default)]
 pub struct AppState<'a> {
@@ -28,6 +50,7 @@ pub struct AppState<'a> {
     pub config: ConfigState,
     pub fps: Fps,
     pub status_bar: StatusBar,
+    pub initial_load: InitialLoad,
 }
 
 /// Configuration state - holds all user-configurable settings
@@ -61,6 +84,9 @@ impl<'a> AppState<'a> {
         event: Event,
         tab_type: &TimelineTabType,
     ) -> Command<AppMsg> {
+        // Receiving any event means the initial load has produced results.
+        self.initial_load.mark_completed();
+
         match event.kind {
             Kind::TextNote => {
                 let current_loading_more_state = self.timeline.is_loading_more_for_tab(tab_type);
@@ -120,7 +146,24 @@ mod tests {
 
         assert_eq!(state.timeline.len(), 0);
         assert!(!state.editor.is_active());
-        assert!(state.timeline.is_loading());
+        assert!(state.initial_load.is_loading());
+    }
+
+    #[test]
+    fn test_initial_load_default_is_loading() {
+        let initial_load = InitialLoad::default();
+        assert!(initial_load.is_loading());
+    }
+
+    #[test]
+    fn test_initial_load_mark_completed() {
+        let mut initial_load = InitialLoad::default();
+        initial_load.mark_completed();
+        assert!(!initial_load.is_loading());
+
+        // mark_completed is idempotent
+        initial_load.mark_completed();
+        assert!(!initial_load.is_loading());
     }
 
     #[test]
@@ -190,7 +233,7 @@ mod tests {
         let mut state = AppState::new(current_user_pubkey);
 
         // Use pre-loaded timeline for testing
-        state.timeline = Timeline::new_loaded();
+        state.timeline = Timeline::default();
 
         // Ensure Home tab is active.
         let _ = state
@@ -234,7 +277,7 @@ mod tests {
         let mut state = AppState::new(current_user_pubkey);
 
         // Use pre-loaded timeline for testing
-        state.timeline = Timeline::new_loaded();
+        state.timeline = Timeline::default();
 
         let author_keys = Keys::generate();
         let author_pubkey = author_keys.public_key();
