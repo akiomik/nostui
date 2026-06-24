@@ -120,8 +120,18 @@ impl NostrEvents {
             .get_contact_list_public_keys(Duration::from_secs(DEFAULT_CONTACT_LIST_TIMEOUT_SECS))
             .await
         {
-            Ok(followings) => {
-                // Cache the contact list for future use
+            Ok(mut followings) => {
+                // Always include the user's own posts in the home timeline,
+                // even if they don't follow themselves.
+                if let Ok(signer) = client.signer().await {
+                    if let Ok(own_pubkey) = signer.get_public_key().await {
+                        if !followings.contains(&own_pubkey) {
+                            followings.push(own_pubkey);
+                        }
+                    }
+                }
+
+                // Cache the contact list (including own pubkey) for future use
                 {
                     let mut cache = contact_list_cache.write().await;
                     *cache = Some(followings.clone());
