@@ -13,7 +13,6 @@ use tears::subscription::time::{Message as TimerMessage, Timer};
 
 use crate::core::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
 use crate::core::state::AppState;
-use crate::domain::nostr::nip10::ReplyTagsBuilder;
 use crate::domain::nostr::nip38::MusicStatus;
 use crate::infrastructure::config::Config;
 use crate::infrastructure::subscription::media::MediaEvents;
@@ -421,52 +420,13 @@ impl<'a> TearsApp<'a> {
         match msg {
             EditorMsg::StartComposing => self.state.editor.update(EditorMessage::ComposingStarted),
             EditorMsg::StartReply => {
-                // Get the selected note
-                if let Some(note) = self.state.timeline.selected_note() {
-                    let note1 = note.bech32_id();
-                    log::info!("Starting reply to event: {note1}");
-
-                    // Set reply context
-                    self.state.editor.update(EditorMessage::ReplyStarted {
-                        to: Box::new(note.as_event().clone()),
-                        profile: Box::new(
-                            self.state.user.get_profile(&note.author_pubkey()).cloned(),
-                        ),
-                    });
-                }
+                return self.state.start_reply();
             }
             EditorMsg::CancelComposing => {
                 self.state.editor.update(EditorMessage::ComposingCanceled);
             }
             EditorMsg::SubmitNote => {
-                // Get content from Component's TextArea
-                let content = self.state.editor.get_content();
-
-                // Build event with appropriate tags
-                let event_builder = if let Some(reply_to_event) = self.state.editor.reply_target() {
-                    log::info!("Publishing reply: {content}");
-                    // Build NIP-10 reply tags (root/reply markers, deduped p-tag)
-                    EventBuilder::text_note(&content)
-                        .tags(ReplyTagsBuilder::build(reply_to_event.clone()))
-                } else {
-                    log::info!("Publishing note: {content}");
-                    EventBuilder::text_note(&content)
-                };
-
-                // Send the event
-                self.state
-                    .nostr
-                    .update(NostrMessage::EventSubmitted { event_builder });
-
-                self.state
-                    .status_bar
-                    .update(StatusBarMessage::MessageChanged {
-                        label: "Posted".to_owned(),
-                        message: content,
-                    });
-
-                // Clear UI state
-                self.state.editor.update(EditorMessage::ComposingCanceled);
+                return self.state.submit_note();
             }
             EditorMsg::ProcessTextAreaInput(key_event) => {
                 self.state
