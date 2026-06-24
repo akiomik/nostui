@@ -1,9 +1,10 @@
 use nostr_sdk::prelude::*;
+use nowhear::Track;
 use tears::prelude::*;
 
 use crate::{
     core::message::AppMsg,
-    domain::nostr::{nip10::ReplyTagsBuilder, Profile},
+    domain::nostr::{nip10::ReplyTagsBuilder, nip38::MusicStatus, Profile},
     infrastructure::config::Config,
     model::{
         editor::{Editor, Message as EditorMessage},
@@ -283,6 +284,28 @@ impl<'a> AppState<'a> {
 
         Command::none()
     }
+
+    /// Publish a NIP-38 live status event for the currently playing track and
+    /// show it in the status bar. No-op when the track is missing the fields
+    /// required to build a status.
+    pub fn publish_music_status(&mut self, track: Track) -> Command<AppMsg> {
+        let Some(status) = MusicStatus::new(track) else {
+            return Command::none();
+        };
+
+        let content = status.content();
+        let event_builder = status.live_status_builder();
+
+        self.nostr
+            .update(NostrMessage::EventSubmitted { event_builder });
+
+        self.status_bar.update(Message::MessageChanged {
+            label: "Music".to_owned(),
+            message: content,
+        });
+
+        Command::none()
+    }
 }
 
 #[cfg(test)]
@@ -290,6 +313,19 @@ mod tests {
     use super::*;
     use crate::domain::{nostr::Profile, text::shorten_npub};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use std::time::Duration;
+
+    fn create_track(title: &str) -> Track {
+        Track {
+            title: title.to_owned(),
+            artist: vec!["Artist".to_owned()],
+            duration: Some(Duration::from_secs(180)),
+            album: None,
+            album_artist: vec![],
+            track_number: None,
+            art_url: None,
+        }
+    }
 
     fn create_text_note(keys: &Keys, content: &str, created_at: Timestamp) -> Result<Event> {
         Ok(EventBuilder::text_note(content)
@@ -719,5 +755,24 @@ mod tests {
         assert!(!state.editor.is_active());
 
         Ok(())
+    }
+
+    #[test]
+    fn test_publish_music_status_sets_status() {
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        let _ = state.publish_music_status(create_track("Song"));
+
+        assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
+    }
+
+    #[test]
+    fn test_publish_music_status_ignores_invalid_track() {
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        // A track with an empty title cannot form a status, so nothing happens.
+        let _ = state.publish_music_status(create_track(""));
+
+        assert_eq!(state.status_bar.message(), None);
     }
 }

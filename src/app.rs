@@ -13,7 +13,6 @@ use tears::subscription::time::{Message as TimerMessage, Timer};
 
 use crate::core::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
 use crate::core::state::AppState;
-use crate::domain::nostr::nip38::MusicStatus;
 use crate::infrastructure::config::Config;
 use crate::infrastructure::subscription::media::MediaEvents;
 use crate::infrastructure::subscription::nostr::{
@@ -457,31 +456,13 @@ impl<'a> TearsApp<'a> {
 
     fn handle_media_msg(&mut self, msg: Result<MediaEvent, MediaSourceError>) -> Command<AppMsg> {
         match msg {
-            Ok(event) => {
-                if let MediaEvent::TrackChanged { track, .. } = event {
-                    if let Some(status) = MusicStatus::new(track) {
-                        let content = status.content();
-                        let event_builder = status.live_status_builder();
-
-                        self.state
-                            .nostr
-                            .update(NostrMessage::EventSubmitted { event_builder });
-
-                        self.state
-                            .status_bar
-                            .update(StatusBarMessage::MessageChanged {
-                                label: "Music".to_owned(),
-                                message: content,
-                            });
-                    }
-                }
-            }
+            Ok(MediaEvent::TrackChanged { track, .. }) => self.state.publish_music_status(track),
+            Ok(_) => Command::none(),
             Err(e) => {
                 log::error!("media source error: {e}");
+                Command::none()
             }
         }
-
-        Command::none()
     }
 
     /// Handle NostrEvents subscription messages
