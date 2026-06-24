@@ -570,7 +570,7 @@ impl<'a> TearsApp<'a> {
                 self.state.nostr.update(NostrMessage::ConnectionClosed);
             }
             NostrMsg::SubscriptionMessage(sub_msg) => {
-                self.handle_nostr_subscription_message(sub_msg);
+                return self.handle_nostr_subscription_message(sub_msg);
             }
         }
         Command::none()
@@ -606,7 +606,10 @@ impl<'a> TearsApp<'a> {
     }
 
     /// Handle NostrEvents subscription messages
-    fn handle_nostr_subscription_message(&mut self, msg: NostrSubscriptionMessage) {
+    fn handle_nostr_subscription_message(
+        &mut self,
+        msg: NostrSubscriptionMessage,
+    ) -> Command<AppMsg> {
         match msg {
             NostrSubscriptionMessage::Ready { sender } => {
                 log::info!("NostrEvents subscription ready");
@@ -624,6 +627,7 @@ impl<'a> TearsApp<'a> {
                         label: tab_title,
                         message: "loading...".to_owned(),
                     });
+                Command::none()
             }
             NostrSubscriptionMessage::SubscriptionCreated {
                 tab_type,
@@ -634,6 +638,7 @@ impl<'a> TearsApp<'a> {
                     tab_type,
                     sub_id: subscription_id,
                 });
+                Command::none()
             }
             NostrSubscriptionMessage::Notification(notif) => match *notif {
                 // NOTE: We use `RelayPoolNotification::Message` instead of `RelayPoolNotification::Event`
@@ -655,6 +660,7 @@ impl<'a> TearsApp<'a> {
                         "Received event {} from subscription {subscription_id:?}",
                         event.id
                     );
+                    Command::none()
                 }
                 RelayPoolNotification::Message { message, .. } => {
                     log::debug!("Received relay message: {message:?}");
@@ -691,8 +697,12 @@ impl<'a> TearsApp<'a> {
                                 event.kind
                             );
                             self.state
-                                .process_nostr_event_for_tab(event.into_owned(), &tab_type);
+                                .process_nostr_event_for_tab(event.into_owned(), &tab_type)
+                        } else {
+                            Command::none()
                         }
+                    } else {
+                        Command::none()
                     }
                 }
                 RelayPoolNotification::Shutdown => {
@@ -703,6 +713,7 @@ impl<'a> TearsApp<'a> {
                             label: "Nostr".to_owned(),
                             message: "disconntected".to_owned(),
                         });
+                    Command::none()
                 }
             },
             NostrSubscriptionMessage::Error { error } => {
@@ -712,6 +723,7 @@ impl<'a> TearsApp<'a> {
                         label: "Nostr".to_owned(),
                         message: format!("{error:?}"),
                     });
+                Command::none()
             }
         }
     }
@@ -782,7 +794,8 @@ mod tests {
         let event = EventBuilder::text_note("test note")
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
-        app.state
+        let _ = app
+            .state
             .process_nostr_event_for_tab(event, &TimelineTabType::Home);
 
         // Set selection and status message
@@ -815,7 +828,8 @@ mod tests {
         let event = EventBuilder::text_note("test note")
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
-        app.state
+        let _ = app
+            .state
             .process_nostr_event_for_tab(event, &TimelineTabType::Home);
 
         // Set selection and status message
@@ -850,9 +864,11 @@ mod tests {
         let event2 = EventBuilder::text_note("test note 2")
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
-        app.state
+        let _ = app
+            .state
             .process_nostr_event_for_tab(event1, &TimelineTabType::Home);
-        app.state
+        let _ = app
+            .state
             .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         // Select somewhere in the middle
@@ -880,9 +896,11 @@ mod tests {
         let event2 = EventBuilder::text_note("test note 2")
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
-        app.state
+        let _ = app
+            .state
             .process_nostr_event_for_tab(event1, &TimelineTabType::Home);
-        app.state
+        let _ = app
+            .state
             .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         // Start with no selection
@@ -908,7 +926,8 @@ mod tests {
         let event = EventBuilder::text_note("test note")
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
-        app.state
+        let _ = app
+            .state
             .process_nostr_event_for_tab(event, &TimelineTabType::Home);
 
         // Directly test the delegation by calling SelectFirst
@@ -930,9 +949,11 @@ mod tests {
         let event2 = EventBuilder::text_note("test note 2")
             .sign_with_keys(&keys)
             .expect("Failed to sign test event");
-        app.state
+        let _ = app
+            .state
             .process_nostr_event_for_tab(event1, &TimelineTabType::Home);
-        app.state
+        let _ = app
+            .state
             .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
 
         // Directly test the delegation by calling SelectLast
