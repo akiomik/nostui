@@ -6,5 +6,6 @@
 //! - Update logic and command execution
 //! - Message translation layer
 
+pub mod config;
 pub mod message;
 pub mod state;
