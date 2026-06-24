@@ -100,7 +100,6 @@ fn extract_modifiers(raw: &str) -> (&str, KeyModifiers) {
     (current, modifiers)
 }
 
-#[allow(clippy::unwrap_used)]
 fn parse_key_code_with_modifiers(raw: &str, mut modifiers: KeyModifiers) -> Result<KeyEvent> {
     let c = match raw {
         "esc" => KeyCode::Esc,
@@ -137,7 +136,10 @@ fn parse_key_code_with_modifiers(raw: &str, mut modifiers: KeyModifiers) -> Resu
         "minus" => KeyCode::Char('-'),
         "tab" => KeyCode::Tab,
         c if c.len() == 1 => {
-            let mut c = c.chars().next().unwrap();
+            let mut c = c
+                .chars()
+                .next()
+                .expect("c has exactly one char because c.len() == 1");
             if modifiers.contains(KeyModifiers::SHIFT) {
                 c = c.to_ascii_uppercase();
             }

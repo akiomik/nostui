@@ -46,15 +46,22 @@ pub struct Config {
 }
 
 impl Config {
-    #[allow(clippy::unwrap_used)]
     pub fn new() -> Result<Self, config::ConfigError> {
         let default_config: Config = json5::from_str(CONFIG)
             .map_err(|e| ConfigError::Message(format!("Failed to load default config: {e}")))?;
         let data_dir = utils::get_data_dir();
         let config_dir = utils::get_config_dir();
+        let data_dir_str = data_dir.to_str().ok_or_else(|| {
+            ConfigError::Message(format!("Data dir path is not valid UTF-8: {data_dir:?}"))
+        })?;
+        let config_dir_str = config_dir.to_str().ok_or_else(|| {
+            ConfigError::Message(format!(
+                "Config dir path is not valid UTF-8: {config_dir:?}"
+            ))
+        })?;
         let mut builder = config::Config::builder()
-            .set_default("_data_dir", data_dir.to_str().unwrap())?
-            .set_default("_config_dir", config_dir.to_str().unwrap())?;
+            .set_default("_data_dir", data_dir_str)?
+            .set_default("_config_dir", config_dir_str)?;
 
         let config_files = [
             ("config.json5", config::FileFormat::Json5),
