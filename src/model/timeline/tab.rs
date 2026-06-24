@@ -199,12 +199,16 @@ impl TimelineTab {
             Message::NextItemSelected => {
                 if !self.is_empty() {
                     if self.is_at_bottom() {
-                        // At bottom: trigger "load more" instead of scrolling
-                        if let Some(since) = self.oldest_timestamp() {
-                            self.pagination
-                                .update(PaginationMessage::LoadingMoreStarted { since });
+                        // At bottom: trigger "load more" instead of scrolling,
+                        // unless a load-more request is already in flight (avoid
+                        // re-triggering duplicate requests on repeated key presses).
+                        if !self.is_loading_more() {
+                            if let Some(since) = self.oldest_timestamp() {
+                                self.pagination
+                                    .update(PaginationMessage::LoadingMoreStarted { since });
 
-                            return Command::message(AppMsg::Timeline(TimelineMsg::LoadMore));
+                                return Command::message(AppMsg::Timeline(TimelineMsg::LoadMore));
+                            }
                         }
                     } else {
                         // Not at bottom: normal scrolling
@@ -354,6 +358,28 @@ mod tests {
         let cmd = tab.update(Message::NextItemSelected);
         assert!(tab.is_loading_more());
         assert!(cmd.is_some()); // LoadMore command was issued
+    }
+
+    #[test]
+    fn test_loading_more_not_retriggered_while_in_flight() {
+        let mut tab = TimelineTab::new_home();
+
+        // Add notes and move to the bottom
+        for i in 0..3 {
+            let event_id = create_test_event_id(1000 + i, i as u8);
+            let _ = tab.update(Message::NoteAdded(event_id));
+        }
+        let _ = tab.update(Message::LastItemSelected);
+
+        // First scroll-down at bottom triggers loading more
+        let cmd = tab.update(Message::NextItemSelected);
+        assert!(tab.is_loading_more());
+        assert!(cmd.is_some());
+
+        // A subsequent scroll-down while already loading must not re-trigger it
+        let cmd = tab.update(Message::NextItemSelected);
+        assert!(tab.is_loading_more());
+        assert!(cmd.is_none()); // No duplicate LoadMore command
     }
 
     #[test]
