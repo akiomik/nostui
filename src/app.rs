@@ -471,24 +471,7 @@ impl<'a> TearsApp<'a> {
         msg: NostrSubscriptionMessage,
     ) -> Command<AppMsg> {
         match msg {
-            NostrSubscriptionMessage::Ready { sender } => {
-                log::info!("NostrEvents subscription ready");
-                let tab_title = self
-                    .state
-                    .timeline
-                    .active_tab()
-                    .tab_title(self.state.user.profiles());
-                self.state.nostr.update(NostrMessage::ConnectionReady {
-                    command_sender: sender,
-                });
-                self.state
-                    .status_bar
-                    .update(StatusBarMessage::MessageChanged {
-                        label: tab_title,
-                        message: "loading...".to_owned(),
-                    });
-                Command::none()
-            }
+            NostrSubscriptionMessage::Ready { sender } => self.state.on_connection_ready(sender),
             NostrSubscriptionMessage::SubscriptionCreated {
                 tab_type,
                 subscription_id,
@@ -530,37 +513,8 @@ impl<'a> TearsApp<'a> {
                         event,
                     } = message
                     {
-                        if self.state.startup.is_in_progress() {
-                            let tab_title = self
-                                .state
-                                .timeline
-                                .active_tab()
-                                .tab_title(self.state.user.profiles());
-                            self.state
-                                .status_bar
-                                .update(StatusBarMessage::MessageChanged {
-                                    label: tab_title,
-                                    message: "loaded".to_owned(),
-                                });
-                        }
-
-                        // Find the tab that owns this subscription
-                        if let Some(tab_type) = self
-                            .state
-                            .nostr
-                            .find_tab_by_subscription(&subscription_id)
-                            .cloned()
-                        {
-                            log::debug!(
-                                "Routing event {} (kind: {:?}) to tab {tab_type:?}",
-                                event.id,
-                                event.kind
-                            );
-                            self.state
-                                .process_nostr_event_for_tab(event.into_owned(), &tab_type)
-                        } else {
-                            Command::none()
-                        }
+                        self.state
+                            .route_relay_event(&subscription_id, event.into_owned())
                     } else {
                         Command::none()
                     }
