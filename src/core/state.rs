@@ -18,23 +18,24 @@ pub mod user;
 
 pub use user::UserState;
 
-/// Tracks whether the initial timeline load is still in progress.
+/// Tracks whether the application is still starting up.
 ///
-/// While loading, the application ignores timeline operations so the
-/// "loading..." status message is preserved until the first event arrives.
-/// `Default` starts in the loading state.
+/// Startup lasts from launch until the first event arrives. While starting up,
+/// the application ignores timeline operations so the "loading..." status
+/// message is preserved. This is a startup indicator, not a data-completeness
+/// signal (it does not wait for EOSE). `Default` starts in the startup state.
 #[derive(Debug, Clone, Default)]
-pub struct InitialLoad {
+pub struct Startup {
     completed: bool,
 }
 
-impl InitialLoad {
-    /// Whether the initial load is still in progress
-    pub fn is_loading(&self) -> bool {
+impl Startup {
+    /// Whether the application is still starting up
+    pub fn is_in_progress(&self) -> bool {
         !self.completed
     }
 
-    /// Mark the initial load as completed (idempotent)
+    /// Mark startup as completed (idempotent)
     pub fn mark_completed(&mut self) {
         self.completed = true;
     }
@@ -50,7 +51,7 @@ pub struct AppState<'a> {
     pub config: ConfigState,
     pub fps: Fps,
     pub status_bar: StatusBar,
-    pub initial_load: InitialLoad,
+    pub startup: Startup,
 }
 
 /// Configuration state - holds all user-configurable settings
@@ -84,8 +85,8 @@ impl<'a> AppState<'a> {
         event: Event,
         tab_type: &TimelineTabType,
     ) -> Command<AppMsg> {
-        // Receiving any event means the initial load has produced results.
-        self.initial_load.mark_completed();
+        // Receiving any event means startup has produced its first results.
+        self.startup.mark_completed();
 
         match event.kind {
             Kind::TextNote => {
@@ -146,18 +147,18 @@ mod tests {
 
         assert_eq!(state.timeline.len(), 0);
         assert!(!state.editor.is_active());
-        assert!(state.initial_load.is_loading());
+        assert!(state.startup.is_in_progress());
     }
 
     #[test]
-    fn test_initial_load_mark_completed() {
-        let mut initial_load = InitialLoad::default();
-        initial_load.mark_completed();
-        assert!(!initial_load.is_loading());
+    fn test_startup_mark_completed() {
+        let mut startup = Startup::default();
+        startup.mark_completed();
+        assert!(!startup.is_in_progress());
 
         // mark_completed is idempotent
-        initial_load.mark_completed();
-        assert!(!initial_load.is_loading());
+        startup.mark_completed();
+        assert!(!startup.is_in_progress());
     }
 
     #[test]
