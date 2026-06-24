@@ -13,6 +13,7 @@ use tears::subscription::time::{Message as TimerMessage, Timer};
 
 use crate::core::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
 use crate::core::state::AppState;
+use crate::domain::nostr::nip10::ReplyTagsBuilder;
 use crate::domain::nostr::nip38::MusicStatus;
 use crate::infrastructure::config::Config;
 use crate::infrastructure::subscription::media::MediaEvents;
@@ -525,10 +526,9 @@ impl<'a> TearsApp<'a> {
                 // Build event with appropriate tags
                 let event_builder = if let Some(reply_to_event) = self.state.editor.reply_target() {
                     log::info!("Publishing reply: {content}");
-                    // Create reply with proper NIP-10 tags
+                    // Build NIP-10 reply tags (root/reply markers, deduped p-tag)
                     EventBuilder::text_note(&content)
-                        .tag(Tag::event(reply_to_event.id))
-                        .tag(Tag::public_key(reply_to_event.pubkey))
+                        .tags(ReplyTagsBuilder::build(reply_to_event.clone()))
                 } else {
                     log::info!("Publishing note: {content}");
                     EventBuilder::text_note(&content)
