@@ -365,6 +365,30 @@ impl<'a> AppState<'a> {
 
         self.process_nostr_event_for_tab(event, &tab_type)
     }
+
+    /// Request older events for the active tab, paginating before its oldest
+    /// known timestamp. No-op when the active timeline has no events yet.
+    pub fn load_more_timeline(&mut self) -> Command<AppMsg> {
+        log::info!("Loading more timeline events");
+
+        let Some(since) = self.timeline.oldest_timestamp() else {
+            log::warn!("No oldest timestamp available, cannot load more");
+            return Command::none();
+        };
+
+        let tab_type = self.timeline.active_tab().tab_type().clone();
+        let tab_title = self.active_tab_title();
+
+        self.nostr
+            .update(NostrMessage::HistoryRequested { tab_type, since });
+
+        self.status_bar.update(Message::MessageChanged {
+            label: tab_title,
+            message: "loading more...".to_owned(),
+        });
+
+        Command::none()
+    }
 }
 
 #[cfg(test)]
@@ -865,6 +889,31 @@ mod tests {
         assert_eq!(state.timeline.len(), 1);
         assert!(!state.startup.is_in_progress());
         assert_eq!(state.status_bar.message(), Some("[Home] loaded"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_more_timeline_without_events_is_noop() {
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        // No events => no oldest timestamp => nothing to paginate.
+        let _ = state.load_more_timeline();
+
+        assert_eq!(state.status_bar.message(), None);
+    }
+
+    #[test]
+    fn test_load_more_timeline_sets_loading_status() -> Result<()> {
+        let keys = Keys::generate();
+        let mut state = AppState::new(keys.public_key());
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let _ = state.process_nostr_event_for_tab(event, &TimelineTabType::Home);
+
+        let _ = state.load_more_timeline();
+
+        assert_eq!(state.status_bar.message(), Some("[Home] loading more..."));
 
         Ok(())
     }
