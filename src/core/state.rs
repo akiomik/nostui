@@ -10,7 +10,9 @@ use crate::{
         fps::Fps,
         nostr::{Message as NostrMessage, Nostr},
         status_bar::{Message, StatusBar},
-        timeline::{tab::TimelineTabType, Message as TimelineMessage, Timeline},
+        timeline::{
+            tab::TimelineTabType, text_note::TextNote, Message as TimelineMessage, Timeline,
+        },
     },
 };
 
@@ -190,6 +192,42 @@ impl<'a> AppState<'a> {
         // Unsubscribe the subscriptions associated with the closed tab.
         self.nostr
             .update(NostrMessage::SubscriptionClosed { tab_type });
+
+        Command::none()
+    }
+
+    /// Submit a NIP-25 reaction for the currently selected note.
+    pub fn react_to_selected(&mut self) -> Command<AppMsg> {
+        self.submit_engagement_for_selected("Reacted", TextNote::reaction_builder)
+    }
+
+    /// Submit a NIP-18 repost for the currently selected note.
+    pub fn repost_selected(&mut self) -> Command<AppMsg> {
+        self.submit_engagement_for_selected("Reposted", TextNote::repost_builder)
+    }
+
+    /// Build an engagement event for the selected note with `build`, submit it,
+    /// and show `label` in the status bar. No-op when nothing is selected.
+    fn submit_engagement_for_selected(
+        &mut self,
+        label: &str,
+        build: fn(&TextNote) -> EventBuilder,
+    ) -> Command<AppMsg> {
+        let Some(note) = self.timeline.selected_note() else {
+            return Command::none();
+        };
+
+        let note_id = note.bech32_id();
+        let event_builder = build(note);
+        log::info!("{label} event: {note_id}");
+
+        self.nostr
+            .update(NostrMessage::EventSubmitted { event_builder });
+
+        self.status_bar.update(Message::MessageChanged {
+            label: label.to_owned(),
+            message: note_id,
+        });
 
         Command::none()
     }
@@ -506,5 +544,55 @@ mod tests {
             state.timeline.active_tab().tab_type(),
             &TimelineTabType::Home
         );
+    }
+
+    #[test]
+    fn test_react_to_selected_without_selection_is_noop() {
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        let command = state.react_to_selected();
+
+        assert!(command.is_none());
+        assert_eq!(state.status_bar.message(), None);
+    }
+
+    #[test]
+    fn test_react_to_selected_sets_status() -> Result<()> {
+        let keys = Keys::generate();
+        let mut state = AppState::new(keys.public_key());
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let Ok(note1) = event.id.to_bech32();
+        let _ = state.process_nostr_event_for_tab(event, &TimelineTabType::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+
+        let _ = state.react_to_selected();
+
+        assert_eq!(
+            state.status_bar.message(),
+            Some(format!("[Reacted] {note1}").as_str())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_repost_selected_sets_status() -> Result<()> {
+        let keys = Keys::generate();
+        let mut state = AppState::new(keys.public_key());
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let Ok(note1) = event.id.to_bech32();
+        let _ = state.process_nostr_event_for_tab(event, &TimelineTabType::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+
+        let _ = state.repost_selected();
+
+        assert_eq!(
+            state.status_bar.message(),
+            Some(format!("[Reposted] {note1}").as_str())
+        );
+
+        Ok(())
     }
 }
