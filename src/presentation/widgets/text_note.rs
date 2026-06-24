@@ -8,6 +8,7 @@ use crate::{
     },
 };
 
+use chrono::{DateTime, Local};
 use nostr_sdk::prelude::*;
 use ratatui::{
     prelude::*,
@@ -45,6 +46,16 @@ impl<'a> TextNoteWidget<'a> {
                     })
             })
             .collect()
+    }
+
+    /// Format this note's creation time for display as a local `HH:MM:SS`
+    /// wall-clock.
+    fn formatted_created_at(&self) -> String {
+        DateTime::from_timestamp(self.text_note.created_at().as_secs() as i64, 0)
+            .expect("Invalid created_at")
+            .with_timezone(&Local)
+            .format("%T")
+            .to_string()
     }
 
     pub fn calculate_height(&self, area: &Rect, padding: Padding) -> u16 {
@@ -114,11 +125,10 @@ impl<'a> Widget for TextNoteWidget<'a> {
         .into();
         text.extend(content);
 
+        let created_at = self.formatted_created_at();
         let meta = match self.text_note.find_client_tag() {
-            Some(TagStandard::Client { name, .. }) => {
-                format!("{} | via {name}", self.text_note.created_at())
-            }
-            _ => self.text_note.created_at(),
+            Some(TagStandard::Client { name, .. }) => format!("{created_at} | via {name}"),
+            _ => created_at,
         };
         text.extend(Text::from(Line::styled(
             meta,
@@ -167,6 +177,29 @@ mod tests {
             Metadata::new().name(name)
         };
         Profile::new(keys.public_key(), Timestamp::now(), metadata)
+    }
+
+    #[test]
+    fn test_formatted_created_at_produces_wall_clock() -> Result<(), Box<dyn Error>> {
+        let event = create_test_event("Test")?;
+        let text_note = TextNote::new(event);
+
+        let profiles = HashMap::new();
+        let ctx = ViewContext {
+            profiles: &profiles,
+            live_status: None,
+            selected: false,
+        };
+        let widget = TextNoteWidget::new(text_note, ctx);
+
+        // Local-timezone formatting varies by machine, so assert the stable
+        // HH:MM:SS shape rather than an exact wall-clock value.
+        let formatted = widget.formatted_created_at();
+
+        assert_eq!(formatted.len(), 8);
+        assert_eq!(formatted.match_indices(':').count(), 2);
+
+        Ok(())
     }
 
     #[test]
