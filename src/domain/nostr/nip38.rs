@@ -52,7 +52,7 @@ mod tests {
             artist: vec!["Test Artist".to_string()],
             duration: Some(Duration::from_secs(180)),
             album: None,
-            album_artist: None,
+            album_artist: vec![],
             track_number: None,
             art_url: None,
         }
@@ -73,7 +73,7 @@ mod tests {
             artist: vec!["Test Artist".to_string()],
             duration: Some(Duration::from_secs(180)),
             album: None,
-            album_artist: None,
+            album_artist: vec![],
             track_number: None,
             art_url: None,
         };
@@ -89,7 +89,7 @@ mod tests {
             artist: vec![],
             duration: Some(Duration::from_secs(180)),
             album: None,
-            album_artist: None,
+            album_artist: vec![],
             track_number: None,
             art_url: None,
         };
@@ -105,7 +105,7 @@ mod tests {
             artist: vec!["Test Artist".to_string()],
             duration: None,
             album: None,
-            album_artist: None,
+            album_artist: vec![],
             track_number: None,
             art_url: None,
         };
@@ -133,7 +133,7 @@ mod tests {
             ],
             duration: Some(Duration::from_secs(200)),
             album: None,
-            album_artist: None,
+            album_artist: vec![],
             track_number: None,
             art_url: None,
         };
@@ -152,7 +152,7 @@ mod tests {
             artist: vec!["Artist/Name".to_string()],
             duration: Some(Duration::from_secs(180)),
             album: None,
-            album_artist: None,
+            album_artist: vec![],
             track_number: None,
             art_url: None,
         };
@@ -214,7 +214,7 @@ mod tests {
             artist: vec!["Test Artist".to_string()],
             duration: Some(Duration::from_secs(180)),
             album: None,
-            album_artist: None,
+            album_artist: vec![],
             track_number: None,
             art_url: None,
         };
