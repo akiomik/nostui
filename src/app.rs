@@ -363,44 +363,10 @@ impl<'a> TearsApp<'a> {
                 return self.load_more_timeline_events();
             }
             TimelineMsg::ReactToSelected => {
-                // React to the selected note
-                if let Some(note) = self.state.timeline.selected_note() {
-                    let note1 = note.bech32_id();
-                    log::info!("Reacting to event: {note1}");
-
-                    // Send the event
-                    let event_builder = note.reaction_builder();
-                    self.state
-                        .nostr
-                        .update(NostrMessage::EventSubmitted { event_builder });
-
-                    self.state
-                        .status_bar
-                        .update(StatusBarMessage::MessageChanged {
-                            label: "Reacted".to_string(),
-                            message: note1,
-                        });
-                }
+                return self.state.react_to_selected();
             }
             TimelineMsg::RepostSelected => {
-                // Repost the selected note
-                if let Some(note) = self.state.timeline.selected_note() {
-                    let note1 = note.bech32_id();
-                    log::info!("Reposting event: {note1}");
-
-                    // Send the event
-                    let event_builder = note.repost_builder();
-                    self.state
-                        .nostr
-                        .update(NostrMessage::EventSubmitted { event_builder });
-
-                    self.state
-                        .status_bar
-                        .update(StatusBarMessage::MessageChanged {
-                            label: "Reposted".to_owned(),
-                            message: note1,
-                        });
-                }
+                return self.state.repost_selected();
             }
             TimelineMsg::SelectTab(index) => {
                 // Select a specific tab by index
