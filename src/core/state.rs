@@ -1,11 +1,12 @@
 use nostr_sdk::prelude::*;
 use nowhear::Track;
 use tears::prelude::*;
+use tokio::sync::mpsc;
 
 use crate::{
     core::message::AppMsg,
     domain::nostr::{nip10::ReplyTagsBuilder, nip38::MusicStatus, Profile},
-    infrastructure::config::Config,
+    infrastructure::{config::Config, subscription::nostr::NostrCommand},
     model::{
         editor::{Editor, Message as EditorMessage},
         fps::Fps,
@@ -104,7 +105,7 @@ impl<'a> AppState<'a> {
 
                 if current_loading_more_state == Some(true) && new_loading_more_state == Some(false)
                 {
-                    let tab_title = self.timeline.active_tab().tab_title(self.user.profiles());
+                    let tab_title = self.active_tab_title();
                     self.status_bar.update(Message::MessageChanged {
                         label: tab_title,
                         message: "loaded more".to_owned(),
@@ -305,6 +306,64 @@ impl<'a> AppState<'a> {
         });
 
         Command::none()
+    }
+
+    /// Title of the currently active tab, resolved against known profiles.
+    fn active_tab_title(&self) -> String {
+        self.timeline.active_tab().tab_title(self.user.profiles())
+    }
+
+    /// Record that the Nostr subscription is ready and store its command sender,
+    /// then show the initial "loading" status for the active tab.
+    pub fn on_connection_ready(
+        &mut self,
+        command_sender: mpsc::UnboundedSender<NostrCommand>,
+    ) -> Command<AppMsg> {
+        log::info!("NostrEvents subscription ready");
+
+        let tab_title = self.active_tab_title();
+        self.nostr
+            .update(NostrMessage::ConnectionReady { command_sender });
+        self.status_bar.update(Message::MessageChanged {
+            label: tab_title,
+            message: "loading...".to_owned(),
+        });
+
+        Command::none()
+    }
+
+    /// Route an incoming relay event to the tab that owns its subscription.
+    ///
+    /// While still starting up, the first event flips the status to "loaded".
+    /// Events whose subscription is not tracked by any tab are ignored.
+    pub fn route_relay_event(
+        &mut self,
+        subscription_id: &SubscriptionId,
+        event: Event,
+    ) -> Command<AppMsg> {
+        if self.startup.is_in_progress() {
+            let tab_title = self.active_tab_title();
+            self.status_bar.update(Message::MessageChanged {
+                label: tab_title,
+                message: "loaded".to_owned(),
+            });
+        }
+
+        let Some(tab_type) = self
+            .nostr
+            .find_tab_by_subscription(subscription_id)
+            .cloned()
+        else {
+            return Command::none();
+        };
+
+        log::debug!(
+            "Routing event {} (kind: {:?}) to tab {tab_type:?}",
+            event.id,
+            event.kind
+        );
+
+        self.process_nostr_event_for_tab(event, &tab_type)
     }
 }
 
@@ -774,5 +833,55 @@ mod tests {
         let _ = state.publish_music_status(create_track(""));
 
         assert_eq!(state.status_bar.message(), None);
+    }
+
+    #[test]
+    fn test_on_connection_ready_marks_ready_and_shows_loading() {
+        let mut state = AppState::new(Keys::generate().public_key());
+        let (tx, _rx) = mpsc::unbounded_channel();
+
+        let _ = state.on_connection_ready(tx);
+
+        assert!(state.nostr.is_ready());
+        assert_eq!(state.status_bar.message(), Some("[Home] loading..."));
+    }
+
+    #[test]
+    fn test_route_relay_event_routes_to_owning_tab() -> Result<()> {
+        let keys = Keys::generate();
+        let mut state = AppState::new(keys.public_key());
+
+        // Associate a subscription with the Home tab.
+        let sub_id = SubscriptionId::new("home_sub");
+        state.nostr.update(NostrMessage::SubscriptionCreated {
+            tab_type: TimelineTabType::Home,
+            sub_id: sub_id.clone(),
+        });
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let _ = state.route_relay_event(&sub_id, event);
+
+        // The event is routed to the Home tab, and the first event ends startup.
+        assert_eq!(state.timeline.len(), 1);
+        assert!(!state.startup.is_in_progress());
+        assert_eq!(state.status_bar.message(), Some("[Home] loaded"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_route_relay_event_ignores_untracked_subscription() -> Result<()> {
+        let keys = Keys::generate();
+        let mut state = AppState::new(keys.public_key());
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let _ = state.route_relay_event(&SubscriptionId::new("unknown"), event);
+
+        // No tab owns the subscription, so the event is dropped, but the
+        // "loaded" status is still shown while starting up.
+        assert_eq!(state.timeline.len(), 0);
+        assert_eq!(state.status_bar.message(), Some("[Home] loaded"));
+
+        Ok(())
     }
 }
