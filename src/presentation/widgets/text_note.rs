@@ -28,8 +28,34 @@ pub struct TextNoteWidget<'a> {
 }
 
 impl<'a> TextNoteWidget<'a> {
+    /// Lines occupied by the author name row.
+    const NAME_LINES: u16 = 1;
+    /// Lines occupied by the metadata row (created_at, optionally `via` client).
+    const META_LINES: u16 = 1;
+    /// Lines occupied by the engagement stats row.
+    const STATS_LINES: u16 = 1;
+    /// Lines occupied by the trailing separator.
+    const SEPARATOR_LINES: u16 = 1;
+    /// Lines occupied by the "Reply to ..." annotation (replies only).
+    const REPLY_ANNOTATION_LINES: u16 = 1;
+
     pub fn new(text_note: TextNote, ctx: ViewContext<'a>) -> Self {
         Self { text_note, ctx }
+    }
+
+    /// Total number of fixed (non-content) lines this note renders.
+    ///
+    /// Must stay in sync with the non-content lines emitted by [`Self::render`]:
+    /// the optional reply annotation, the author name, the metadata row, the
+    /// stats row, and the separator.
+    fn fixed_lines(&self) -> u16 {
+        let base = Self::NAME_LINES + Self::META_LINES + Self::STATS_LINES + Self::SEPARATOR_LINES;
+
+        if self.text_note.find_reply_tag().is_some() {
+            base + Self::REPLY_ANNOTATION_LINES
+        } else {
+            base
+        }
     }
 
     pub fn mentioned_names(&self) -> Vec<String> {
@@ -63,12 +89,7 @@ impl<'a> TextNoteWidget<'a> {
         let width = area.width.saturating_sub(padding.left + padding.right);
 
         // Calculate the number of fixed lines (non-content)
-        let has_reply = self.text_note.find_reply_tag().is_some();
-        let fixed_lines = if has_reply {
-            5 // annotation + name + created_at + stats + separator
-        } else {
-            4 // name + created_at + stats + separator
-        };
+        let fixed_lines = self.fixed_lines();
 
         // Calculate available height for content
         let available_height = area
@@ -93,6 +114,8 @@ impl<'a> Widget for TextNoteWidget<'a> {
     where
         Self: Sized,
     {
+        // NOTE: The non-content lines emitted below are counted by
+        // `fixed_lines`; keep the two in sync when changing the layout.
         let mut text = Text::default();
 
         if let Some(TagStandard::Event { event_id, .. }) = self.text_note.find_reply_tag() {
@@ -347,6 +370,48 @@ mod tests {
         let mentioned_names = widget.mentioned_names();
 
         assert_eq!(mentioned_names.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_fixed_lines_without_reply() -> Result<(), Box<dyn Error>> {
+        let event = create_test_event("Not a reply")?;
+        let text_note = TextNote::new(event);
+
+        let profiles = HashMap::new();
+        let ctx = ViewContext {
+            profiles: &profiles,
+            live_status: None,
+            selected: false,
+        };
+
+        let widget = TextNoteWidget::new(text_note, ctx);
+
+        // name + created_at + stats + separator
+        assert_eq!(widget.fixed_lines(), 4);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_fixed_lines_with_reply() -> Result<(), Box<dyn Error>> {
+        let original_event = create_test_event("Original")?;
+        let reply_event =
+            create_test_event_with_tags("Reply", vec![Tag::event(original_event.id)])?;
+        let text_note = TextNote::new(reply_event);
+
+        let profiles = HashMap::new();
+        let ctx = ViewContext {
+            profiles: &profiles,
+            live_status: None,
+            selected: false,
+        };
+
+        let widget = TextNoteWidget::new(text_note, ctx);
+
+        // reply annotation + name + created_at + stats + separator
+        assert_eq!(widget.fixed_lines(), 5);
 
         Ok(())
     }
