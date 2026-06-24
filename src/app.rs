@@ -363,7 +363,7 @@ impl<'a> TearsApp<'a> {
                     log::info!("Reacting to event: {note1}");
 
                     // Send the event
-                    let event_builder = EventBuilder::reaction(note.as_event(), "+");
+                    let event_builder = note.reaction_builder();
                     self.state
                         .nostr
                         .update(NostrMessage::EventSubmitted { event_builder });
@@ -383,7 +383,7 @@ impl<'a> TearsApp<'a> {
                     log::info!("Reposting event: {note1}");
 
                     // Send the event
-                    let event_builder = EventBuilder::repost(note.as_event(), None);
+                    let event_builder = note.repost_builder();
                     self.state
                         .nostr
                         .update(NostrMessage::EventSubmitted { event_builder });
