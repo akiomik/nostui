@@ -8,7 +8,8 @@ use tears::Runtime;
 
 use nostui::{
     app::{InitFlags, TearsApp},
-    infrastructure::{cli::Cli, config::Config, nostr::PublicKeySigner},
+    core::config::Config,
+    infrastructure::{cli::Cli, nostr::PublicKeySigner},
     utils::{initialize_logging, initialize_panic_handler},
 };
 

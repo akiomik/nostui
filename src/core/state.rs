@@ -5,12 +5,10 @@ use tears::prelude::*;
 use tokio::sync::mpsc;
 
 use crate::{
+    core::config::Config,
     core::message::AppMsg,
     domain::nostr::{nip10::ReplyTagsBuilder, nip38::MusicStatus, Profile},
-    infrastructure::{
-        config::Config,
-        subscription::nostr::{CommandError, NostrCommand},
-    },
+    infrastructure::subscription::nostr::{CommandError, NostrCommand},
     model::{
         editor::{Editor, Message as EditorMessage},
         fps::{Fps, Message as FpsMessage},
