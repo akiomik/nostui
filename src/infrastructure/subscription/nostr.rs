@@ -9,16 +9,13 @@ use nostr_sdk::prelude::*;
 use tears::{SubscriptionId, SubscriptionSource};
 use tokio::sync::{broadcast, mpsc, RwLock};
 
+use crate::domain::nostr::timeline_filter::{
+    home_load_more_filter, home_timeline_filters, user_load_more_filter, user_timeline_filters,
+    with_own_pubkey,
+};
 use crate::model::timeline::tab::TimelineTabType;
 
 const DEFAULT_CONTACT_LIST_TIMEOUT_SECS: u64 = 10;
-const DEFAULT_TIMELINE_LIMIT: usize = 50;
-const TIMELINE_KINDS: [Kind; 4] = [
-    Kind::TextNote,
-    Kind::Repost,
-    Kind::Reaction,
-    Kind::ZapReceipt,
-];
 
 /// Commands that can be sent to the Nostr subscription
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,9 +122,7 @@ impl NostrEvents {
                 // even if they don't follow themselves.
                 if let Ok(signer) = client.signer().await {
                     if let Ok(own_pubkey) = signer.get_public_key().await {
-                        if !followings.contains(&own_pubkey) {
-                            followings.push(own_pubkey);
-                        }
+                        followings = with_own_pubkey(followings, own_pubkey);
                     }
                 }
 
@@ -137,16 +132,8 @@ impl NostrEvents {
                     *cache = Some(followings.clone());
                 }
 
-                let timeline_backward_filter = Filter::new()
-                    .authors(followings.clone())
-                    .kinds(TIMELINE_KINDS)
-                    .until(Timestamp::now())
-                    .limit(DEFAULT_TIMELINE_LIMIT);
-                let timeline_forward_filter = Filter::new()
-                    .authors(followings.clone())
-                    .kinds(TIMELINE_KINDS)
-                    .since(Timestamp::now());
-                let profile_filter = Filter::new().authors(followings).kinds([Kind::Metadata]);
+                let [timeline_backward_filter, timeline_forward_filter, profile_filter] =
+                    home_timeline_filters(followings, Timestamp::now());
 
                 // Subscribe to both timeline and profile data concurrently
                 let result = tokio::try_join!(
@@ -226,32 +213,20 @@ impl NostrEvents {
                 }
             }
             NostrCommand::LoadMoreTimeline { tab_type, since } => {
-                // Load more timeline events before the specified timestamp
+                // Load more timeline events before the specified timestamp.
+                // Map the tab to the appropriate domain filter builder; the home
+                // timeline reuses the contact list cached at init time.
                 let filter = match &tab_type {
-                    TimelineTabType::Home => {
-                        // Use cached contact list from initialization
-                        let followings = {
-                            let cache = contact_list_cache.read().await;
-                            match cache.as_ref() {
-                                Some(list) => list.clone(),
-                                None => {
-                                    log::warn!("Contact list not cached, cannot load more events");
-                                    return;
-                                }
-                            }
-                        };
-
-                        Filter::new()
-                            .authors(followings)
-                            .kinds(TIMELINE_KINDS)
-                            .until(since) // flipped
-                            .limit(DEFAULT_TIMELINE_LIMIT)
+                    TimelineTabType::Home => match contact_list_cache.read().await.clone() {
+                        Some(authors) => home_load_more_filter(authors, since),
+                        None => {
+                            log::warn!("Contact list not cached, cannot load more events");
+                            return;
+                        }
+                    },
+                    TimelineTabType::UserTimeline { pubkey } => {
+                        user_load_more_filter(*pubkey, since)
                     }
-                    TimelineTabType::UserTimeline { pubkey } => Filter::new()
-                        .authors(vec![*pubkey])
-                        .kinds(vec![Kind::TextNote, Kind::Repost])
-                        .until(since) // flipped
-                        .limit(DEFAULT_TIMELINE_LIMIT),
                 };
 
                 match client.subscribe(filter, None).await {
@@ -276,16 +251,8 @@ impl NostrEvents {
                     }
                     TimelineTabType::UserTimeline { pubkey } => {
                         // Subscribe to both backward (historical) and forward (real-time) events
-                        let backward_filter = Filter::new()
-                            .authors(vec![*pubkey])
-                            .kinds(vec![Kind::TextNote, Kind::Repost])
-                            .until(Timestamp::now())
-                            .limit(DEFAULT_TIMELINE_LIMIT);
-
-                        let forward_filter = Filter::new()
-                            .authors(vec![*pubkey])
-                            .kinds(vec![Kind::TextNote, Kind::Repost])
-                            .since(Timestamp::now());
+                        let [backward_filter, forward_filter] =
+                            user_timeline_filters(*pubkey, Timestamp::now());
 
                         // Subscribe to both filters concurrently
                         let result = tokio::try_join!(
