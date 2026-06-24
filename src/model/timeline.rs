@@ -89,6 +89,16 @@ pub struct Timeline {
 }
 
 impl Timeline {
+    /// Forward an engagement event (reaction, repost, zap receipt) to the note
+    /// it targets, identified by the last `e` tag.
+    fn apply_engagement(&mut self, event: Event, to_message: fn(Event) -> TextNoteMessage) {
+        if let Some(target_event_id) = find_event_id_from_last_e_tag(&event) {
+            self.notes.entry(target_event_id).and_modify(|note| {
+                note.update(to_message(event));
+            });
+        }
+    }
+
     /// Create a Timeline
     pub fn new(&self) -> Self {
         Self::default()
@@ -223,25 +233,13 @@ impl Timeline {
                 return tab.update(TabMessage::NoteAdded(sortable_id));
             }
             Message::ReactionAdded { event } => {
-                if let Some(target_event_id) = find_event_id_from_last_e_tag(&event) {
-                    self.notes.entry(target_event_id).and_modify(|note| {
-                        note.update(TextNoteMessage::ReactionReceived(event));
-                    });
-                }
+                self.apply_engagement(event, TextNoteMessage::ReactionReceived);
             }
             Message::RepostAdded { event } => {
-                if let Some(target_event_id) = find_event_id_from_last_e_tag(&event) {
-                    self.notes.entry(target_event_id).and_modify(|note| {
-                        note.update(TextNoteMessage::RepostReceived(event));
-                    });
-                }
+                self.apply_engagement(event, TextNoteMessage::RepostReceived);
             }
             Message::ZapReceiptAdded { event } => {
-                if let Some(target_event_id) = find_event_id_from_last_e_tag(&event) {
-                    self.notes.entry(target_event_id).and_modify(|note| {
-                        note.update(TextNoteMessage::ZapReceiptReceived(event));
-                    });
-                }
+                self.apply_engagement(event, TextNoteMessage::ZapReceiptReceived);
             }
             Message::PreviousItemSelected => {
                 let tab = self.active_tab_mut();
