@@ -10,7 +10,7 @@ use tears::Command;
 
 use crate::{
     core::message::AppMsg,
-    domain::nostr::SortableEventId,
+    domain::nostr::{find_event_id_from_last_e_tag, SortableEventId},
     model::timeline::{
         tab::{Message as TabMessage, TimelineTab, TimelineTabType},
         text_note::{Message as TextNoteMessage, TextNote},
@@ -89,20 +89,6 @@ pub struct Timeline {
 }
 
 impl Timeline {
-    /// Extract the last event ID from 'e' tags
-    fn find_event_id_from_last_e_tag(event: &Event) -> Option<EventId> {
-        event
-            .tags
-            .filter_standardized(TagKind::SingleLetter(SingleLetterTag::lowercase(
-                Alphabet::E,
-            )))
-            .last()
-            .and_then(|tag| match tag {
-                TagStandard::Event { event_id, .. } => Some(*event_id),
-                _ => None,
-            })
-    }
-
     /// Create a Timeline
     pub fn new(&self) -> Self {
         Self::default()
@@ -237,21 +223,21 @@ impl Timeline {
                 return tab.update(TabMessage::NoteAdded(sortable_id));
             }
             Message::ReactionAdded { event } => {
-                if let Some(target_event_id) = Self::find_event_id_from_last_e_tag(&event) {
+                if let Some(target_event_id) = find_event_id_from_last_e_tag(&event) {
                     self.notes.entry(target_event_id).and_modify(|note| {
                         note.update(TextNoteMessage::ReactionReceived(event));
                     });
                 }
             }
             Message::RepostAdded { event } => {
-                if let Some(target_event_id) = Self::find_event_id_from_last_e_tag(&event) {
+                if let Some(target_event_id) = find_event_id_from_last_e_tag(&event) {
                     self.notes.entry(target_event_id).and_modify(|note| {
                         note.update(TextNoteMessage::RepostReceived(event));
                     });
                 }
             }
             Message::ZapReceiptAdded { event } => {
-                if let Some(target_event_id) = Self::find_event_id_from_last_e_tag(&event) {
+                if let Some(target_event_id) = find_event_id_from_last_e_tag(&event) {
                     self.notes.entry(target_event_id).and_modify(|note| {
                         note.update(TextNoteMessage::ZapReceiptReceived(event));
                     });
@@ -1097,48 +1083,6 @@ mod tests {
         // Switch back to Home - selection should be independent
         let _ = timeline.update(Message::TabSelected { index: 0 });
         assert_eq!(timeline.selected_index(), None);
-    }
-
-    #[test]
-    fn test_find_event_id_from_last_e_tag() {
-        let keys = Keys::generate();
-        let target_id = EventId::all_zeros();
-
-        let event = EventBuilder::new(Kind::Reaction, "+")
-            .tags(vec![Tag::event(target_id)])
-            .sign_with_keys(&keys)
-            .expect("Failed to create event");
-
-        let found_id = Timeline::find_event_id_from_last_e_tag(&event);
-        assert_eq!(found_id, Some(target_id));
-    }
-
-    #[test]
-    fn test_find_event_id_from_last_e_tag_multiple_tags() {
-        let keys = Keys::generate();
-        let first_id = EventId::all_zeros();
-        let last_id = EventId::from_slice(&[1u8; 32]).expect("Valid event ID");
-
-        let event = EventBuilder::new(Kind::Reaction, "+")
-            .tags(vec![Tag::event(first_id), Tag::event(last_id)])
-            .sign_with_keys(&keys)
-            .expect("Failed to create event");
-
-        // Should return the last 'e' tag
-        let found_id = Timeline::find_event_id_from_last_e_tag(&event);
-        assert_eq!(found_id, Some(last_id));
-    }
-
-    #[test]
-    fn test_find_event_id_from_last_e_tag_no_tags() {
-        let keys = Keys::generate();
-
-        let event = EventBuilder::new(Kind::Reaction, "+")
-            .sign_with_keys(&keys)
-            .expect("Failed to create event");
-
-        let found_id = Timeline::find_event_id_from_last_e_tag(&event);
-        assert_eq!(found_id, None);
     }
 
     #[test]

@@ -4,5 +4,5 @@ pub mod nip27;
 pub mod nip38;
 mod profile;
 
-pub use event::SortableEventId;
+pub use event::{find_event_id_from_last_e_tag, SortableEventId};
 pub use profile::Profile;
