@@ -99,11 +99,6 @@ impl Timeline {
         }
     }
 
-    /// Create a Timeline
-    pub fn new(&self) -> Self {
-        Self::default()
-    }
-
     /// Get all tabs
     pub fn tabs(&self) -> &[TimelineTab] {
         &self.tabs
