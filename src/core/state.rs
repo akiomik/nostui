@@ -1,3 +1,4 @@
+use crossterm::event::KeyEvent;
 use nostr_sdk::prelude::*;
 use nowhear::Track;
 use tears::prelude::*;
@@ -6,10 +7,13 @@ use tokio::sync::mpsc;
 use crate::{
     core::message::AppMsg,
     domain::nostr::{nip10::ReplyTagsBuilder, nip38::MusicStatus, Profile},
-    infrastructure::{config::Config, subscription::nostr::NostrCommand},
+    infrastructure::{
+        config::Config,
+        subscription::nostr::{CommandError, NostrCommand},
+    },
     model::{
         editor::{Editor, Message as EditorMessage},
-        fps::Fps,
+        fps::{Fps, Message as FpsMessage},
         nostr::{Message as NostrMessage, Nostr},
         status_bar::{Message, StatusBar},
         timeline::{
@@ -387,6 +391,147 @@ impl<'a> AppState<'a> {
             message: "loading more...".to_owned(),
         });
 
+        Command::none()
+    }
+
+    // --- Thin command methods ---
+    //
+    // These wrap a single sub-state transition so that `TearsApp` never mutates
+    // a sub-state directly; all state changes flow through `AppState`. Read-only
+    // access (used by the view) is intentionally left to the public fields.
+
+    /// Clear the current status message.
+    pub fn clear_status_message(&mut self) -> Command<AppMsg> {
+        self.status_bar.update(Message::MessageCleared);
+        Command::none()
+    }
+
+    /// Show a system-level error in the status bar.
+    pub fn show_error(&mut self, error: String) -> Command<AppMsg> {
+        log::error!("{error}");
+        self.status_bar.update(Message::ErrorMessageChanged {
+            label: "System".to_owned(),
+            message: error,
+        });
+        Command::none()
+    }
+
+    /// Record a frame tick for FPS tracking.
+    pub fn record_tick(&mut self) -> Command<AppMsg> {
+        self.fps.update(FpsMessage::FrameRecorded { now: None });
+        Command::none()
+    }
+
+    /// Move the selection to the previous timeline item.
+    pub fn scroll_up(&mut self) -> Command<AppMsg> {
+        self.timeline.update(TimelineMessage::PreviousItemSelected)
+    }
+
+    /// Move the selection to the next timeline item.
+    pub fn scroll_down(&mut self) -> Command<AppMsg> {
+        self.timeline.update(TimelineMessage::NextItemSelected)
+    }
+
+    /// Select the timeline item at `index`.
+    pub fn select_note(&mut self, index: usize) -> Command<AppMsg> {
+        self.timeline
+            .update(TimelineMessage::ItemSelected { index })
+    }
+
+    /// Clear the current timeline selection.
+    pub fn deselect_note(&mut self) -> Command<AppMsg> {
+        self.timeline.update(TimelineMessage::ItemSelectionCleared)
+    }
+
+    /// Select the first timeline item.
+    pub fn select_first_note(&mut self) -> Command<AppMsg> {
+        self.timeline.update(TimelineMessage::FirstItemSelected)
+    }
+
+    /// Select the last timeline item.
+    pub fn select_last_note(&mut self) -> Command<AppMsg> {
+        self.timeline.update(TimelineMessage::LastItemSelected)
+    }
+
+    /// Switch to the tab at `index`.
+    pub fn select_tab(&mut self, index: usize) -> Command<AppMsg> {
+        let command = self.timeline.update(TimelineMessage::TabSelected { index });
+        log::debug!("Selected tab index: {}", self.timeline.active_tab_index());
+        command
+    }
+
+    /// Switch to the next tab (wraps around).
+    pub fn next_tab(&mut self) -> Command<AppMsg> {
+        let command = self.timeline.update(TimelineMessage::NextTabSelected);
+        log::debug!("Switched to next tab: {}", self.timeline.active_tab_index());
+        command
+    }
+
+    /// Switch to the previous tab (wraps around).
+    pub fn prev_tab(&mut self) -> Command<AppMsg> {
+        let command = self.timeline.update(TimelineMessage::PreviousTabSelected);
+        log::debug!(
+            "Switched to previous tab: {}",
+            self.timeline.active_tab_index()
+        );
+        command
+    }
+
+    /// Start composing a new note.
+    pub fn start_composing(&mut self) -> Command<AppMsg> {
+        self.editor.update(EditorMessage::ComposingStarted);
+        Command::none()
+    }
+
+    /// Cancel the current composing/reply session.
+    pub fn cancel_composing(&mut self) -> Command<AppMsg> {
+        self.editor.update(EditorMessage::ComposingCanceled);
+        Command::none()
+    }
+
+    /// Forward a key event to the editor's text area.
+    pub fn process_text_input(&mut self, event: KeyEvent) -> Command<AppMsg> {
+        self.editor
+            .update(EditorMessage::KeyEventReceived { event });
+        Command::none()
+    }
+
+    /// Close the Nostr connection: unsubscribe and disconnect from relays.
+    pub fn close_connection(&mut self) -> Command<AppMsg> {
+        self.nostr.update(NostrMessage::ConnectionClosed);
+        Command::none()
+    }
+
+    /// Track a subscription that the relay layer created for a tab.
+    pub fn track_subscription_created(
+        &mut self,
+        tab_type: TimelineTabType,
+        subscription_id: SubscriptionId,
+    ) -> Command<AppMsg> {
+        log::info!("Subscription created for {tab_type:?}: {subscription_id:?}");
+        self.nostr.update(NostrMessage::SubscriptionCreated {
+            tab_type,
+            sub_id: subscription_id,
+        });
+        Command::none()
+    }
+
+    /// Show that the Nostr subscription was shut down.
+    pub fn notify_subscription_shutdown(&mut self) -> Command<AppMsg> {
+        log::info!("Nostr subscription shut down");
+        self.status_bar.update(Message::MessageChanged {
+            label: "Nostr".to_owned(),
+            message: "disconntected".to_owned(),
+        });
+        Command::none()
+    }
+
+    /// Show a Nostr subscription error in the status bar.
+    pub fn notify_subscription_error(&mut self, error: CommandError) -> Command<AppMsg> {
+        self.status_bar.update(Message::ErrorMessageChanged {
+            label: "Nostr".to_owned(),
+            message: format!("{error:?}"),
+        });
         Command::none()
     }
 }
