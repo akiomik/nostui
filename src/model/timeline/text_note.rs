@@ -1,4 +1,3 @@
-use chrono::{DateTime, Local};
 use nostr_sdk::prelude::*;
 
 use crate::domain::collections::EventSet;
@@ -49,12 +48,8 @@ impl TextNote {
         &self.event.content
     }
 
-    pub fn created_at(&self) -> String {
-        DateTime::from_timestamp(self.event.created_at.as_secs() as i64, 0)
-            .expect("Invalid created_at")
-            .with_timezone(&Local)
-            .format("%T")
-            .to_string()
+    pub fn created_at(&self) -> Timestamp {
+        self.event.created_at
     }
 
     pub fn reactions_count(&self) -> usize {
@@ -166,6 +161,7 @@ mod tests {
         assert_eq!(text_note.id(), event.id);
         assert_eq!(text_note.author_pubkey(), event.pubkey);
         assert_eq!(text_note.content(), &event.content);
+        assert_eq!(text_note.created_at(), event.created_at);
         assert_eq!(text_note.reactions_count(), 0);
         assert_eq!(text_note.reposts_count(), 0);
         assert_eq!(text_note.zap_amount(), 0);
@@ -180,19 +176,6 @@ mod tests {
 
         let bech32 = text_note.bech32_id();
         assert!(bech32.starts_with("note1"));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_created_at_format() -> Result<(), Box<dyn Error>> {
-        let event = create_test_event("Test")?;
-        let text_note = TextNote::new(event);
-
-        let created_at = text_note.created_at();
-        // Format should be HH:MM:SS
-        assert!(created_at.contains(':'));
-        assert_eq!(created_at.len(), 8);
 
         Ok(())
     }
