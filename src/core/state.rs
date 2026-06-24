@@ -8,7 +8,7 @@ use crate::{
     model::{
         editor::Editor,
         fps::Fps,
-        nostr::Nostr,
+        nostr::{Message as NostrMessage, Nostr},
         status_bar::{Message, StatusBar},
         timeline::{tab::TimelineTabType, Message as TimelineMessage, Timeline},
     },
@@ -127,6 +127,71 @@ impl<'a> AppState<'a> {
                 .update(TimelineMessage::ZapReceiptAdded { event }),
             _ => Command::none(),
         }
+    }
+
+    /// Open (or switch to) the author timeline tab for the given pubkey.
+    ///
+    /// If a tab for this author already exists, it is selected. Otherwise a new
+    /// tab is created, a subscription is requested, and a "loading" status
+    /// message is shown (or an error message if the tab could not be created).
+    pub fn open_author_timeline(&mut self, author_pubkey: PublicKey) -> Command<AppMsg> {
+        let Ok(author_npub) = author_pubkey.to_bech32();
+        let tab_type = TimelineTabType::UserTimeline {
+            pubkey: author_pubkey,
+        };
+
+        // Tab already open: just switch to it.
+        if let Some(index) = self.timeline.find_tab_by_type(&tab_type) {
+            let _ = self.timeline.update(TimelineMessage::TabSelected { index });
+            return Command::none();
+        }
+
+        // Otherwise create it, then subscribe and show the loading status.
+        let _ = self.timeline.update(TimelineMessage::TabAdded {
+            tab_type: tab_type.clone(),
+        });
+
+        if self.timeline.find_tab_by_type(&tab_type).is_some() {
+            log::info!("Created new author timeline for {author_npub}");
+
+            self.nostr
+                .update(NostrMessage::SubscriptionRequested { tab_type });
+
+            self.status_bar.update(Message::MessageChanged {
+                label: author_npub,
+                message: "loading...".to_owned(),
+            });
+        } else {
+            log::error!("Failed to create author timeline");
+
+            self.status_bar.update(Message::ErrorMessageChanged {
+                label: author_npub,
+                message: "failed to open tab".to_owned(),
+            });
+        }
+
+        Command::none()
+    }
+
+    /// Close the currently active tab and unsubscribe from its subscriptions.
+    ///
+    /// The Home tab cannot be closed; the [`Timeline`] enforces this, so calling
+    /// this while Home is active is a no-op apart from the (no-op) unsubscribe.
+    pub fn close_current_tab(&mut self) -> Command<AppMsg> {
+        let current_index = self.timeline.active_tab_index();
+
+        // Capture the tab type before removing the tab.
+        let tab_type = self.timeline.active_tab().tab_type().clone();
+
+        let _ = self.timeline.update(TimelineMessage::TabRemoved {
+            index: current_index,
+        });
+
+        // Unsubscribe the subscriptions associated with the closed tab.
+        self.nostr
+            .update(NostrMessage::SubscriptionClosed { tab_type });
+
+        Command::none()
     }
 }
 
@@ -357,5 +422,89 @@ mod tests {
         assert_eq!(state.user.profile_count(), 0);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_open_author_timeline_switches_to_existing_tab() {
+        let mut state = AppState::new(Keys::generate().public_key());
+        let author_pubkey = Keys::generate().public_key();
+        let tab_type = TimelineTabType::UserTimeline {
+            pubkey: author_pubkey,
+        };
+
+        // Pre-create the author tab, then move focus back to Home.
+        let _ = state.timeline.update(TimelineMessage::TabAdded {
+            tab_type: tab_type.clone(),
+        });
+        let _ = state
+            .timeline
+            .update(TimelineMessage::TabSelected { index: 0 });
+        assert_eq!(state.timeline.active_tab_index(), 0);
+
+        let _ = state.open_author_timeline(author_pubkey);
+
+        // Switches to the existing tab instead of creating a duplicate.
+        assert_eq!(state.timeline.tabs().len(), 2);
+        assert_eq!(state.timeline.active_tab().tab_type(), &tab_type);
+    }
+
+    #[test]
+    fn test_open_author_timeline_creates_new_tab_and_shows_loading() {
+        let mut state = AppState::new(Keys::generate().public_key());
+        let author_pubkey = Keys::generate().public_key();
+        let Ok(author_npub) = author_pubkey.to_bech32();
+        let tab_type = TimelineTabType::UserTimeline {
+            pubkey: author_pubkey,
+        };
+
+        let _ = state.open_author_timeline(author_pubkey);
+
+        // A new author tab is created, focused, and a loading status is shown.
+        assert_eq!(state.timeline.tabs().len(), 2);
+        assert_eq!(state.timeline.active_tab().tab_type(), &tab_type);
+        assert_eq!(
+            state.status_bar.message(),
+            Some(format!("[{author_npub}] loading...").as_str())
+        );
+    }
+
+    #[test]
+    fn test_close_current_tab_removes_active_tab() {
+        let mut state = AppState::new(Keys::generate().public_key());
+        let author_pubkey = Keys::generate().public_key();
+        let tab_type = TimelineTabType::UserTimeline {
+            pubkey: author_pubkey,
+        };
+        let _ = state
+            .timeline
+            .update(TimelineMessage::TabAdded { tab_type });
+        assert_eq!(state.timeline.active_tab_index(), 1);
+
+        let _ = state.close_current_tab();
+
+        // The active author tab is removed and focus falls back to Home.
+        assert_eq!(state.timeline.tabs().len(), 1);
+        assert_eq!(
+            state.timeline.active_tab().tab_type(),
+            &TimelineTabType::Home
+        );
+    }
+
+    #[test]
+    fn test_close_current_tab_keeps_home_tab() {
+        let mut state = AppState::new(Keys::generate().public_key());
+        assert_eq!(
+            state.timeline.active_tab().tab_type(),
+            &TimelineTabType::Home
+        );
+
+        let _ = state.close_current_tab();
+
+        // Home cannot be closed, so the timeline is unchanged.
+        assert_eq!(state.timeline.tabs().len(), 1);
+        assert_eq!(
+            state.timeline.active_tab().tab_type(),
+            &TimelineTabType::Home
+        );
     }
 }

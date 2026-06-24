@@ -24,7 +24,6 @@ use crate::model::editor::Message as EditorMessage;
 use crate::model::fps::Message as FpsMessage;
 use crate::model::nostr::Message as NostrMessage;
 use crate::model::status_bar::Message as StatusBarMessage;
-use crate::model::timeline::tab::TimelineTabType;
 use crate::model::timeline::Message as TimelineMessage;
 use crate::presentation::components::Components;
 use crate::presentation::config::keybindings::Action as KeyAction;
@@ -435,70 +434,17 @@ impl<'a> TearsApp<'a> {
             }
             TimelineMsg::OpenAuthorTimeline => {
                 // Open author timeline for the selected note's author
-                if let Some(event) = self.state.timeline.selected_note() {
-                    let author_pubkey = event.author_pubkey();
-                    let Ok(author_npub) = author_pubkey.to_bech32();
-                    let tab_type = TimelineTabType::UserTimeline {
-                        pubkey: author_pubkey,
-                    };
-
-                    // Check if tab already exists
-                    if let Some(index) = self.state.timeline.find_tab_by_type(&tab_type) {
-                        // Tab exists, just switch to it
-                        let _ = self
-                            .state
-                            .timeline
-                            .update(TimelineMessage::TabSelected { index });
-                    } else {
-                        // Tab doesn't exist, create a new one
-                        let _ = self.state.timeline.update(TimelineMessage::TabAdded {
-                            tab_type: tab_type.clone(),
-                        });
-
-                        if let Some(_index) = self.state.timeline.find_tab_by_type(&tab_type) {
-                            log::info!("Created new author timeline for {author_npub}");
-
-                            // Send subscription command
-                            self.state
-                                .nostr
-                                .update(NostrMessage::SubscriptionRequested { tab_type });
-
-                            log::info!("Sent SubscribeTimeline command for user: {author_npub}");
-
-                            self.state
-                                .status_bar
-                                .update(StatusBarMessage::MessageChanged {
-                                    label: author_npub,
-                                    message: "loading...".to_owned(),
-                                });
-                        } else {
-                            log::error!("Failed to create author timeline");
-                            self.state
-                                .status_bar
-                                .update(StatusBarMessage::ErrorMessageChanged {
-                                    label: author_npub,
-                                    message: "failed to open tab".to_owned(),
-                                });
-                        }
-                    }
+                let author_pubkey = self
+                    .state
+                    .timeline
+                    .selected_note()
+                    .map(|note| note.author_pubkey());
+                if let Some(author_pubkey) = author_pubkey {
+                    return self.state.open_author_timeline(author_pubkey);
                 }
             }
             TimelineMsg::CloseCurrentTab => {
-                // Close the current tab (only if it's not the Home tab)
-                let current_index = self.state.timeline.active_tab_index();
-
-                // Get the tab type before closing
-                let tab_type = self.state.timeline.active_tab().tab_type().clone();
-
-                // Close the tab
-                let _ = self.state.timeline.update(TimelineMessage::TabRemoved {
-                    index: current_index,
-                });
-
-                // Unsubscribe subscriptions associated with this tab.
-                self.state
-                    .nostr
-                    .update(NostrMessage::SubscriptionClosed { tab_type });
+                return self.state.close_current_tab();
             }
         }
         Command::none()
@@ -774,6 +720,7 @@ impl<'a> TearsApp<'a> {
 mod tests {
     use super::*;
     use crate::infrastructure::config::Config;
+    use crate::model::timeline::tab::TimelineTabType;
 
     /// Create a test app instance
     fn create_test_app() -> TearsApp<'static> {
