@@ -160,8 +160,11 @@ impl Timeline {
     }
 
     /// Check if the active timeline is empty
+    ///
+    /// This mirrors `len()`, which counts items in the active tab, so that
+    /// `len() == 0` is always equivalent to `is_empty()`.
     pub fn is_empty(&self) -> bool {
-        self.notes.is_empty()
+        self.active_tab().is_empty()
     }
 
     /// Get the index of currently selected note in the active tab
@@ -490,6 +493,32 @@ mod tests {
         });
 
         // Note should not be added
+        assert_eq!(timeline.len(), 0);
+        assert!(timeline.is_empty());
+    }
+
+    #[test]
+    fn test_is_empty_reflects_active_tab() {
+        let mut timeline = Timeline::default();
+        let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
+
+        // Add a note only to a non-active tab
+        let _ = timeline.update(Message::TabAdded {
+            tab_type: TimelineTabType::UserTimeline { pubkey },
+        });
+        let event = create_test_event(1000, 1, "Note");
+        let _ = timeline.update(Message::NoteAddedToTab {
+            event,
+            tab_type: TimelineTabType::UserTimeline { pubkey },
+        });
+
+        // The active tab (UserTimeline) has the note
+        assert_eq!(timeline.len(), 1);
+        assert!(!timeline.is_empty());
+
+        // Switching to the empty Home tab keeps len() and is_empty() consistent,
+        // even though the centralized storage still holds the note
+        let _ = timeline.update(Message::TabSelected { index: 0 });
         assert_eq!(timeline.len(), 0);
         assert!(timeline.is_empty());
     }
