@@ -96,6 +96,16 @@ impl TextNote {
         self.event.tags.public_keys()
     }
 
+    /// Build a NIP-25 `+` reaction event targeting this note.
+    pub fn reaction_builder(&self) -> EventBuilder {
+        EventBuilder::reaction(&self.event, "+")
+    }
+
+    /// Build a NIP-18 repost event for this note.
+    pub fn repost_builder(&self) -> EventBuilder {
+        EventBuilder::repost(&self.event, None)
+    }
+
     pub fn update(&mut self, message: Message) {
         match message {
             Message::ReactionReceived(event) => {
@@ -243,6 +253,41 @@ mod tests {
         text_note.update(Message::ZapReceiptReceived(zap_receipt));
 
         assert_eq!(text_note.zap_amount(), 10000);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_reaction_builder() -> Result<(), Box<dyn Error>> {
+        let event = create_test_event("Original post")?;
+        let text_note = TextNote::new(event.clone());
+
+        let keys = Keys::generate();
+        let reaction = text_note.reaction_builder().sign_with_keys(&keys)?;
+
+        assert_eq!(reaction.kind, Kind::Reaction);
+        assert_eq!(reaction.content, "+");
+        assert_eq!(
+            reaction.tags.event_ids().copied().collect::<Vec<_>>(),
+            vec![event.id]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_repost_builder() -> Result<(), Box<dyn Error>> {
+        let event = create_test_event("Original post")?;
+        let text_note = TextNote::new(event.clone());
+
+        let keys = Keys::generate();
+        let repost = text_note.repost_builder().sign_with_keys(&keys)?;
+
+        assert_eq!(repost.kind, Kind::Repost);
+        assert_eq!(
+            repost.tags.event_ids().copied().collect::<Vec<_>>(),
+            vec![event.id]
+        );
 
         Ok(())
     }
