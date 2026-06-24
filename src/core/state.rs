@@ -3,10 +3,10 @@ use tears::prelude::*;
 
 use crate::{
     core::message::AppMsg,
-    domain::nostr::Profile,
+    domain::nostr::{nip10::ReplyTagsBuilder, Profile},
     infrastructure::config::Config,
     model::{
-        editor::Editor,
+        editor::{Editor, Message as EditorMessage},
         fps::Fps,
         nostr::{Message as NostrMessage, Nostr},
         status_bar::{Message, StatusBar},
@@ -231,12 +231,65 @@ impl<'a> AppState<'a> {
 
         Command::none()
     }
+
+    /// Start composing a reply to the currently selected note.
+    ///
+    /// Sets the reply context (target event and author profile) on the editor.
+    /// No-op when nothing is selected.
+    pub fn start_reply(&mut self) -> Command<AppMsg> {
+        let Some(note) = self.timeline.selected_note() else {
+            return Command::none();
+        };
+
+        let note_id = note.bech32_id();
+        let event = note.as_event().clone();
+        let author_pubkey = note.author_pubkey();
+        log::info!("Starting reply to event: {note_id}");
+
+        let profile = self.user.get_profile(&author_pubkey).cloned();
+
+        self.editor.update(EditorMessage::ReplyStarted {
+            to: Box::new(event),
+            profile: Box::new(profile),
+        });
+
+        Command::none()
+    }
+
+    /// Publish the editor's current content as a text note, or as a NIP-10 reply
+    /// when a reply target is set, then reset the editor.
+    pub fn submit_note(&mut self) -> Command<AppMsg> {
+        let content = self.editor.get_content();
+
+        let event_builder = if let Some(reply_to_event) = self.editor.reply_target() {
+            log::info!("Publishing reply: {content}");
+            // Build NIP-10 reply tags (root/reply markers, deduped p-tag).
+            EventBuilder::text_note(&content).tags(ReplyTagsBuilder::build(reply_to_event.clone()))
+        } else {
+            log::info!("Publishing note: {content}");
+            EventBuilder::text_note(&content)
+        };
+
+        self.nostr
+            .update(NostrMessage::EventSubmitted { event_builder });
+
+        self.status_bar.update(Message::MessageChanged {
+            label: "Posted".to_owned(),
+            message: content,
+        });
+
+        // Clear UI state.
+        self.editor.update(EditorMessage::ComposingCanceled);
+
+        Command::none()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::{nostr::Profile, text::shorten_npub};
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     fn create_text_note(keys: &Keys, content: &str, created_at: Timestamp) -> Result<Event> {
         Ok(EventBuilder::text_note(content)
@@ -592,6 +645,78 @@ mod tests {
             state.status_bar.message(),
             Some(format!("[Reposted] {note1}").as_str())
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_start_reply_without_selection_is_noop() {
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        let _ = state.start_reply();
+
+        assert!(!state.editor.is_active());
+        assert_eq!(state.editor.reply_target(), None);
+    }
+
+    #[test]
+    fn test_start_reply_sets_reply_context() -> Result<()> {
+        let keys = Keys::generate();
+        let mut state = AppState::new(keys.public_key());
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let _ = state.process_nostr_event_for_tab(event.clone(), &TimelineTabType::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+
+        let _ = state.start_reply();
+
+        assert!(state.editor.is_active());
+        assert_eq!(state.editor.reply_target(), Some(&event));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_submit_note_posts_content_and_resets_editor() {
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        // Compose "hi" in the editor.
+        state.editor.update(EditorMessage::ComposingStarted);
+        for code in ["h", "i"] {
+            state.editor.update(EditorMessage::KeyEventReceived {
+                event: KeyEvent::new(
+                    KeyCode::Char(code.chars().next().expect("single char")),
+                    KeyModifiers::NONE,
+                ),
+            });
+        }
+
+        let _ = state.submit_note();
+
+        assert_eq!(state.status_bar.message(), Some("[Posted] hi"));
+        assert!(!state.editor.is_active());
+    }
+
+    #[test]
+    fn test_submit_note_as_reply_posts_and_resets_editor() -> Result<()> {
+        let keys = Keys::generate();
+        let mut state = AppState::new(keys.public_key());
+
+        // Select a note and start replying to it.
+        let event = create_text_note(&keys, "original", Timestamp::from(1000))?;
+        let _ = state.process_nostr_event_for_tab(event, &TimelineTabType::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+        let _ = state.start_reply();
+
+        // Type a reply and submit it (exercises the NIP-10 reply branch).
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+
+        assert_eq!(state.status_bar.message(), Some("[Posted] y"));
+        assert!(!state.editor.is_active());
 
         Ok(())
     }
