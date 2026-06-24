@@ -67,7 +67,7 @@ async fn tokio_main() -> Result<()> {
     // Restore terminal
     ratatui::restore();
 
-    result
+    Ok(result?)
 }
 
 #[tokio::main]
