@@ -151,9 +151,7 @@ impl<'a> AppState<'a> {
     /// message is shown (or an error message if the tab could not be created).
     pub fn open_author_timeline(&mut self, author_pubkey: PublicKey) -> Command<AppMsg> {
         let Ok(author_npub) = author_pubkey.to_bech32();
-        let feed = FeedKind::UserTimeline {
-            pubkey: author_pubkey,
-        };
+        let feed = FeedKind::Author(author_pubkey);
 
         // Tab already open: just switch to it.
         if let Some(index) = self.timeline.find_tab_by_feed(&feed) {
@@ -617,9 +615,7 @@ mod tests {
         // Add a user timeline tab first (before adding any events)
         let author_keys = Keys::generate();
         let author_pubkey = author_keys.public_key();
-        let user_tab = FeedKind::UserTimeline {
-            pubkey: author_pubkey,
-        };
+        let user_tab = FeedKind::Author(author_pubkey);
         let _ = state.timeline.update(TimelineMessage::TabAdded {
             feed: user_tab.clone(),
         });
@@ -711,9 +707,7 @@ mod tests {
         let author_keys = Keys::generate();
         let author_pubkey = author_keys.public_key();
         let Ok(author_npub) = author_pubkey.to_bech32();
-        let user_tab = FeedKind::UserTimeline {
-            pubkey: author_pubkey,
-        };
+        let user_tab = FeedKind::Author(author_pubkey);
         let _ = state.timeline.update(TimelineMessage::TabAdded {
             feed: user_tab.clone(),
         });
@@ -797,9 +791,7 @@ mod tests {
     fn test_open_author_timeline_switches_to_existing_tab() {
         let mut state = AppState::new(Keys::generate().public_key());
         let author_pubkey = Keys::generate().public_key();
-        let feed = FeedKind::UserTimeline {
-            pubkey: author_pubkey,
-        };
+        let feed = FeedKind::Author(author_pubkey);
 
         // Pre-create the author tab, then move focus back to Home.
         let _ = state
@@ -822,9 +814,7 @@ mod tests {
         let mut state = AppState::new(Keys::generate().public_key());
         let author_pubkey = Keys::generate().public_key();
         let Ok(author_npub) = author_pubkey.to_bech32();
-        let feed = FeedKind::UserTimeline {
-            pubkey: author_pubkey,
-        };
+        let feed = FeedKind::Author(author_pubkey);
 
         let _ = state.open_author_timeline(author_pubkey);
 
@@ -841,9 +831,7 @@ mod tests {
     fn test_close_current_tab_removes_active_tab() {
         let mut state = AppState::new(Keys::generate().public_key());
         let author_pubkey = Keys::generate().public_key();
-        let feed = FeedKind::UserTimeline {
-            pubkey: author_pubkey,
-        };
+        let feed = FeedKind::Author(author_pubkey);
         let _ = state.timeline.update(TimelineMessage::TabAdded { feed });
         assert_eq!(state.timeline.active_tab_index(), 1);
 

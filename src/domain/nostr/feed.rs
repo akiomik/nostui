@@ -12,5 +12,5 @@ pub enum FeedKind {
     /// The home feed (the followed authors, plus the user themselves).
     Home,
     /// A single author's feed.
-    UserTimeline { pubkey: PublicKey },
+    Author(PublicKey),
 }

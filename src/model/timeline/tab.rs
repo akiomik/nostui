@@ -102,7 +102,7 @@ impl TimelineTab {
     pub fn tab_title(&self, profiles: &HashMap<PublicKey, Profile>) -> String {
         match self.feed {
             FeedKind::Home => "Home".to_string(),
-            FeedKind::UserTimeline { pubkey } => profiles
+            FeedKind::Author(pubkey) => profiles
                 .get(&pubkey)
                 .and_then(|profile| profile.handle())
                 .unwrap_or_else(|| {
@@ -294,8 +294,8 @@ mod tests {
         assert_eq!(home_tab.feed, FeedKind::Home);
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        let user_tab = TimelineTab::new(FeedKind::UserTimeline { pubkey });
-        assert_eq!(user_tab.feed, FeedKind::UserTimeline { pubkey });
+        let user_tab = TimelineTab::new(FeedKind::Author(pubkey));
+        assert_eq!(user_tab.feed, FeedKind::Author(pubkey));
     }
 
     #[test]
@@ -644,7 +644,7 @@ mod tests {
     #[test]
     fn test_tab_title_user_timeline_with_handle() {
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        let tab = TimelineTab::new(FeedKind::UserTimeline { pubkey });
+        let tab = TimelineTab::new(FeedKind::Author(pubkey));
 
         let mut metadata = Metadata::new();
         metadata = metadata.name("alice");
@@ -659,7 +659,7 @@ mod tests {
     #[test]
     fn test_tab_title_user_timeline_with_empty_name() {
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        let tab = TimelineTab::new(FeedKind::UserTimeline { pubkey });
+        let tab = TimelineTab::new(FeedKind::Author(pubkey));
 
         let mut metadata = Metadata::new();
         metadata = metadata.name("");
@@ -676,7 +676,7 @@ mod tests {
     #[test]
     fn test_tab_title_user_timeline_without_profile() {
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        let tab = TimelineTab::new(FeedKind::UserTimeline { pubkey });
+        let tab = TimelineTab::new(FeedKind::Author(pubkey));
 
         let profiles = HashMap::new();
 

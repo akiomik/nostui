@@ -206,7 +206,7 @@ impl Timeline {
             Message::TabAdded { feed } => {
                 // Check if a tab for the same feed already exists
                 if self.find_tab_by_feed(&feed).is_some() {
-                    log::warn!("Tab with this type already exists");
+                    log::warn!("Tab for this feed already exists");
                     return TimelineOutcome::None;
                 }
 
@@ -352,18 +352,15 @@ mod tests {
 
         // Non-existent tab should return None
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        assert_eq!(
-            timeline.find_tab_by_feed(&FeedKind::UserTimeline { pubkey }),
-            None
-        );
+        assert_eq!(timeline.find_tab_by_feed(&FeedKind::Author(pubkey)), None);
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         assert_eq!(
-            timeline.find_tab_by_feed(&FeedKind::UserTimeline { pubkey }),
+            timeline.find_tab_by_feed(&FeedKind::Author(pubkey)),
             Some(1)
         );
     }
@@ -393,7 +390,7 @@ mod tests {
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::NoteAddedToTab {
             event,
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         // Note should not be added
@@ -408,15 +405,15 @@ mod tests {
 
         // Add a note only to a non-active tab
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
         let event = create_test_event(1000, 1, "Note");
         let _ = timeline.update(Message::NoteAddedToTab {
             event,
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
-        // The active tab (UserTimeline) has the note
+        // The active tab (Author feed) has the note
         assert_eq!(timeline.len(), 1);
         assert!(!timeline.is_empty());
 
@@ -434,7 +431,7 @@ mod tests {
         // Add a user timeline tab
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         // Add the same event to both tabs
@@ -448,7 +445,7 @@ mod tests {
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event,
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         // Event should be stored only once in centralized storage
@@ -767,15 +764,12 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         assert_eq!(timeline.tabs().len(), 2);
         assert_eq!(timeline.active_tab_index(), 1); // Should switch to new tab
-        assert_eq!(
-            timeline.active_tab().feed(),
-            &FeedKind::UserTimeline { pubkey }
-        );
+        assert_eq!(timeline.active_tab().feed(), &FeedKind::Author(pubkey));
     }
 
     #[test]
@@ -784,15 +778,15 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         // Try to add the same tab again
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
-        // Should still have only 2 tabs (Home + UserTimeline)
+        // Should still have only 2 tabs (Home + Author feed)
         assert_eq!(timeline.tabs().len(), 2);
     }
 
@@ -802,7 +796,7 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         assert_eq!(timeline.tabs().len(), 2);
@@ -846,10 +840,10 @@ mod tests {
         let pubkey2 = PublicKey::from_slice(&[2u8; 32]).expect("Valid pubkey");
 
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey: pubkey1 },
+            feed: FeedKind::Author(pubkey1),
         });
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey: pubkey2 },
+            feed: FeedKind::Author(pubkey2),
         });
 
         // Now we have: [Home, User1, User2], active = 2
@@ -870,7 +864,7 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         // Active tab is now the user timeline (index 1)
@@ -890,7 +884,7 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         // Switch to Home tab
@@ -918,7 +912,7 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         // Start at Home (index 0)
@@ -940,7 +934,7 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         // Start at user timeline (index 1)
@@ -962,7 +956,7 @@ mod tests {
         // Add a user timeline tab
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         // Add notes to Home tab
@@ -980,7 +974,7 @@ mod tests {
             let event = create_test_event(2000 + i, i as u8, &format!("User note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
-                feed: FeedKind::UserTimeline { pubkey },
+                feed: FeedKind::Author(pubkey),
             });
         }
 
@@ -1010,7 +1004,7 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         assert_eq!(timeline.last_tab_index(), 1);
