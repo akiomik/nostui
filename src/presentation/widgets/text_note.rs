@@ -140,10 +140,11 @@ impl<'a> Widget for TextNoteWidget<'a> {
         );
         text.extend::<Text>(name_with_handle.into());
 
+        let fixed = self.fixed_lines();
         let content: Text = ShrinkText::new(
             self.text_note.content().clone(),
             area.width as usize,
-            area.height as usize,
+            area.height.saturating_sub(fixed) as usize,
         )
         .into();
         text.extend(content);
@@ -480,6 +481,33 @@ mod tests {
 
         // Long content with narrow width should result in multiple lines
         assert!(height > 10);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_truncates_content_taller_than_area() -> Result<(), Box<dyn Error>> {
+        // Content that wraps to more lines than (area.height - fixed_lines)
+        // should be truncated with "..." in the rendered output.
+        let long_content = "x ".repeat(400); // many words that wrap to many lines
+        let event = create_test_event(&long_content)?;
+        let text_note = TextNote::new(event);
+
+        let profiles = HashMap::new();
+        let ctx = ViewContext {
+            profiles: &profiles,
+            live_status: None,
+            selected: false,
+        };
+
+        let widget = TextNoteWidget::new(text_note, ctx);
+        // area.height=10: fixed_lines=4, so only 6 lines available for content.
+        let area = Rect::new(0, 0, 20, 10);
+        let mut buffer = Buffer::empty(area);
+        widget.render(area, &mut buffer);
+
+        let raw: String = buffer.content().iter().map(|cell| cell.symbol()).collect();
+        assert!(raw.contains("..."), "truncation marker '...' should appear");
 
         Ok(())
     }
