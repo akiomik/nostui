@@ -138,10 +138,8 @@ impl Nostr {
 mod tests {
     use super::*;
 
-    fn create_test_tab_type() -> FeedKind {
-        FeedKind::UserTimeline {
-            pubkey: PublicKey::from_slice(&[0u8; 32]).expect("valid public key"),
-        }
+    fn create_test_feed() -> FeedKind {
+        FeedKind::Author(PublicKey::from_slice(&[0u8; 32]).expect("valid public key"))
     }
 
     #[test]
@@ -172,7 +170,7 @@ mod tests {
     #[test]
     fn test_is_subscribed_returns_false_when_no_subscription() {
         let nostr = Nostr::new();
-        let feed = create_test_tab_type();
+        let feed = create_test_feed();
 
         assert!(!nostr.is_subscribed(&feed));
     }
@@ -180,7 +178,7 @@ mod tests {
     #[test]
     fn test_is_subscribed_returns_false_when_subscription_list_is_empty() {
         let mut nostr = Nostr::new();
-        let feed = create_test_tab_type();
+        let feed = create_test_feed();
 
         nostr
             .timeline_subscriptions
@@ -192,7 +190,7 @@ mod tests {
     #[test]
     fn test_is_subscribed_returns_true_when_subscription_exists() {
         let mut nostr = Nostr::new();
-        let feed = create_test_tab_type();
+        let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
 
         nostr.update(Message::SubscriptionCreated {
@@ -214,7 +212,7 @@ mod tests {
     #[test]
     fn test_find_tab_by_subscription_returns_feed_when_found() {
         let mut nostr = Nostr::new();
-        let feed = create_test_tab_type();
+        let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
 
         nostr.update(Message::SubscriptionCreated {
@@ -286,7 +284,7 @@ mod tests {
     fn test_update_subscription_requested_creates_subscription() {
         let mut nostr = Nostr::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let feed = create_test_tab_type();
+        let feed = create_test_feed();
 
         nostr.update(Message::ConnectionReady { command_sender: tx });
 
@@ -311,7 +309,7 @@ mod tests {
     fn test_update_subscription_requested_ignores_duplicate_request() {
         let mut nostr = Nostr::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let feed = create_test_tab_type();
+        let feed = create_test_feed();
 
         nostr.update(Message::ConnectionReady { command_sender: tx });
 
@@ -330,7 +328,7 @@ mod tests {
     #[test]
     fn test_update_subscription_created_adds_subscription_id() {
         let mut nostr = Nostr::new();
-        let feed = create_test_tab_type();
+        let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
 
         nostr.update(Message::SubscriptionCreated {
@@ -348,7 +346,7 @@ mod tests {
     #[test]
     fn test_update_subscription_created_appends_to_existing_subscriptions() {
         let mut nostr = Nostr::new();
-        let feed = create_test_tab_type();
+        let feed = create_test_feed();
         let sub_id1 = SubscriptionId::new("test_sub1");
         let sub_id2 = SubscriptionId::new("test_sub2");
 
@@ -373,7 +371,7 @@ mod tests {
     fn test_update_subscription_closed_removes_subscription_and_sends_unsubscribe() {
         let mut nostr = Nostr::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let feed = create_test_tab_type();
+        let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
 
         nostr.update(Message::ConnectionReady { command_sender: tx });
@@ -402,7 +400,7 @@ mod tests {
     fn test_update_subscription_closed_handles_non_existent_subscription() {
         let mut nostr = Nostr::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let feed = create_test_tab_type();
+        let feed = create_test_feed();
 
         nostr.update(Message::ConnectionReady { command_sender: tx });
 
@@ -416,7 +414,7 @@ mod tests {
     fn test_update_history_requested_sends_load_more_command() {
         let mut nostr = Nostr::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let feed = create_test_tab_type();
+        let feed = create_test_feed();
         let since = Timestamp::from(1234567890);
 
         nostr.update(Message::ConnectionReady { command_sender: tx });
@@ -435,7 +433,7 @@ mod tests {
     fn test_update_connection_closed_clears_state_and_sends_shutdown() {
         let mut nostr = Nostr::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let feed = create_test_tab_type();
+        let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
 
         nostr.update(Message::ConnectionReady { command_sender: tx });

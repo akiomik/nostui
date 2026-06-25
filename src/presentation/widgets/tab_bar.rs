@@ -114,7 +114,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         let profiles = HashMap::new();
@@ -137,7 +137,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         let mut profiles = HashMap::new();
@@ -164,7 +164,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         let mut profiles = HashMap::new();
@@ -187,7 +187,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         let mut profiles = HashMap::new();
@@ -213,10 +213,10 @@ mod tests {
 
         // Add two user timeline tabs
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey: pubkey1 },
+            feed: FeedKind::Author(pubkey1),
         });
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey: pubkey2 },
+            feed: FeedKind::Author(pubkey2),
         });
 
         let mut profiles = HashMap::new();
@@ -263,7 +263,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         let mut profiles = HashMap::new();
@@ -296,7 +296,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         // Active tab should be the newly added tab (index 1)
@@ -366,7 +366,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            feed: FeedKind::UserTimeline { pubkey },
+            feed: FeedKind::Author(pubkey),
         });
 
         // Switch to Home tab

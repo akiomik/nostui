@@ -170,7 +170,7 @@ impl NostrEvents {
                             return;
                         }
                     },
-                    FeedKind::UserTimeline { pubkey } => user_load_more_filter(*pubkey, since),
+                    FeedKind::Author(pubkey) => user_load_more_filter(*pubkey, since),
                 };
 
                 match client.subscribe(filter, None).await {
@@ -193,7 +193,7 @@ impl NostrEvents {
                             "Home timeline should be initialized, not subscribed via command"
                         );
                     }
-                    FeedKind::UserTimeline { pubkey } => {
+                    FeedKind::Author(pubkey) => {
                         // Subscribe to both backward (historical) and forward (real-time) events
                         let [backward_filter, forward_filter] =
                             user_timeline_filters(*pubkey, Timestamp::now());
