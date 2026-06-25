@@ -11,6 +11,7 @@ use tears::prelude::*;
 use tears::subscription::terminal::TerminalEvents;
 use tears::subscription::time::{Message as TimerMessage, Timer};
 
+use crate::application::config::keybindings::Action as KeyAction;
 use crate::application::config::Config;
 use crate::application::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
 use crate::application::state::AppState;
@@ -18,7 +19,6 @@ use crate::infrastructure::subscription::media::MediaEvents;
 use crate::infrastructure::subscription::nostr::NostrEvents;
 use crate::model::nostr_gateway::Message as NostrSubscriptionMessage;
 use crate::presentation::components::Components;
-use crate::presentation::config::keybindings::Action as KeyAction;
 
 /// Initialization flags for the Tears application
 #[derive(Debug)]

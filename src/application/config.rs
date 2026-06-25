@@ -1,5 +1,5 @@
-use crate::presentation::config::keybindings;
-use crate::presentation::config::styles;
+pub mod keybindings;
+pub mod styles;
 
 use std::path::PathBuf;
 
