@@ -48,9 +48,9 @@ impl<'a> Widget for TabBarWidget<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::nostr::Profile;
+    use crate::domain::nostr::{FeedKind, Profile};
     use crate::model::timeline::Message;
-    use crate::model::timeline::{tab::TimelineTabType, Timeline};
+    use crate::model::timeline::Timeline;
     use nostr_sdk::nostr::Metadata;
 
     fn create_test_pubkey() -> PublicKey {
@@ -114,7 +114,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         let profiles = HashMap::new();
@@ -137,7 +137,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         let mut profiles = HashMap::new();
@@ -164,7 +164,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         let mut profiles = HashMap::new();
@@ -187,7 +187,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         let mut profiles = HashMap::new();
@@ -213,10 +213,10 @@ mod tests {
 
         // Add two user timeline tabs
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey: pubkey1 },
+            feed: FeedKind::UserTimeline { pubkey: pubkey1 },
         });
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey: pubkey2 },
+            feed: FeedKind::UserTimeline { pubkey: pubkey2 },
         });
 
         let mut profiles = HashMap::new();
@@ -263,7 +263,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         let mut profiles = HashMap::new();
@@ -296,7 +296,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // Active tab should be the newly added tab (index 1)
@@ -366,7 +366,7 @@ mod tests {
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // Switch to Home tab

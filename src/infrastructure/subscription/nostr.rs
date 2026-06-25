@@ -13,8 +13,8 @@ use crate::domain::nostr::timeline_filter::{
     home_load_more_filter, home_timeline_filters, user_load_more_filter, user_timeline_filters,
     with_own_pubkey,
 };
+use crate::domain::nostr::FeedKind;
 use crate::model::nostr_gateway::{CommandError, Message, NostrCommand};
-use crate::model::timeline::tab::TimelineTabType;
 
 const DEFAULT_CONTACT_LIST_TIMEOUT_SECS: u64 = 10;
 
@@ -90,17 +90,17 @@ impl NostrEvents {
 
                 if let Ok((sub_id1, sub_id2, sub_id3)) = result {
                     // Send SubscriptionCreated messages for NostrState to track
-                    let tab_type = TimelineTabType::Home;
+                    let feed = FeedKind::Home;
                     let _ = msg_tx.send(Message::SubscriptionCreated {
-                        tab_type: tab_type.clone(),
+                        feed: feed.clone(),
                         subscription_id: sub_id1.val,
                     });
                     let _ = msg_tx.send(Message::SubscriptionCreated {
-                        tab_type: tab_type.clone(),
+                        feed: feed.clone(),
                         subscription_id: sub_id2.val,
                     });
                     let _ = msg_tx.send(Message::SubscriptionCreated {
-                        tab_type,
+                        feed,
                         subscription_id: sub_id3.val,
                     });
                 }
@@ -158,28 +158,26 @@ impl NostrEvents {
                     });
                 }
             }
-            NostrCommand::LoadMoreTimeline { tab_type, since } => {
+            NostrCommand::LoadMoreTimeline { feed, since } => {
                 // Load more timeline events before the specified timestamp.
                 // Map the tab to the appropriate domain filter builder; the home
                 // timeline reuses the contact list cached at init time.
-                let filter = match &tab_type {
-                    TimelineTabType::Home => match contact_list_cache.read().await.clone() {
+                let filter = match &feed {
+                    FeedKind::Home => match contact_list_cache.read().await.clone() {
                         Some(authors) => home_load_more_filter(authors, since),
                         None => {
                             log::warn!("Contact list not cached, cannot load more events");
                             return;
                         }
                     },
-                    TimelineTabType::UserTimeline { pubkey } => {
-                        user_load_more_filter(*pubkey, since)
-                    }
+                    FeedKind::UserTimeline { pubkey } => user_load_more_filter(*pubkey, since),
                 };
 
                 match client.subscribe(filter, None).await {
                     Ok(sub_id) => {
                         // Send SubscriptionCreated to track this load-more subscription
                         let _ = msg_tx.send(Message::SubscriptionCreated {
-                            tab_type,
+                            feed,
                             subscription_id: sub_id.val,
                         });
                     }
@@ -188,14 +186,14 @@ impl NostrEvents {
                     }
                 }
             }
-            NostrCommand::SubscribeTimeline { tab_type } => {
-                match &tab_type {
-                    TimelineTabType::Home => {
+            NostrCommand::SubscribeTimeline { feed } => {
+                match &feed {
+                    FeedKind::Home => {
                         log::warn!(
                             "Home timeline should be initialized, not subscribed via command"
                         );
                     }
-                    TimelineTabType::UserTimeline { pubkey } => {
+                    FeedKind::UserTimeline { pubkey } => {
                         // Subscribe to both backward (historical) and forward (real-time) events
                         let [backward_filter, forward_filter] =
                             user_timeline_filters(*pubkey, Timestamp::now());
@@ -210,11 +208,11 @@ impl NostrEvents {
                             Ok((sub_id1, sub_id2)) => {
                                 // Send SubscriptionCreated messages for both subscriptions
                                 let _ = msg_tx.send(Message::SubscriptionCreated {
-                                    tab_type: tab_type.clone(),
+                                    feed: feed.clone(),
                                     subscription_id: sub_id1.val,
                                 });
                                 let _ = msg_tx.send(Message::SubscriptionCreated {
-                                    tab_type,
+                                    feed,
                                     subscription_id: sub_id2.val,
                                 });
                             }
