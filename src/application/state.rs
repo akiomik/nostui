@@ -338,8 +338,8 @@ impl<'a> AppState<'a> {
     ///
     /// `model::nostr::update` is side-effect free and only reports the command
     /// to send; the application owns the sender and performs the actual I/O.
-    fn dispatch_nostr(&self, outcome: NostrOutcome) {
-        let NostrOutcome::Send(command) = outcome else {
+    fn dispatch_nostr(&self, outcome: Option<NostrOutcome>) {
+        let Some(NostrOutcome::Send(command)) = outcome else {
             return;
         };
 
@@ -420,8 +420,10 @@ impl<'a> AppState<'a> {
         let feed = self.timeline.active_tab().feed().clone();
         let tab_title = self.active_tab_title();
 
-        self.nostr
+        let outcome = self
+            .nostr
             .update(NostrMessage::HistoryRequested { feed, since });
+        self.dispatch_nostr(outcome);
 
         self.status_bar.update(Message::MessageChanged {
             label: tab_title,
@@ -471,8 +473,8 @@ impl<'a> AppState<'a> {
     /// `LoadMoreRequested` and the application loads older events.
     pub fn scroll_down(&mut self) -> Command<AppMsg> {
         match self.timeline.update(TimelineMessage::NextItemSelected) {
-            TimelineOutcome::LoadMoreRequested => self.load_more_timeline(),
-            TimelineOutcome::None => Command::none(),
+            Some(TimelineOutcome::LoadMoreRequested) => self.load_more_timeline(),
+            None => Command::none(),
         }
     }
 
@@ -1049,7 +1051,7 @@ mod tests {
 
         // Associate a subscription with the Home tab.
         let sub_id = SubscriptionId::new("home_sub");
-        state.nostr.update(NostrMessage::SubscriptionCreated {
+        let _ = state.nostr.update(NostrMessage::SubscriptionCreated {
             feed: FeedKind::Home,
             sub_id: sub_id.clone(),
         });
