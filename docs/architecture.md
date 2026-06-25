@@ -34,7 +34,15 @@ Ordering from innermost to outermost:
 domain  <  model  <  application  <  { presentation, infrastructure }  <  runtime
 ```
 
-`utils` is a neutral leaf with no internal dependencies; inner layers may use it.
+The `<` is a layering convenience, not a claim that every outer layer calls the
+one directly inside it. In particular `infrastructure` does **not** depend on
+`application`: they are siblings that communicate through the `model`-owned
+gateway contract (see [Contracts](#contracts)), not a linear caller/callee pair.
+
+`utils` is a neutral leaf with no internal dependencies; any inner layer **may**
+use it. The graph below draws only the edges that exist today
+(`application` / `infrastructure` → `utils`); the permission is broader than the
+current usage.
 
 ```mermaid
 flowchart TD
@@ -90,6 +98,11 @@ done
 
 Anything that makes an inner layer reference an outer one is a regression.
 
+This grep is a best-effort heuristic, not a proof: it keys on path-qualified
+references (`outer::`), so it misses a violation that `use`-imports a name and
+then uses it unqualified, as well as re-exports and aliases. For a hard
+guarantee, complement it with a dependency lint (e.g. `cargo-modules`).
+
 ## Layers in detail
 
 ### `domain` — pure logic
@@ -126,6 +139,10 @@ side-effect-free `update`. Key modules/types:
 and, when the application must act, **report an outcome** rather than issuing an
 effect. `TimelineTab::update` / `Timeline::update` return `TimelineOutcome`
 (`None` / `LoadMoreRequested`); the application decides what to run.
+
+Holding the gateway **contract** (a port) and a command `sender` does not break
+this: a port is only a type definition, and the `sender` is an inert handle —
+`update` never sends on it. The application owns the act of sending.
 
 ### `application` — use cases
 
@@ -209,10 +226,17 @@ flowchart LR
     infra -->|implements: consumes NostrCommand, emits Message| gw
 ```
 
-It lives in `model` rather than `domain` because it carries the `tokio` command
-channel (`Message::Ready { sender }`) and relay-lifecycle commands (`AddRelay`,
-`Shutdown`) — async-runtime and I/O concerns the domain layer is kept free of.
-Its feed identity comes from `domain::nostr::FeedKind`, a downward dependency.
+It lives in `model` for two reasons. **Why not `domain`:** it carries the
+`tokio` command channel (`Message::Ready { sender }`) and relay-lifecycle
+commands (`AddRelay`, `Shutdown`) — async-runtime and I/O concerns the domain
+layer is kept free of. **Why not `application`:** `infrastructure` (the adapter)
+depends only on `model`, `domain`, and `utils`, never on `application`; placing
+the contract there would force the very `infrastructure -> application` edge the
+dependency rule forbids. With `domain` ruled out (I/O concerns) and `utils` a
+neutral leaf that may not reference `FeedKind`, `model` — already a dependency of
+`infrastructure` and free to carry I/O concerns — is the only inner layer that
+fits. Its feed identity comes from `domain::nostr::FeedKind`, a downward
+dependency.
 
 ### Outcome reporting (model → application)
 
@@ -263,6 +287,12 @@ sequenceDiagram
     RT->>ST: view reads &AppState
     RT->>Ext: render frame
 ```
+
+> [!NOTE]
+> The `ST ->> IN` arrow (`NostrCommand`) is a **channel send**, not a
+> direct call — `application` has no compile-time dependency on `infrastructure`
+> and reaches the worker only through the `model`-owned gateway sender. The
+> sequence shows message flow, not import direction.
 
 ## Design principles
 
