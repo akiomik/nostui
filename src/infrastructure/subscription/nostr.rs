@@ -9,8 +9,8 @@ use nostr_sdk::prelude::*;
 use tears::{SubscriptionId, SubscriptionSource};
 use tokio::sync::{broadcast, mpsc, RwLock};
 
-use crate::domain::nostr::timeline_filter::{
-    home_load_more_filter, home_timeline_filters, user_load_more_filter, user_timeline_filters,
+use crate::domain::nostr::feed_filter::{
+    home_feed_filters, home_load_more_filter, user_feed_filters, user_load_more_filter,
     with_own_pubkey,
 };
 use crate::domain::nostr::FeedKind;
@@ -79,7 +79,7 @@ impl NostrEvents {
                 }
 
                 let [timeline_backward_filter, timeline_forward_filter, profile_filter] =
-                    home_timeline_filters(followings, Timestamp::now());
+                    home_feed_filters(followings, Timestamp::now());
 
                 // Subscribe to both timeline and profile data concurrently
                 let result = tokio::try_join!(
@@ -196,7 +196,7 @@ impl NostrEvents {
                     FeedKind::Author(pubkey) => {
                         // Subscribe to both backward (historical) and forward (real-time) events
                         let [backward_filter, forward_filter] =
-                            user_timeline_filters(*pubkey, Timestamp::now());
+                            user_feed_filters(*pubkey, Timestamp::now());
 
                         // Subscribe to both filters concurrently
                         let result = tokio::try_join!(
