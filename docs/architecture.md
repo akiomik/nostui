@@ -99,14 +99,14 @@ concept. Key modules/types:
 
 - `domain::nostr` — `Profile`, `SortableEventId`, `FeedKind` (which feed a
   timeline displays: `Home` / `Author(pubkey)`), NIP helpers (`nip10`
-  `ReplyTagsBuilder`, `nip27`, `nip38` `MusicStatus`), and `timeline_filter`
+  `ReplyTagsBuilder`, `nip27`, `nip38` `MusicStatus`), and `feed_filter`
   (pure functions that build subscription filters).
 - `domain::collections` — `EventSet`.
 - `domain::text` — `wrap_text`, `truncate_text`, `shorten_npub`.
 
 **Invariant:** `domain` is free of UI concepts. `FeedKind` captures *which feed*
 (a domain concept), but the layer knows nothing of "tabs" (a UI notion):
-`domain::nostr::timeline_filter` stays parametric and takes concrete inputs
+`domain::nostr::feed_filter` stays parametric and takes concrete inputs
 (pubkeys, timestamps); the infrastructure adapter maps a `FeedKind` to the
 appropriate filter. This keeps the filter rules pure and unit-testable.
 
