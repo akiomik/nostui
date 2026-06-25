@@ -35,10 +35,10 @@ pub struct Nostr {
     /// This is set when the subscription emits a Ready message
     command_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
 
-    /// Track subscription IDs for each timeline tab
-    /// Home tab has 3 subscriptions (backward, forward, profile)
-    /// User timelines have 1 subscription
-    timeline_subscriptions: HashMap<FeedKind, Vec<nostr_sdk::SubscriptionId>>,
+    /// Track subscription IDs for each feed
+    /// The home feed has 3 subscriptions (backward, forward, profile)
+    /// Author feeds have 1 subscription
+    feed_subscriptions: HashMap<FeedKind, Vec<nostr_sdk::SubscriptionId>>,
 }
 
 impl Nostr {
@@ -51,14 +51,14 @@ impl Nostr {
     }
 
     pub fn is_subscribed(&self, feed: &FeedKind) -> bool {
-        self.timeline_subscriptions
+        self.feed_subscriptions
             .get(feed)
             .is_some_and(|subs| !subs.is_empty())
     }
 
     /// Find the feed that owns a specific subscription ID
     pub fn find_tab_by_subscription(&self, subscription_id: &SubscriptionId) -> Option<&FeedKind> {
-        self.timeline_subscriptions
+        self.feed_subscriptions
             .iter()
             .find(|(_, sub_ids)| sub_ids.contains(subscription_id))
             .map(|(feed, _)| feed)
@@ -79,35 +79,32 @@ impl Nostr {
                     return;
                 }
 
-                if self.timeline_subscriptions.contains_key(&feed) {
+                if self.feed_subscriptions.contains_key(&feed) {
                     // Already subscribed or in-flight.
                     return;
                 }
 
                 if let Some(sender) = self.command_sender.as_ref() {
                     // Mark as in-flight before sending, so repeated calls are rejected.
-                    self.timeline_subscriptions.insert(feed.clone(), Vec::new());
+                    self.feed_subscriptions.insert(feed.clone(), Vec::new());
 
                     if sender
                         .send(NostrCommand::Subscribe { feed: feed.clone() })
                         .is_err()
                     {
                         // NOTE: Avoid leaving an "in-flight" mark when the command didn't go through.
-                        self.timeline_subscriptions.remove(&feed);
+                        self.feed_subscriptions.remove(&feed);
                     }
                 }
             }
             Message::SubscriptionCreated { feed, sub_id } => {
-                self.timeline_subscriptions
+                self.feed_subscriptions
                     .entry(feed)
                     .or_default()
                     .push(sub_id);
             }
             Message::SubscriptionClosed { feed } => {
-                let subscription_ids = self
-                    .timeline_subscriptions
-                    .remove(&feed)
-                    .unwrap_or_default();
+                let subscription_ids = self.feed_subscriptions.remove(&feed).unwrap_or_default();
 
                 if !subscription_ids.is_empty() {
                     if let Some(sender) = self.command_sender.as_ref() {
@@ -115,7 +112,7 @@ impl Nostr {
                     }
                 }
 
-                self.timeline_subscriptions.remove(&feed);
+                self.feed_subscriptions.remove(&feed);
             }
             Message::HistoryRequested { feed, since } => {
                 if let Some(sender) = self.command_sender.as_ref() {
@@ -128,7 +125,7 @@ impl Nostr {
                 }
 
                 self.command_sender = None;
-                self.timeline_subscriptions.clear();
+                self.feed_subscriptions.clear();
             }
         }
     }
@@ -147,7 +144,7 @@ mod tests {
         let nostr = Nostr::new();
 
         assert!(nostr.command_sender.is_none());
-        assert_eq!(nostr.timeline_subscriptions, HashMap::new());
+        assert_eq!(nostr.feed_subscriptions, HashMap::new());
     }
 
     #[test]
@@ -180,9 +177,7 @@ mod tests {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
 
-        nostr
-            .timeline_subscriptions
-            .insert(feed.clone(), Vec::new());
+        nostr.feed_subscriptions.insert(feed.clone(), Vec::new());
 
         assert!(!nostr.is_subscribed(&feed));
     }
@@ -277,7 +272,7 @@ mod tests {
 
         // No command should be sent for Home tab
         assert!(rx.try_recv().is_err());
-        assert!(!nostr.timeline_subscriptions.contains_key(&FeedKind::Home));
+        assert!(!nostr.feed_subscriptions.contains_key(&FeedKind::Home));
     }
 
     #[test]
@@ -291,10 +286,10 @@ mod tests {
         nostr.update(Message::SubscriptionRequested { feed: feed.clone() });
 
         // Verify in-flight mark was set
-        assert!(nostr.timeline_subscriptions.contains_key(&feed));
+        assert!(nostr.feed_subscriptions.contains_key(&feed));
         assert_eq!(
             nostr
-                .timeline_subscriptions
+                .feed_subscriptions
                 .get(&feed)
                 .expect("subscription exists"),
             &Vec::<SubscriptionId>::new()
@@ -337,7 +332,7 @@ mod tests {
         });
 
         let subs = nostr
-            .timeline_subscriptions
+            .feed_subscriptions
             .get(&feed)
             .expect("subscription exists");
         assert_eq!(subs, &vec![sub_id]);
@@ -361,7 +356,7 @@ mod tests {
         });
 
         let subs = nostr
-            .timeline_subscriptions
+            .feed_subscriptions
             .get(&feed)
             .expect("subscription exists");
         assert_eq!(subs, &vec![sub_id1, sub_id2]);
@@ -384,7 +379,7 @@ mod tests {
         nostr.update(Message::SubscriptionClosed { feed: feed.clone() });
 
         // Verify subscription was removed
-        assert!(!nostr.timeline_subscriptions.contains_key(&feed));
+        assert!(!nostr.feed_subscriptions.contains_key(&feed));
 
         // Verify unsubscribe command was sent
         let received = rx.try_recv();
@@ -444,7 +439,7 @@ mod tests {
 
         // Verify state was cleared
         assert!(nostr.command_sender.is_none());
-        assert_eq!(nostr.timeline_subscriptions, HashMap::new());
+        assert_eq!(nostr.feed_subscriptions, HashMap::new());
 
         // Verify shutdown command was sent
         let received = rx.try_recv();

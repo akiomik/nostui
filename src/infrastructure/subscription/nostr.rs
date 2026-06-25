@@ -51,10 +51,10 @@ impl NostrEvents {
         }
     }
 
-    /// Initialize timeline subscription by fetching contact list and subscribing to filters
+    /// Initialize the home feed subscription by fetching the contact list and subscribing to filters
     /// Also caches the contact list for future use (e.g., loading more events)
     /// Sends SubscriptionCreated messages for NostrState to track
-    async fn initialize_timeline(
+    async fn initialize_home_feed(
         client: &Client,
         contact_list_cache: Arc<RwLock<Option<Vec<PublicKey>>>>,
         msg_tx: &mpsc::UnboundedSender<Message>,
@@ -64,7 +64,7 @@ impl NostrEvents {
             .await
         {
             Ok(mut followings) => {
-                // Always include the user's own posts in the home timeline,
+                // Always include the user's own posts in the home feed,
                 // even if they don't follow themselves.
                 if let Ok(signer) = client.signer().await {
                     if let Ok(own_pubkey) = signer.get_public_key().await {
@@ -78,13 +78,13 @@ impl NostrEvents {
                     *cache = Some(followings.clone());
                 }
 
-                let [timeline_backward_filter, timeline_forward_filter, profile_filter] =
+                let [feed_backward_filter, feed_forward_filter, profile_filter] =
                     home_feed_filters(followings, Timestamp::now());
 
-                // Subscribe to both timeline and profile data concurrently
+                // Subscribe to both feed and profile data concurrently
                 let result = tokio::try_join!(
-                    client.subscribe(timeline_backward_filter, None),
-                    client.subscribe(timeline_forward_filter, None),
+                    client.subscribe(feed_backward_filter, None),
+                    client.subscribe(feed_forward_filter, None),
                     client.subscribe(profile_filter, None)
                 );
 
@@ -159,9 +159,9 @@ impl NostrEvents {
                 }
             }
             NostrCommand::LoadMore { feed, since } => {
-                // Load more timeline events before the specified timestamp.
-                // Map the tab to the appropriate domain filter builder; the home
-                // timeline reuses the contact list cached at init time.
+                // Load more feed events before the specified timestamp.
+                // Map the feed to the appropriate domain filter builder; the home
+                // feed reuses the contact list cached at init time.
                 let filter = match &feed {
                     FeedKind::Home => match contact_list_cache.read().await.clone() {
                         Some(authors) => home_load_more_filter(authors, since),
@@ -189,9 +189,7 @@ impl NostrEvents {
             NostrCommand::Subscribe { feed } => {
                 match &feed {
                     FeedKind::Home => {
-                        log::warn!(
-                            "Home timeline should be initialized, not subscribed via command"
-                        );
+                        log::warn!("Home feed should be initialized, not subscribed via command");
                     }
                     FeedKind::Author(pubkey) => {
                         // Subscribe to both backward (historical) and forward (real-time) events
@@ -217,7 +215,7 @@ impl NostrEvents {
                                 });
                             }
                             Err(e) => {
-                                log::error!("Failed to subscribe to user timeline: {e}");
+                                log::error!("Failed to subscribe to author feed: {e}");
                             }
                         }
                     }
@@ -246,9 +244,9 @@ impl NostrEvents {
         msg_tx: mpsc::UnboundedSender<Message>,
         mut cmd_rx: mpsc::UnboundedReceiver<NostrCommand>,
     ) {
-        // Initialize timeline subscription
+        // Initialize the home feed subscription
         let mut notifications =
-            Self::initialize_timeline(&client, Arc::clone(&contact_list_cache), &msg_tx).await;
+            Self::initialize_home_feed(&client, Arc::clone(&contact_list_cache), &msg_tx).await;
 
         loop {
             tokio::select! {
