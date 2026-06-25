@@ -53,8 +53,6 @@ pub enum TimelineMsg {
     SelectFirst,
     /// Select the last note in the timeline
     SelectLast,
-    /// Load more older events when reaching bottom
-    LoadMore,
     /// React to the selected note
     ReactToSelected,
     /// Repost the selected note
