@@ -112,10 +112,7 @@ impl<'a> AppState<'a> {
                 if current_loading_more_state == Some(true) && new_loading_more_state == Some(false)
                 {
                     let tab_title = self.active_tab_title();
-                    self.status_bar.update(Message::MessageChanged {
-                        label: tab_title,
-                        message: "loaded more".to_owned(),
-                    });
+                    self.set_status(tab_title, "loaded more");
                 }
 
                 Command::none()
@@ -176,17 +173,11 @@ impl<'a> AppState<'a> {
                 .update(NostrMessage::SubscriptionRequested { feed });
             self.dispatch_nostr(outcome);
 
-            self.status_bar.update(Message::MessageChanged {
-                label: author_npub,
-                message: "loading...".to_owned(),
-            });
+            self.set_status(author_npub, "loading...");
         } else {
             log::error!("Failed to create author timeline");
 
-            self.status_bar.update(Message::ErrorMessageChanged {
-                label: author_npub,
-                message: "failed to open tab".to_owned(),
-            });
+            self.set_status_error(author_npub, "failed to open tab");
         }
 
         Command::none()
@@ -243,10 +234,7 @@ impl<'a> AppState<'a> {
             .update(NostrMessage::EventSubmitted { event_builder });
         self.dispatch_nostr(outcome);
 
-        self.status_bar.update(Message::MessageChanged {
-            label: label.to_owned(),
-            message: note_id,
-        });
+        self.set_status(label, note_id);
 
         Command::none()
     }
@@ -294,10 +282,7 @@ impl<'a> AppState<'a> {
             .update(NostrMessage::EventSubmitted { event_builder });
         self.dispatch_nostr(outcome);
 
-        self.status_bar.update(Message::MessageChanged {
-            label: "Posted".to_owned(),
-            message: content,
-        });
+        self.set_status("Posted", content);
 
         // Clear UI state.
         self.editor.update(EditorMessage::ComposingCanceled);
@@ -321,10 +306,7 @@ impl<'a> AppState<'a> {
             .update(NostrMessage::EventSubmitted { event_builder });
         self.dispatch_nostr(outcome);
 
-        self.status_bar.update(Message::MessageChanged {
-            label: "Music".to_owned(),
-            message: content,
-        });
+        self.set_status("Music", content);
 
         Command::none()
     }
@@ -332,6 +314,22 @@ impl<'a> AppState<'a> {
     /// Title of the currently active tab, resolved against known profiles.
     fn active_tab_title(&self) -> String {
         self.timeline.active_tab().tab_title(self.user.profiles())
+    }
+
+    /// Show a status message in the status bar.
+    fn set_status(&mut self, label: impl Into<String>, message: impl Into<String>) {
+        self.status_bar.update(Message::MessageChanged {
+            label: label.into(),
+            message: message.into(),
+        });
+    }
+
+    /// Show an error message in the status bar.
+    fn set_status_error(&mut self, label: impl Into<String>, message: impl Into<String>) {
+        self.status_bar.update(Message::ErrorMessageChanged {
+            label: label.into(),
+            message: message.into(),
+        });
     }
 
     /// Dispatch a [`NostrOutcome`] produced by `model::nostr` to the worker.
@@ -365,10 +363,7 @@ impl<'a> AppState<'a> {
         self.command_sender = Some(command_sender);
         let outcome = self.nostr.update(NostrMessage::ConnectionReady);
         self.dispatch_nostr(outcome);
-        self.status_bar.update(Message::MessageChanged {
-            label: tab_title,
-            message: "loading...".to_owned(),
-        });
+        self.set_status(tab_title, "loading...");
 
         Command::none()
     }
@@ -384,10 +379,7 @@ impl<'a> AppState<'a> {
     ) -> Command<AppMsg> {
         if self.startup.is_in_progress() {
             let tab_title = self.active_tab_title();
-            self.status_bar.update(Message::MessageChanged {
-                label: tab_title,
-                message: "loaded".to_owned(),
-            });
+            self.set_status(tab_title, "loaded");
         }
 
         let Some(feed) = self
@@ -425,10 +417,7 @@ impl<'a> AppState<'a> {
             .update(NostrMessage::HistoryRequested { feed, since });
         self.dispatch_nostr(outcome);
 
-        self.status_bar.update(Message::MessageChanged {
-            label: tab_title,
-            message: "loading more...".to_owned(),
-        });
+        self.set_status(tab_title, "loading more...");
 
         Command::none()
     }
@@ -448,10 +437,7 @@ impl<'a> AppState<'a> {
     /// Show a system-level error in the status bar.
     pub fn show_error(&mut self, error: String) -> Command<AppMsg> {
         log::error!("{error}");
-        self.status_bar.update(Message::ErrorMessageChanged {
-            label: "System".to_owned(),
-            message: error,
-        });
+        self.set_status_error("System", error);
         Command::none()
     }
 
@@ -573,19 +559,13 @@ impl<'a> AppState<'a> {
     /// Show that the Nostr subscription was shut down.
     pub fn notify_subscription_shutdown(&mut self) -> Command<AppMsg> {
         log::info!("Nostr subscription shut down");
-        self.status_bar.update(Message::MessageChanged {
-            label: "Nostr".to_owned(),
-            message: "disconntected".to_owned(),
-        });
+        self.set_status("Nostr", "disconntected");
         Command::none()
     }
 
     /// Show a Nostr subscription error in the status bar.
     pub fn notify_subscription_error(&mut self, error: CommandError) -> Command<AppMsg> {
-        self.status_bar.update(Message::ErrorMessageChanged {
-            label: "Nostr".to_owned(),
-            message: format!("{error:?}"),
-        });
+        self.set_status_error("Nostr", format!("{error:?}"));
         Command::none()
     }
 }
