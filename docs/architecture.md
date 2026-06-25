@@ -125,24 +125,33 @@ appropriate filter. This keeps the filter rules pure and unit-testable.
 
 ### `model` — component state
 
-The TEA "Model" broken into components, each with its own message type and a
-side-effect-free `update`. Key modules/types:
+The TEA "Model" broken into components, each with its own message type and an
+`update` that — with one documented exception (`model::nostr`) — is side-effect
+free. Key modules/types:
 
 - `model::timeline` — `Timeline` and its `TimelineTab` (the UI surface that
   displays a `domain::nostr::FeedKind`), plus child components `selection`,
   `pagination`, `text_note`.
 - `model::editor`, `model::status_bar`, `model::fps`.
-- `model::nostr` — connection state; owns the command sender to the gateway.
+- `model::nostr` — connection state; owns the command sender to the gateway and
+  is the one component whose `update` sends `NostrCommand`s on it directly (see
+  the invariant below).
 - `model::nostr_gateway` — the **Nostr gateway contract** (see below).
 
-**Invariant:** `model::update` methods are side-effect free. They mutate state
-and, when the application must act, **report an outcome** rather than issuing an
-effect. `TimelineTab::update` / `Timeline::update` return `TimelineOutcome`
-(`None` / `LoadMoreRequested`); the application decides what to run.
+**Invariant:** with one exception, `model::update` methods are side-effect free.
+They mutate state and, when the application must act, **report an outcome**
+rather than issuing an effect. `TimelineTab::update` / `Timeline::update` return
+`TimelineOutcome` (`None` / `LoadMoreRequested`); the application decides what to
+run. `editor`, `status_bar`, and `fps` are likewise pure.
 
-Holding the gateway **contract** (a port) and a command `sender` does not break
-this: a port is only a type definition, and the `sender` is an inert handle —
-`update` never sends on it. The application owns the act of sending.
+**The exception is `model::nostr`.** It holds the gateway `sender`, and its
+`update` issues commands on it directly — e.g. `EventSubmitted` →
+`NostrCommand::SendEventBuilder`, `HistoryRequested` → `NostrCommand::LoadMore`,
+`ConnectionClosed` → `NostrCommand::Shutdown`. These are fire-and-forget channel
+sends, not TEA `Command<AppMsg>` effects: `application::state` drives them by
+calling `self.nostr.update(…)`, but the send itself happens inside the model.
+This is a deliberate seam — the component that *owns* the sender is the one that
+sends — and the lone place a `model` `update` performs I/O.
 
 ### `application` — use cases
 
@@ -221,8 +230,8 @@ flowchart LR
     app["application::state"]
     infra["infrastructure::subscription::nostr<br/>NostrEvents"]
 
-    app -->|build and send NostrCommand| gw
-    mnostr --> gw
+    app -->|drives via nostr.update| mnostr
+    mnostr -->|holds sender, sends NostrCommand| gw
     infra -->|implements: consumes NostrCommand, emits Message| gw
 ```
 
@@ -240,8 +249,9 @@ dependency.
 
 ### Outcome reporting (model → application)
 
-`model` never issues effects. When a state transition requires an effect, the
-`update` returns a `TimelineOutcome` and the application acts on it:
+Apart from `model::nostr` (above), `model` components do not issue effects. When
+a state transition requires an effect, the `update` returns a `TimelineOutcome`
+and the application acts on it:
 
 ```rust
 // application::state
@@ -280,8 +290,9 @@ sequenceDiagram
     Ext->>RT: key / subscription event
     RT->>RT: map to AppMsg (Action, etc.)
     RT->>ST: call use case (e.g. scroll_down)
-    ST->>MD: sub-model update → TimelineOutcome
-    ST->>IN: NostrCommand (via gateway sender)
+    ST->>MD: timeline update → TimelineOutcome
+    ST->>MD: nostr update (issues NostrCommand)
+    MD->>IN: NostrCommand (via gateway sender)
     IN-->>RT: gateway Message (subscription)
     ST-->>RT: Command<AppMsg>
     RT->>ST: view reads &AppState
@@ -289,18 +300,21 @@ sequenceDiagram
 ```
 
 > [!NOTE]
-> The `ST ->> IN` arrow (`NostrCommand`) is a **channel send**, not a
-> direct call — `application` has no compile-time dependency on `infrastructure`
-> and reaches the worker only through the `model`-owned gateway sender. The
-> sequence shows message flow, not import direction.
+> The `MD ->> IN` arrow (`NostrCommand`) is a **channel send**, not a direct
+> call. `application` has no compile-time dependency on `infrastructure`: it
+> drives `model::nostr` via `update`, and that component — which holds the
+> gateway sender — performs the send. The sequence shows message flow, not
+> import direction.
 
 ## Design principles
 
 1. **Dependencies point inward.** Outer adapters depend on inner layers; never
    the reverse. Invert via inner-owned contracts when needed.
 2. **`domain` is pure.** No framework, I/O, UI, or model concepts.
-3. **`model` is side-effect free.** `update` mutates state and reports outcomes;
-   the application owns all effects.
+3. **`model` is side-effect free, save one seam.** Component `update`s mutate
+   state and report outcomes for the application to act on. The exception is
+   `model::nostr`, which owns the gateway sender and issues `NostrCommand`s on it
+   directly.
 4. **One message vocabulary.** `AppMsg` is defined in `application`; only the
    `runtime` translates the outside world into it.
 5. **Views are read-only.** `presentation` renders `AppState` and nothing more.
