@@ -125,3 +125,8 @@ The following actions are available:
 | `PrevTab`          | Switch to the previous tab           |
 | `NextTab`          | Switch to the next tab               |
 | `Quit`             | Quit the application                 |
+
+## Architecture
+
+For how the codebase is organised — the layers, their dependency direction, and
+the contracts between them — see [docs/architecture.md](docs/architecture.md).
