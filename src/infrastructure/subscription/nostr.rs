@@ -158,7 +158,7 @@ impl NostrEvents {
                     });
                 }
             }
-            NostrCommand::LoadMoreTimeline { feed, since } => {
+            NostrCommand::LoadMore { feed, since } => {
                 // Load more timeline events before the specified timestamp.
                 // Map the tab to the appropriate domain filter builder; the home
                 // timeline reuses the contact list cached at init time.
@@ -186,7 +186,7 @@ impl NostrEvents {
                     }
                 }
             }
-            NostrCommand::SubscribeTimeline { feed } => {
+            NostrCommand::Subscribe { feed } => {
                 match &feed {
                     FeedKind::Home => {
                         log::warn!(
