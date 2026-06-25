@@ -8,11 +8,11 @@ use crate::{
     application::config::Config,
     application::message::AppMsg,
     domain::nostr::{nip10::ReplyTagsBuilder, nip38::MusicStatus, Profile},
-    infrastructure::subscription::nostr::{CommandError, NostrCommand},
     model::{
         editor::{Editor, Message as EditorMessage},
         fps::{Fps, Message as FpsMessage},
         nostr::{Message as NostrMessage, Nostr},
+        nostr_gateway::{CommandError, NostrCommand},
         status_bar::{Message, StatusBar},
         timeline::{
             tab::TimelineTabType, text_note::TextNote, Message as TimelineMessage, Timeline,

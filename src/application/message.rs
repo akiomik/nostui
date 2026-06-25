@@ -6,7 +6,7 @@
 use crossterm::event::KeyEvent;
 use nowhear::{MediaEvent, MediaSourceError};
 
-use crate::infrastructure::subscription::nostr::Message as NostrSubscriptionMessage;
+use crate::model::nostr_gateway::Message as NostrSubscriptionMessage;
 
 /// Main application message type for tears
 #[derive(Debug, Clone)]

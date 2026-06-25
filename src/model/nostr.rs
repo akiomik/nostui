@@ -2,9 +2,8 @@ use nostr_sdk::prelude::*;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
-use crate::{
-    infrastructure::subscription::nostr::NostrCommand, model::timeline::tab::TimelineTabType,
-};
+use crate::model::nostr_gateway::NostrCommand;
+use crate::model::timeline::tab::TimelineTabType;
 
 pub enum Message {
     ConnectionReady {
