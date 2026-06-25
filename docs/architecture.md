@@ -134,15 +134,18 @@ side-effect-free `update`. Key modules/types:
 - `model::editor`, `model::status_bar`, `model::fps`.
 - `model::nostr` — connection state: tracks the per-feed subscriptions and
   whether the worker is ready. It does **not** hold the command sender (the
-  application does); its `update` reports a `NostrOutcome` instead of sending.
+  application does); its `update` reports an `Option<NostrOutcome>` instead of
+  sending.
 - `model::nostr_gateway` — the **Nostr gateway contract** (see below).
 
 **Invariant:** `model::update` methods are side-effect free. They mutate state
 and, when the application must act, **report an outcome** rather than issuing an
-effect. `TimelineTab::update` / `Timeline::update` return `TimelineOutcome`
-(`None` / `LoadMoreRequested`), and `Nostr::update` returns `NostrOutcome`
-(`None` / `Send(NostrCommand)`); the application decides what to run. `editor`,
-`status_bar`, and `fps` are likewise pure.
+effect. `TimelineTab::update` / `Timeline::update` return
+`Option<TimelineOutcome>` (`Some(LoadMoreRequested)` or `None`), and
+`Nostr::update` returns `Option<NostrOutcome>` (`Some(Send(NostrCommand))` or
+`None`); the outcome enums hold only real follow-ups, with absence modelled by
+`Option`. The `update` methods are `#[must_use]`, so the application cannot
+silently drop an outcome. `editor`, `status_bar`, and `fps` are likewise pure.
 
 ### `application` — use cases
 
@@ -248,14 +251,15 @@ dependency.
 // application::state
 pub fn scroll_down(&mut self) -> Command<AppMsg> {
     match self.timeline.update(TimelineMessage::NextItemSelected) {
-        TimelineOutcome::LoadMoreRequested => self.load_more_timeline(),
-        TimelineOutcome::None => Command::none(),
+        Some(TimelineOutcome::LoadMoreRequested) => self.load_more_timeline(),
+        None => Command::none(),
     }
 }
 ```
 
-The Nostr gateway works the same way: `Nostr::update` returns a `NostrOutcome`,
-and the application — which owns the command sender — performs the send:
+The Nostr gateway works the same way: `Nostr::update` returns an
+`Option<NostrOutcome>`, and the application — which owns the command sender —
+performs the send:
 
 ```rust
 // application::state

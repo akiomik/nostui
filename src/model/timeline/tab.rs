@@ -29,13 +29,11 @@ use super::{
 /// Follow-up action the application layer must take after a timeline update.
 ///
 /// Timeline state objects are side-effect free, like the rest of `model`: their
-/// `update` methods mutate state and return this outcome instead of issuing a
-/// `Command`/`AppMsg`. The application layer decides which effect to run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// `update` methods mutate state and return `Some(outcome)` instead of issuing a
+/// `Command`/`AppMsg`, or `None` when no follow-up is required. The application
+/// layer decides which effect to run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimelineOutcome {
-    /// No follow-up action is required.
-    #[default]
-    None,
     /// The selection reached the bottom; older events should be loaded.
     LoadMoreRequested,
 }
@@ -170,7 +168,7 @@ impl TimelineTab {
     /// ### NextItemSelected
     /// When the user tries to scroll down at the bottom of the timeline:
     /// - Updates pagination state to "loading more"
-    /// - Returns `TimelineOutcome::LoadMoreRequested` so the application can fetch older events
+    /// - Returns `Some(TimelineOutcome::LoadMoreRequested)` so the application can fetch older events
     ///
     /// ### NoteAdded
     /// When a new note arrives, coordinates three child components:
@@ -182,7 +180,8 @@ impl TimelineTab {
     /// The coordination logic lives here because it's TimelineTab's responsibility
     /// to maintain consistency across its children, not the responsibility of
     /// Selection or Pagination themselves.
-    pub fn update(&mut self, message: Message) -> TimelineOutcome {
+    #[must_use]
+    pub fn update(&mut self, message: Message) -> Option<TimelineOutcome> {
         match message {
             // Selection-related messages - simple delegation
             Message::ItemSelected(index) => {
@@ -208,7 +207,7 @@ impl TimelineTab {
                                 self.pagination
                                     .update(PaginationMessage::LoadingMoreStarted { since });
 
-                                return TimelineOutcome::LoadMoreRequested;
+                                return Some(TimelineOutcome::LoadMoreRequested);
                             }
                         }
                     } else {
@@ -260,7 +259,7 @@ impl TimelineTab {
             }
         };
 
-        TimelineOutcome::None
+        None
     }
 }
 
@@ -305,17 +304,17 @@ mod tests {
         // Test ItemSelected - no command should be issued for selection changes
         let cmd = tab.update(Message::ItemSelected(5));
         assert_eq!(tab.selected_index(), None);
-        assert_eq!(cmd, TimelineOutcome::None);
+        assert_eq!(cmd, None);
 
         // Test SelectionCleared
         let cmd = tab.update(Message::SelectionCleared);
         assert_eq!(tab.selected_index(), None);
-        assert_eq!(cmd, TimelineOutcome::None);
+        assert_eq!(cmd, None);
 
         // Test FirstItemSelected
         let cmd = tab.update(Message::FirstItemSelected);
         assert_eq!(tab.selected_index(), None);
-        assert_eq!(cmd, TimelineOutcome::None);
+        assert_eq!(cmd, None);
 
         // Add some notes first so LastItemSelected and NextItemSelected work properly
         for i in 0..11 {
@@ -327,17 +326,17 @@ mod tests {
         let _ = tab.update(Message::ItemSelected(5));
         let cmd = tab.update(Message::LastItemSelected);
         assert_eq!(tab.selected_index(), Some(10));
-        assert_eq!(cmd, TimelineOutcome::None);
+        assert_eq!(cmd, None);
 
         // Test PreviousItemSelected
         let cmd = tab.update(Message::PreviousItemSelected);
         assert_eq!(tab.selected_index(), Some(9));
-        assert_eq!(cmd, TimelineOutcome::None);
+        assert_eq!(cmd, None);
 
         // Test NextItemSelected (not at bottom, so no LoadMore)
         let cmd = tab.update(Message::NextItemSelected);
         assert_eq!(tab.selected_index(), Some(10));
-        assert_eq!(cmd, TimelineOutcome::None);
+        assert_eq!(cmd, None);
     }
 
     #[test]
@@ -358,7 +357,7 @@ mod tests {
         // Try to scroll down at bottom - should trigger loading more and return LoadMore command
         let cmd = tab.update(Message::NextItemSelected);
         assert!(tab.is_loading_more());
-        assert_eq!(cmd, TimelineOutcome::LoadMoreRequested); // LoadMore command was issued
+        assert_eq!(cmd, Some(TimelineOutcome::LoadMoreRequested)); // LoadMore command was issued
     }
 
     #[test]
@@ -375,12 +374,12 @@ mod tests {
         // First scroll-down at bottom triggers loading more
         let cmd = tab.update(Message::NextItemSelected);
         assert!(tab.is_loading_more());
-        assert_eq!(cmd, TimelineOutcome::LoadMoreRequested);
+        assert_eq!(cmd, Some(TimelineOutcome::LoadMoreRequested));
 
         // A subsequent scroll-down while already loading must not re-trigger it
         let cmd = tab.update(Message::NextItemSelected);
         assert!(tab.is_loading_more());
-        assert_eq!(cmd, TimelineOutcome::None); // No duplicate LoadMore command
+        assert_eq!(cmd, None); // No duplicate LoadMore command
     }
 
     #[test]
@@ -391,7 +390,7 @@ mod tests {
         // Should do nothing when there are no notes (no oldest_timestamp)
         let cmd = tab.update(Message::NextItemSelected);
         assert!(!tab.is_loading_more());
-        assert_eq!(cmd, TimelineOutcome::None); // No command should be issued
+        assert_eq!(cmd, None); // No command should be issued
     }
 
     #[test]
@@ -404,7 +403,7 @@ mod tests {
         assert_eq!(tab.len(), 1);
         assert!(!tab.is_empty());
         assert_eq!(tab.oldest_timestamp(), Some(Timestamp::from(1000)));
-        assert_eq!(cmd, TimelineOutcome::None); // NoteAdded should not issue commands
+        assert_eq!(cmd, None); // NoteAdded should not issue commands
     }
 
     #[test]
@@ -479,7 +478,7 @@ mod tests {
         // Selection should be adjusted to index 2 to maintain the same item selected
         assert_eq!(tab.selected_index(), Some(2));
         assert_eq!(tab.len(), 3);
-        assert_eq!(cmd, TimelineOutcome::None);
+        assert_eq!(cmd, None);
     }
 
     #[test]
@@ -503,7 +502,7 @@ mod tests {
         // Selection should not change because the new item was inserted after
         assert_eq!(tab.selected_index(), Some(0));
         assert_eq!(tab.len(), 3);
-        assert_eq!(cmd, TimelineOutcome::None);
+        assert_eq!(cmd, None);
     }
 
     #[test]
@@ -595,12 +594,12 @@ mod tests {
         // NextItemSelected on empty timeline should do nothing
         let cmd = tab.update(Message::NextItemSelected);
         assert_eq!(tab.selected_index(), None);
-        assert_eq!(cmd, TimelineOutcome::None);
+        assert_eq!(cmd, None);
 
         // LastItemSelected on empty timeline should do nothing
         let cmd = tab.update(Message::LastItemSelected);
         assert_eq!(tab.selected_index(), None);
-        assert_eq!(cmd, TimelineOutcome::None);
+        assert_eq!(cmd, None);
     }
 
     #[test]
@@ -615,7 +614,7 @@ mod tests {
         // because Selection's logic requires max_index > 0 for initial selection
         let cmd = tab.update(Message::NextItemSelected);
         assert_eq!(tab.selected_index(), None);
-        assert_eq!(cmd, TimelineOutcome::None);
+        assert_eq!(cmd, None);
 
         // Select the item manually
         let _ = tab.update(Message::ItemSelected(0));
@@ -624,13 +623,13 @@ mod tests {
         // Can't go beyond the only item - but at bottom with single item, should trigger LoadMore
         let cmd = tab.update(Message::NextItemSelected);
         assert_eq!(tab.selected_index(), Some(0));
-        assert_eq!(cmd, TimelineOutcome::LoadMoreRequested); // LoadMore command issued when at bottom
+        assert_eq!(cmd, Some(TimelineOutcome::LoadMoreRequested)); // LoadMore command issued when at bottom
 
         // LastItemSelected should select index 0
         let _ = tab.update(Message::SelectionCleared);
         let cmd = tab.update(Message::LastItemSelected);
         assert_eq!(tab.selected_index(), Some(0));
-        assert_eq!(cmd, TimelineOutcome::None);
+        assert_eq!(cmd, None);
     }
 
     #[test]

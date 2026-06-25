@@ -29,13 +29,11 @@ pub enum Message {
 /// Follow-up effect the application must dispatch after a [`Nostr`] update.
 ///
 /// `Nostr`, like the rest of `model`, is side-effect free: `update` mutates
-/// state and returns this outcome instead of sending on the gateway channel.
-/// The application layer owns the command sender and performs the send.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// state and returns `Some(outcome)` instead of sending on the gateway channel,
+/// or `None` when there is nothing to dispatch. The application layer owns the
+/// command sender and performs the send.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NostrOutcome {
-    /// No command needs to be sent.
-    #[default]
-    None,
     /// Dispatch this command to the subscription worker.
     Send(NostrCommand),
 }
@@ -75,58 +73,63 @@ impl Nostr {
             .map(|(feed, _)| feed)
     }
 
-    pub fn update(&mut self, message: Message) -> NostrOutcome {
+    #[must_use]
+    pub fn update(&mut self, message: Message) -> Option<NostrOutcome> {
         match message {
             Message::ConnectionReady => {
                 self.connected = true;
-                NostrOutcome::None
+                None
             }
             Message::EventSubmitted { event_builder } => {
                 if self.connected {
-                    NostrOutcome::Send(NostrCommand::SendEventBuilder { event_builder })
+                    Some(NostrOutcome::Send(NostrCommand::SendEventBuilder {
+                        event_builder,
+                    }))
                 } else {
-                    NostrOutcome::None
+                    None
                 }
             }
             Message::SubscriptionRequested { feed } => {
                 if matches!(feed, FeedKind::Home) {
-                    return NostrOutcome::None;
+                    return None;
                 }
 
                 if self.feed_subscriptions.contains_key(&feed) {
                     // Already subscribed or in-flight.
-                    return NostrOutcome::None;
+                    return None;
                 }
 
                 if !self.connected {
-                    return NostrOutcome::None;
+                    return None;
                 }
 
                 // Mark as in-flight before dispatching, so repeated calls are rejected.
                 self.feed_subscriptions.insert(feed.clone(), Vec::new());
-                NostrOutcome::Send(NostrCommand::Subscribe { feed })
+                Some(NostrOutcome::Send(NostrCommand::Subscribe { feed }))
             }
             Message::SubscriptionCreated { feed, sub_id } => {
                 self.feed_subscriptions
                     .entry(feed)
                     .or_default()
                     .push(sub_id);
-                NostrOutcome::None
+                None
             }
             Message::SubscriptionClosed { feed } => {
                 let subscription_ids = self.feed_subscriptions.remove(&feed).unwrap_or_default();
 
                 if !subscription_ids.is_empty() && self.connected {
-                    NostrOutcome::Send(NostrCommand::Unsubscribe { subscription_ids })
+                    Some(NostrOutcome::Send(NostrCommand::Unsubscribe {
+                        subscription_ids,
+                    }))
                 } else {
-                    NostrOutcome::None
+                    None
                 }
             }
             Message::HistoryRequested { feed, since } => {
                 if self.connected {
-                    NostrOutcome::Send(NostrCommand::LoadMore { feed, since })
+                    Some(NostrOutcome::Send(NostrCommand::LoadMore { feed, since }))
                 } else {
-                    NostrOutcome::None
+                    None
                 }
             }
             Message::ConnectionClosed => {
@@ -135,9 +138,9 @@ impl Nostr {
                 self.feed_subscriptions.clear();
 
                 if was_connected {
-                    NostrOutcome::Send(NostrCommand::Shutdown)
+                    Some(NostrOutcome::Send(NostrCommand::Shutdown))
                 } else {
-                    NostrOutcome::None
+                    None
                 }
             }
         }
@@ -171,7 +174,7 @@ mod tests {
     fn test_is_ready_returns_true_after_connection_ready() {
         let mut nostr = Nostr::new();
 
-        assert_eq!(nostr.update(Message::ConnectionReady), NostrOutcome::None);
+        assert_eq!(nostr.update(Message::ConnectionReady), None);
 
         assert!(nostr.is_ready());
     }
@@ -200,7 +203,7 @@ mod tests {
         let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
 
-        nostr.update(Message::SubscriptionCreated {
+        let _ = nostr.update(Message::SubscriptionCreated {
             feed: feed.clone(),
             sub_id,
         });
@@ -222,7 +225,7 @@ mod tests {
         let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
 
-        nostr.update(Message::SubscriptionCreated {
+        let _ = nostr.update(Message::SubscriptionCreated {
             feed: feed.clone(),
             sub_id: sub_id.clone(),
         });
@@ -236,7 +239,7 @@ mod tests {
 
         let outcome = nostr.update(Message::ConnectionReady);
 
-        assert_eq!(outcome, NostrOutcome::None);
+        assert_eq!(outcome, None);
         assert!(nostr.is_ready());
     }
 
@@ -245,7 +248,7 @@ mod tests {
         let mut nostr = Nostr::new();
         let event_builder = EventBuilder::text_note("test");
 
-        nostr.update(Message::ConnectionReady);
+        let _ = nostr.update(Message::ConnectionReady);
 
         let outcome = nostr.update(Message::EventSubmitted {
             event_builder: event_builder.clone(),
@@ -253,7 +256,9 @@ mod tests {
 
         assert_eq!(
             outcome,
-            NostrOutcome::Send(NostrCommand::SendEventBuilder { event_builder })
+            Some(NostrOutcome::Send(NostrCommand::SendEventBuilder {
+                event_builder
+            }))
         );
     }
 
@@ -264,20 +269,20 @@ mod tests {
 
         let outcome = nostr.update(Message::EventSubmitted { event_builder });
 
-        assert_eq!(outcome, NostrOutcome::None);
+        assert_eq!(outcome, None);
     }
 
     #[test]
     fn test_update_subscription_requested_ignores_home_tab() {
         let mut nostr = Nostr::new();
 
-        nostr.update(Message::ConnectionReady);
+        let _ = nostr.update(Message::ConnectionReady);
 
         let outcome = nostr.update(Message::SubscriptionRequested {
             feed: FeedKind::Home,
         });
 
-        assert_eq!(outcome, NostrOutcome::None);
+        assert_eq!(outcome, None);
         assert!(!nostr.feed_subscriptions.contains_key(&FeedKind::Home));
     }
 
@@ -286,7 +291,7 @@ mod tests {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
 
-        nostr.update(Message::ConnectionReady);
+        let _ = nostr.update(Message::ConnectionReady);
 
         let outcome = nostr.update(Message::SubscriptionRequested { feed: feed.clone() });
 
@@ -303,7 +308,7 @@ mod tests {
         // Verify the subscribe command was reported
         assert_eq!(
             outcome,
-            NostrOutcome::Send(NostrCommand::Subscribe { feed })
+            Some(NostrOutcome::Send(NostrCommand::Subscribe { feed }))
         );
     }
 
@@ -315,7 +320,7 @@ mod tests {
         // Not connected yet, so no in-flight mark and no command.
         let outcome = nostr.update(Message::SubscriptionRequested { feed: feed.clone() });
 
-        assert_eq!(outcome, NostrOutcome::None);
+        assert_eq!(outcome, None);
         assert!(!nostr.feed_subscriptions.contains_key(&feed));
     }
 
@@ -324,17 +329,19 @@ mod tests {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
 
-        nostr.update(Message::ConnectionReady);
+        let _ = nostr.update(Message::ConnectionReady);
 
         let first = nostr.update(Message::SubscriptionRequested { feed: feed.clone() });
         assert_eq!(
             first,
-            NostrOutcome::Send(NostrCommand::Subscribe { feed: feed.clone() })
+            Some(NostrOutcome::Send(NostrCommand::Subscribe {
+                feed: feed.clone()
+            }))
         );
 
         // Second request should be ignored
         let second = nostr.update(Message::SubscriptionRequested { feed });
-        assert_eq!(second, NostrOutcome::None);
+        assert_eq!(second, None);
     }
 
     #[test]
@@ -343,7 +350,7 @@ mod tests {
         let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
 
-        nostr.update(Message::SubscriptionCreated {
+        let _ = nostr.update(Message::SubscriptionCreated {
             feed: feed.clone(),
             sub_id: sub_id.clone(),
         });
@@ -362,12 +369,12 @@ mod tests {
         let sub_id1 = SubscriptionId::new("test_sub1");
         let sub_id2 = SubscriptionId::new("test_sub2");
 
-        nostr.update(Message::SubscriptionCreated {
+        let _ = nostr.update(Message::SubscriptionCreated {
             feed: feed.clone(),
             sub_id: sub_id1.clone(),
         });
 
-        nostr.update(Message::SubscriptionCreated {
+        let _ = nostr.update(Message::SubscriptionCreated {
             feed: feed.clone(),
             sub_id: sub_id2.clone(),
         });
@@ -385,9 +392,9 @@ mod tests {
         let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
 
-        nostr.update(Message::ConnectionReady);
+        let _ = nostr.update(Message::ConnectionReady);
 
-        nostr.update(Message::SubscriptionCreated {
+        let _ = nostr.update(Message::SubscriptionCreated {
             feed: feed.clone(),
             sub_id: sub_id.clone(),
         });
@@ -400,9 +407,9 @@ mod tests {
         // Verify unsubscribe command was reported
         assert_eq!(
             outcome,
-            NostrOutcome::Send(NostrCommand::Unsubscribe {
+            Some(NostrOutcome::Send(NostrCommand::Unsubscribe {
                 subscription_ids: vec![sub_id]
-            })
+            }))
         );
     }
 
@@ -411,12 +418,12 @@ mod tests {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
 
-        nostr.update(Message::ConnectionReady);
+        let _ = nostr.update(Message::ConnectionReady);
 
         let outcome = nostr.update(Message::SubscriptionClosed { feed });
 
         // No unsubscribe command for an empty subscription list
-        assert_eq!(outcome, NostrOutcome::None);
+        assert_eq!(outcome, None);
     }
 
     #[test]
@@ -425,7 +432,7 @@ mod tests {
         let feed = create_test_feed();
         let since = Timestamp::from(1234567890);
 
-        nostr.update(Message::ConnectionReady);
+        let _ = nostr.update(Message::ConnectionReady);
 
         let outcome = nostr.update(Message::HistoryRequested {
             feed: feed.clone(),
@@ -434,7 +441,7 @@ mod tests {
 
         assert_eq!(
             outcome,
-            NostrOutcome::Send(NostrCommand::LoadMore { feed, since })
+            Some(NostrOutcome::Send(NostrCommand::LoadMore { feed, since }))
         );
     }
 
@@ -444,9 +451,9 @@ mod tests {
         let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
 
-        nostr.update(Message::ConnectionReady);
+        let _ = nostr.update(Message::ConnectionReady);
 
-        nostr.update(Message::SubscriptionCreated { feed, sub_id });
+        let _ = nostr.update(Message::SubscriptionCreated { feed, sub_id });
 
         let outcome = nostr.update(Message::ConnectionClosed);
 
@@ -455,7 +462,7 @@ mod tests {
         assert_eq!(nostr.feed_subscriptions, HashMap::new());
 
         // Verify shutdown command was reported
-        assert_eq!(outcome, NostrOutcome::Send(NostrCommand::Shutdown));
+        assert_eq!(outcome, Some(NostrOutcome::Send(NostrCommand::Shutdown)));
     }
 
     #[test]
@@ -464,6 +471,6 @@ mod tests {
 
         let outcome = nostr.update(Message::ConnectionClosed);
 
-        assert_eq!(outcome, NostrOutcome::None);
+        assert_eq!(outcome, None);
     }
 }

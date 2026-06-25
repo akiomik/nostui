@@ -143,7 +143,8 @@ impl Timeline {
         tab.is_at_bottom()
     }
 
-    pub fn update(&mut self, message: Message) -> TimelineOutcome {
+    #[must_use]
+    pub fn update(&mut self, message: Message) -> Option<TimelineOutcome> {
         match message {
             Message::NoteAddedToTab { event, feed } => {
                 // Find the tab index for the specified feed
@@ -152,7 +153,7 @@ impl Timeline {
                     None => {
                         // Tab not found - cannot add note
                         log::warn!("Cannot add note: tab {feed:?} not found");
-                        return TimelineOutcome::None;
+                        return None;
                     }
                 };
 
@@ -207,7 +208,7 @@ impl Timeline {
                 // Check if a tab for the same feed already exists
                 if self.find_tab_by_feed(&feed).is_some() {
                     log::warn!("Tab for this feed already exists");
-                    return TimelineOutcome::None;
+                    return None;
                 }
 
                 // Create and add the new tab
@@ -221,13 +222,13 @@ impl Timeline {
                 // Validate index
                 if index >= self.tabs.len() {
                     log::warn!("Tab index out of bounds");
-                    return TimelineOutcome::None;
+                    return None;
                 }
 
                 // Cannot remove the Home tab
                 if matches!(self.tabs[index].feed(), FeedKind::Home) {
                     log::warn!("Cannot remove the Home tab");
-                    return TimelineOutcome::None;
+                    return None;
                 }
 
                 // Remove the tab
@@ -263,7 +264,7 @@ impl Timeline {
             }
         }
 
-        TimelineOutcome::None
+        None
     }
 }
 
