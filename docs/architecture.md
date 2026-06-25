@@ -161,6 +161,10 @@ vocabulary, and orchestrates effects. Key modules/types:
   `EditorMsg`, `NostrMsg`). The message contract for the whole app.
 - `application::config` — `Config` (loaded from files), plus the UI config value
   types `keybindings` (`KeyBindings`, `Action`) and `styles` (`Styles`).
+  `keybindings` is consumed by `runtime` for input resolution. `styles` is a
+  **reserved theming hook that is not yet wired up**: it is parsed and merged,
+  but no widget reads it — `presentation` currently hardcodes its `ratatui`
+  styles. It is kept here pending a future theming feature.
 
 ### `infrastructure` — I/O adapters
 
@@ -242,6 +246,25 @@ neutral leaf that may not reference `FeedKind`, `model` — already a dependency
 fits. Its feed identity comes from `domain::nostr::FeedKind`, a downward
 dependency.
 
+### Error reporting (worker → UI)
+
+Command failures travel back through the same gateway contract and surface in
+the status bar, with no inward layer reaching outward:
+
+1. The worker (`infrastructure::subscription::nostr::NostrEvents`) fails to run a
+   `NostrCommand` and emits `model::nostr_gateway::Message::Error { error }`,
+   where `error` is a `CommandError` (e.g. `SendEventFailed`,
+   `ConnectRelayFailed`).
+2. `runtime` receives it in `handle_nostr_subscription_message` and calls the
+   use case `AppState::notify_subscription_error(error)`.
+3. That use case updates `model::status_bar` with an error message
+   (`Message::ErrorMessageChanged`, labelled `Nostr`).
+4. `presentation`'s `StatusBarWidget` renders it on the next frame.
+
+Relay shutdown follows the same shape via `RelayPoolNotification::Shutdown` →
+`AppState::notify_subscription_shutdown`. System-level errors raised inside the
+application use `AppState::show_error`, which writes to the same status bar.
+
 ### Outcome reporting (model → application)
 
 `model` never issues effects. When a state transition requires an effect, the
@@ -279,7 +302,9 @@ enums and are driven by `AppState`, not by `AppMsg` directly.
 `application::config::Config` aggregates all settings — app/Nostr settings plus
 the UI value types `KeyBindings` and `Styles` — and loads/merges them from
 config files. `runtime` reads `config.keybindings` to resolve input; `main.rs`
-builds the `Config` at startup.
+builds the `Config` at startup. `config.styles` is parsed and merged but not yet
+consumed (see the `application::config` note above); it is a reserved hook for a
+future theming feature, not a live setting.
 
 ## End-to-end flow
 
