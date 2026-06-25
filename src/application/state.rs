@@ -1087,4 +1087,186 @@ mod tests {
 
         Ok(())
     }
+
+    // --- Dispatch seam: each use case sends the expected NostrCommand ---
+    //
+    // The model only emits commands once connected, and the application owns the
+    // sender, so these tests connect via `on_connection_ready` (which injects the
+    // sender and marks the worker ready) and then drain the receiver. They guard
+    // the application <-> worker wiring that visible-side-effect tests miss — e.g.
+    // the #458 regression where `load_more_timeline` set the status but never
+    // dispatched `LoadMore`.
+
+    fn connected_state() -> (AppState<'static>, mpsc::UnboundedReceiver<NostrCommand>) {
+        let mut state = AppState::new(Keys::generate().public_key());
+        let (tx, rx) = mpsc::unbounded_channel();
+        let _ = state.on_connection_ready(tx);
+        (state, rx)
+    }
+
+    #[test]
+    fn test_on_connection_ready_dispatches_nothing() {
+        let (_state, mut rx) = connected_state();
+
+        // Becoming ready must not, by itself, send any command.
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn test_open_author_timeline_dispatches_subscribe() {
+        let (mut state, mut rx) = connected_state();
+        let author_pubkey = Keys::generate().public_key();
+
+        let _ = state.open_author_timeline(author_pubkey);
+
+        assert_eq!(
+            rx.try_recv(),
+            Ok(NostrCommand::Subscribe {
+                feed: FeedKind::Author(author_pubkey),
+            })
+        );
+    }
+
+    #[test]
+    fn test_close_current_tab_dispatches_unsubscribe() {
+        let (mut state, mut rx) = connected_state();
+        let feed = FeedKind::Author(Keys::generate().public_key());
+        let sub_id = SubscriptionId::new("author_sub");
+
+        // Open an author tab and register a subscription for it without going
+        // through `open_author_timeline` (which would also emit `Subscribe`).
+        let _ = state
+            .timeline
+            .update(TimelineMessage::TabAdded { feed: feed.clone() });
+        let _ = state.track_subscription_created(feed, sub_id.clone());
+
+        let _ = state.close_current_tab();
+
+        assert_eq!(
+            rx.try_recv(),
+            Ok(NostrCommand::Unsubscribe {
+                subscription_ids: vec![sub_id],
+            })
+        );
+    }
+
+    #[test]
+    fn test_react_to_selected_dispatches_send_event() -> Result<()> {
+        let (mut state, mut rx) = connected_state();
+        let keys = Keys::generate();
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+
+        let _ = state.react_to_selected();
+
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(NostrCommand::SendEventBuilder { .. })
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_repost_selected_dispatches_send_event() -> Result<()> {
+        let (mut state, mut rx) = connected_state();
+        let keys = Keys::generate();
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+
+        let _ = state.repost_selected();
+
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(NostrCommand::SendEventBuilder { .. })
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_submit_note_dispatches_send_event() {
+        let (mut state, mut rx) = connected_state();
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(NostrCommand::SendEventBuilder { .. })
+        ));
+    }
+
+    #[test]
+    fn test_publish_music_status_dispatches_send_event() {
+        let (mut state, mut rx) = connected_state();
+
+        let _ = state.publish_music_status(create_track("Song"));
+
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(NostrCommand::SendEventBuilder { .. })
+        ));
+    }
+
+    #[test]
+    fn test_load_more_timeline_dispatches_load_more() -> Result<()> {
+        // Regression guard for #458: the status-only test passed while the
+        // `LoadMore` dispatch was missing.
+        let (mut state, mut rx) = connected_state();
+        let keys = Keys::generate();
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
+
+        let _ = state.load_more_timeline();
+
+        assert_eq!(
+            rx.try_recv(),
+            Ok(NostrCommand::LoadMore {
+                feed: FeedKind::Home,
+                since: Timestamp::from(1000),
+            })
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_close_connection_dispatches_shutdown() {
+        let (mut state, mut rx) = connected_state();
+
+        let _ = state.close_connection();
+
+        assert_eq!(rx.try_recv(), Ok(NostrCommand::Shutdown));
+    }
+
+    #[test]
+    fn test_show_error_sets_error_status() {
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        let _ = state.show_error("boom".to_owned());
+
+        assert_eq!(state.status_bar.message(), Some("[ERR: System] boom"));
+    }
+
+    #[test]
+    fn test_notify_subscription_error_sets_error_status() {
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        let _ = state.notify_subscription_error(CommandError::SendEventFailed {
+            error: "x".to_owned(),
+        });
+
+        let message = state.status_bar.message().expect("status set");
+        assert!(message.starts_with("[ERR: Nostr]"));
+    }
 }
