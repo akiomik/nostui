@@ -276,6 +276,9 @@ impl<'a> TearsApp<'a> {
             KeyAction::OpenAuthorTimeline => {
                 Command::message(AppMsg::Timeline(TimelineMsg::OpenAuthorTimeline))
             }
+            KeyAction::OpenMentionTab => {
+                Command::message(AppMsg::Timeline(TimelineMsg::OpenMentionTab))
+            }
             KeyAction::CloseCurrentTab => {
                 Command::message(AppMsg::Timeline(TimelineMsg::CloseCurrentTab))
             }
@@ -327,6 +330,7 @@ impl<'a> TearsApp<'a> {
                     None => Command::none(),
                 }
             }
+            TimelineMsg::OpenMentionTab => self.state.open_mention_tab(),
             TimelineMsg::CloseCurrentTab => self.state.close_current_tab(),
         }
     }

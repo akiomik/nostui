@@ -11,6 +11,8 @@ use nostr_sdk::prelude::*;
 pub enum FeedKind {
     /// The home feed (the followed authors, plus the user themselves).
     Home,
+    /// The mention feed (kind-1 events that tag the current user via `#p`).
+    Mention,
     /// A single author's feed.
     Author(PublicKey),
 }

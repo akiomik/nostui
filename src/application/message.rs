@@ -65,6 +65,8 @@ pub enum TimelineMsg {
     PrevTab,
     /// Open author timeline for the selected note's author
     OpenAuthorTimeline,
+    /// Open mention timeline
+    OpenMentionTab,
     /// Close the current tab
     CloseCurrentTab,
 }

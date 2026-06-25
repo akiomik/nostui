@@ -10,8 +10,8 @@ use tears::{SubscriptionId, SubscriptionSource};
 use tokio::sync::{broadcast, mpsc, RwLock};
 
 use crate::domain::nostr::feed_filter::{
-    home_feed_filters, home_load_more_filter, user_feed_filters, user_load_more_filter,
-    with_own_pubkey,
+    home_feed_filters, home_load_more_filter, mention_feed_filters, mention_load_more_filter,
+    user_feed_filters, user_load_more_filter, with_own_pubkey,
 };
 use crate::domain::nostr::FeedKind;
 use crate::model::nostr_gateway::{CommandError, Message, NostrCommand};
@@ -170,6 +170,17 @@ impl NostrEvents {
                             return;
                         }
                     },
+                    FeedKind::Mention => {
+                        let Ok(signer) = client.signer().await else {
+                            log::warn!("No signer available, cannot load more mention events");
+                            return;
+                        };
+                        let Ok(own_pubkey) = signer.get_public_key().await else {
+                            log::warn!("Failed to get public key, cannot load more mention events");
+                            return;
+                        };
+                        mention_load_more_filter(own_pubkey, since)
+                    }
                     FeedKind::Author(pubkey) => user_load_more_filter(*pubkey, since),
                 };
 
@@ -190,6 +201,42 @@ impl NostrEvents {
                 match &feed {
                     FeedKind::Home => {
                         log::warn!("Home feed should be initialized, not subscribed via command");
+                    }
+                    FeedKind::Mention => {
+                        let Ok(signer) = client.signer().await else {
+                            log::error!("No signer available, cannot subscribe to mention feed");
+                            return;
+                        };
+                        let Ok(own_pubkey) = signer.get_public_key().await else {
+                            log::error!(
+                                "Failed to get public key, cannot subscribe to mention feed"
+                            );
+                            return;
+                        };
+
+                        let [backward_filter, forward_filter] =
+                            mention_feed_filters(own_pubkey, Timestamp::now());
+
+                        let result = tokio::try_join!(
+                            client.subscribe(backward_filter, None),
+                            client.subscribe(forward_filter, None)
+                        );
+
+                        match result {
+                            Ok((sub_id1, sub_id2)) => {
+                                let _ = msg_tx.send(Message::SubscriptionCreated {
+                                    feed: feed.clone(),
+                                    subscription_id: sub_id1.val,
+                                });
+                                let _ = msg_tx.send(Message::SubscriptionCreated {
+                                    feed,
+                                    subscription_id: sub_id2.val,
+                                });
+                            }
+                            Err(e) => {
+                                log::error!("Failed to subscribe to mention feed: {e}");
+                            }
+                        }
                     }
                     FeedKind::Author(pubkey) => {
                         // Subscribe to both backward (historical) and forward (real-time) events

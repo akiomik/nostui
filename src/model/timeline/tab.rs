@@ -100,6 +100,7 @@ impl TimelineTab {
     pub fn tab_title(&self, profiles: &HashMap<PublicKey, Profile>) -> String {
         match self.feed {
             FeedKind::Home => "Home".to_string(),
+            FeedKind::Mention => "Mention".to_string(),
             FeedKind::Author(pubkey) => profiles
                 .get(&pubkey)
                 .and_then(|profile| profile.handle())
@@ -638,6 +639,14 @@ mod tests {
         let profiles = HashMap::new();
 
         assert_eq!(tab.tab_title(&profiles), "Home");
+    }
+
+    #[test]
+    fn test_tab_title_mention() {
+        let tab = TimelineTab::new(FeedKind::Mention);
+        let profiles = HashMap::new();
+
+        assert_eq!(tab.tab_title(&profiles), "Mention");
     }
 
     #[test]

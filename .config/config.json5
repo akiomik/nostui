@@ -12,6 +12,7 @@
       "<f>": "React",                // React to the post
       "<t>": "Repost",               // Repost the post
       "<i>": "OpenAuthorTimeline",   // Open author timeline
+      "<m>": "OpenMentionTab",       // Open mention tab
       "<Ctrl-w>": "CloseCurrentTab", // Close current tab
       "<h>": "PrevTab",              // Switch to previous tab
       "<left>": "PrevTab",           // Switch to previous tab

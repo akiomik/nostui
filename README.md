@@ -11,6 +11,7 @@ A TUI client for [Nostr](https://nostr.com)
 ## Current Features
 
 - Timeline
+- Mention timeline
 - Post, reply, react and repost
 - Open per-user timelines as tabs
 - Broadcast the currently playing track as a music status (NIP-38)
@@ -81,6 +82,7 @@ Options:
 | `f`                   | Send reaction                       |
 | `t`                   | Repost                              |
 | `i`                   | Open the author's timeline as a tab |
+| `m`                   | Open the mention timeline as a tab  |
 | `h` `left`            | Switch to the previous tab          |
 | `l` `right`           | Switch to the next tab              |
 | `Ctrl-w`              | Close the current tab               |
@@ -121,6 +123,7 @@ The following actions are available:
 | `React`            | Send a reaction to the selected note |
 | `Repost`           | Repost the selected note             |
 | `OpenAuthorTimeline` | Open the author's timeline as a tab |
+| `OpenMentionTab`   | Open the mention timeline as a tab   |
 | `CloseCurrentTab`  | Close the current tab                |
 | `PrevTab`          | Switch to the previous tab           |
 | `NextTab`          | Switch to the next tab               |
