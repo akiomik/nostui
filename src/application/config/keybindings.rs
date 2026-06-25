@@ -38,6 +38,7 @@ pub enum Action {
 
     // Tab management
     OpenAuthorTimeline,
+    OpenMentionTab,
     CloseCurrentTab,
     PrevTab,
     NextTab,

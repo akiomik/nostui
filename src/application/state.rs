@@ -145,6 +145,41 @@ impl<'a> AppState<'a> {
         }
     }
 
+    /// Open (or switch to) the mention timeline tab.
+    ///
+    /// If the Mention tab already exists, it is selected. Otherwise a new tab is
+    /// created, a subscription is requested, and a "loading" status message is shown.
+    pub fn open_mention_tab(&mut self) -> Command<AppMsg> {
+        let feed = FeedKind::Mention;
+
+        // Tab already open: just switch to it.
+        if let Some(index) = self.timeline.find_tab_by_feed(&feed) {
+            let _ = self.timeline.update(TimelineMessage::TabSelected { index });
+            return Command::none();
+        }
+
+        let _ = self
+            .timeline
+            .update(TimelineMessage::TabAdded { feed: feed.clone() });
+
+        if self.timeline.find_tab_by_feed(&feed).is_some() {
+            log::info!("Created new mention timeline");
+
+            let outcome = self
+                .nostr
+                .update(NostrMessage::SubscriptionRequested { feed });
+            self.dispatch_nostr(outcome);
+
+            self.set_status("Mention", "loading...");
+        } else {
+            log::error!("Failed to create mention timeline");
+
+            self.set_status_error("Mention", "failed to open tab");
+        }
+
+        Command::none()
+    }
+
     /// Open (or switch to) the author timeline tab for the given pubkey.
     ///
     /// If a tab for this author already exists, it is selected. Otherwise a new
@@ -843,6 +878,40 @@ mod tests {
             state.status_bar.message(),
             Some(format!("[{author_npub}] loading...").as_str())
         );
+    }
+
+    #[test]
+    fn test_open_mention_tab_switches_to_existing_tab() {
+        let mut state = AppState::new(Keys::generate().public_key());
+        let feed = FeedKind::Mention;
+
+        // Pre-create the mention tab, then move focus back to Home.
+        let _ = state
+            .timeline
+            .update(TimelineMessage::TabAdded { feed: feed.clone() });
+        let _ = state
+            .timeline
+            .update(TimelineMessage::TabSelected { index: 0 });
+        assert_eq!(state.timeline.active_tab_index(), 0);
+
+        let _ = state.open_mention_tab();
+
+        // Switches to the existing tab instead of creating a duplicate.
+        assert_eq!(state.timeline.tabs().len(), 2);
+        assert_eq!(state.timeline.active_tab().feed(), &feed);
+    }
+
+    #[test]
+    fn test_open_mention_tab_creates_new_tab_and_shows_loading() {
+        let mut state = AppState::new(Keys::generate().public_key());
+        let feed = FeedKind::Mention;
+
+        let _ = state.open_mention_tab();
+
+        // A new mention tab is created, focused, and a loading status is shown.
+        assert_eq!(state.timeline.tabs().len(), 2);
+        assert_eq!(state.timeline.active_tab().feed(), &feed);
+        assert_eq!(state.status_bar.message(), Some("[Mention] loading..."));
     }
 
     #[test]

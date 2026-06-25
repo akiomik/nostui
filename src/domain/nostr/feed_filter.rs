@@ -26,6 +26,9 @@ pub const HOME_FEED_KINDS: [Kind; 4] = [
 /// Event kinds shown in a single user's feed.
 pub const USER_FEED_KINDS: [Kind; 2] = [Kind::TextNote, Kind::Repost];
 
+/// Event kinds shown in the mention feed.
+pub const MENTION_FEED_KINDS: [Kind; 1] = [Kind::TextNote];
+
 /// Ensure the user's own pubkey is part of the author set so that their posts
 /// always appear in the home feed, even when they do not follow themselves.
 pub fn with_own_pubkey(mut authors: Vec<PublicKey>, own_pubkey: PublicKey) -> Vec<PublicKey> {
@@ -91,6 +94,34 @@ pub fn user_load_more_filter(pubkey: PublicKey, since: Timestamp) -> Filter {
     Filter::new()
         .authors(vec![pubkey])
         .kinds(USER_FEED_KINDS)
+        .until(since)
+        .limit(DEFAULT_FEED_LIMIT)
+}
+
+/// Build the backward + forward subscription filters for the mention feed.
+///
+/// Returns `[backward, forward]`:
+/// - `backward`: historical kind-1 events tagging `pubkey` via `#p`, up to `now`
+/// - `forward`: real-time kind-1 events tagging `pubkey` via `#p` from `now` onward
+pub fn mention_feed_filters(pubkey: PublicKey, now: Timestamp) -> [Filter; 2] {
+    let backward = Filter::new()
+        .pubkey(pubkey)
+        .kinds(MENTION_FEED_KINDS)
+        .until(now)
+        .limit(DEFAULT_FEED_LIMIT);
+    let forward = Filter::new()
+        .pubkey(pubkey)
+        .kinds(MENTION_FEED_KINDS)
+        .since(now);
+
+    [backward, forward]
+}
+
+/// Build the "load more" filter for paginating older mention-feed events before `since`.
+pub fn mention_load_more_filter(pubkey: PublicKey, since: Timestamp) -> Filter {
+    Filter::new()
+        .pubkey(pubkey)
+        .kinds(MENTION_FEED_KINDS)
         .until(since)
         .limit(DEFAULT_FEED_LIMIT)
 }
@@ -209,6 +240,45 @@ mod tests {
             Filter::new()
                 .authors(vec![author])
                 .kinds(USER_FEED_KINDS)
+                .until(since)
+                .limit(DEFAULT_FEED_LIMIT)
+        );
+    }
+
+    #[test]
+    fn test_mention_feed_filters() {
+        let own = pubkey(3);
+        let now = Timestamp::from(2000);
+
+        let [backward, forward] = mention_feed_filters(own, now);
+
+        assert_eq!(
+            backward,
+            Filter::new()
+                .pubkey(own)
+                .kinds(MENTION_FEED_KINDS)
+                .until(now)
+                .limit(DEFAULT_FEED_LIMIT)
+        );
+        assert_eq!(
+            forward,
+            Filter::new()
+                .pubkey(own)
+                .kinds(MENTION_FEED_KINDS)
+                .since(now)
+        );
+    }
+
+    #[test]
+    fn test_mention_load_more_filter() {
+        let own = pubkey(3);
+        let since = Timestamp::from(500);
+
+        assert_eq!(
+            mention_load_more_filter(own, since),
+            Filter::new()
+                .pubkey(own)
+                .kinds(MENTION_FEED_KINDS)
                 .until(since)
                 .limit(DEFAULT_FEED_LIMIT)
         );
