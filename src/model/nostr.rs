@@ -89,7 +89,7 @@ impl Nostr {
                     self.timeline_subscriptions.insert(feed.clone(), Vec::new());
 
                     if sender
-                        .send(NostrCommand::SubscribeTimeline { feed: feed.clone() })
+                        .send(NostrCommand::Subscribe { feed: feed.clone() })
                         .is_err()
                     {
                         // NOTE: Avoid leaving an "in-flight" mark when the command didn't go through.
@@ -119,7 +119,7 @@ impl Nostr {
             }
             Message::HistoryRequested { feed, since } => {
                 if let Some(sender) = self.command_sender.as_ref() {
-                    let _ = sender.send(NostrCommand::LoadMoreTimeline { feed, since });
+                    let _ = sender.send(NostrCommand::LoadMore { feed, since });
                 }
             }
             Message::ConnectionClosed => {
@@ -302,7 +302,7 @@ mod tests {
 
         // Verify command was sent
         let received = rx.try_recv();
-        assert_eq!(received, Ok(NostrCommand::SubscribeTimeline { feed }));
+        assert_eq!(received, Ok(NostrCommand::Subscribe { feed }));
     }
 
     #[test]
@@ -426,7 +426,7 @@ mod tests {
 
         // Verify command was sent
         let received = rx.try_recv();
-        assert_eq!(received, Ok(NostrCommand::LoadMoreTimeline { feed, since }));
+        assert_eq!(received, Ok(NostrCommand::LoadMore { feed, since }));
     }
 
     #[test]

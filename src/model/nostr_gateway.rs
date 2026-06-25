@@ -26,10 +26,10 @@ pub enum NostrCommand {
     AddRelay { url: String },
     /// Remove a relay
     RemoveRelay { url: String },
-    /// Load more timeline events before the specified timestamp for a specific tab
-    LoadMoreTimeline { feed: FeedKind, since: Timestamp },
-    /// Subscribe to a specific timeline tab
-    SubscribeTimeline { feed: FeedKind },
+    /// Load more events for a feed, older than the given timestamp
+    LoadMore { feed: FeedKind, since: Timestamp },
+    /// Subscribe to a feed
+    Subscribe { feed: FeedKind },
     /// Unsubscribe from multiple subscriptions
     Unsubscribe {
         subscription_ids: Vec<nostr_sdk::SubscriptionId>,

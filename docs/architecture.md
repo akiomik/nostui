@@ -97,25 +97,27 @@ Anything that makes an inner layer reference an outer one is a regression.
 Nostr- and text-domain logic with no dependency on any framework, I/O, or UI
 concept. Key modules/types:
 
-- `domain::nostr` — `Profile`, `SortableEventId`, NIP helpers (`nip10`
+- `domain::nostr` — `Profile`, `SortableEventId`, `FeedKind` (which feed a
+  timeline displays: `Home` / `Author(pubkey)`), NIP helpers (`nip10`
   `ReplyTagsBuilder`, `nip27`, `nip38` `MusicStatus`), and `timeline_filter`
   (pure functions that build subscription filters).
 - `domain::collections` — `EventSet`.
 - `domain::text` — `wrap_text`, `truncate_text`, `shorten_npub`.
 
-**Invariant:** `domain` is free of UI/model concepts. For example,
-`domain::nostr::timeline_filter` is deliberately agnostic of "tab" notions and
-takes concrete inputs (pubkeys, timestamps); the caller maps a tab to a filter.
-This keeps the filter rules pure and unit-testable.
+**Invariant:** `domain` is free of UI concepts. `FeedKind` captures *which feed*
+(a domain concept), but the layer knows nothing of "tabs" (a UI notion):
+`domain::nostr::timeline_filter` stays parametric and takes concrete inputs
+(pubkeys, timestamps); the infrastructure adapter maps a `FeedKind` to the
+appropriate filter. This keeps the filter rules pure and unit-testable.
 
 ### `model` — component state
 
 The TEA "Model" broken into components, each with its own message type and a
 side-effect-free `update`. Key modules/types:
 
-- `model::timeline` — `Timeline` and its `TimelineTab`, plus the value object
-  `TimelineTabType` (`Home` / `UserTimeline { pubkey }`) and child components
-  `selection`, `pagination`, `text_note`.
+- `model::timeline` — `Timeline` and its `TimelineTab` (the UI surface that
+  displays a `domain::nostr::FeedKind`), plus child components `selection`,
+  `pagination`, `text_note`.
 - `model::editor`, `model::status_bar`, `model::fps`.
 - `model::nostr` — connection state; owns the command sender to the gateway.
 - `model::nostr_gateway` — the **Nostr gateway contract** (see below).
@@ -207,9 +209,10 @@ flowchart LR
     infra -->|implements: consumes NostrCommand, emits Message| gw
 ```
 
-It lives in `model` rather than `domain` because it references
-`TimelineTabType`, a model/UI concept the domain layer is intentionally kept
-free of.
+It lives in `model` rather than `domain` because it carries the `tokio` command
+channel (`Message::Ready { sender }`) and relay-lifecycle commands (`AddRelay`,
+`Shutdown`) — async-runtime and I/O concerns the domain layer is kept free of.
+Its feed identity comes from `domain::nostr::FeedKind`, a downward dependency.
 
 ### Outcome reporting (model → application)
 
