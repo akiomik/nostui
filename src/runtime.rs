@@ -310,7 +310,6 @@ impl<'a> TearsApp<'a> {
             TimelineMsg::Deselect => self.state.deselect_note(),
             TimelineMsg::SelectFirst => self.state.select_first_note(),
             TimelineMsg::SelectLast => self.state.select_last_note(),
-            TimelineMsg::LoadMore => self.state.load_more_timeline(),
             TimelineMsg::ReactToSelected => self.state.react_to_selected(),
             TimelineMsg::RepostSelected => self.state.repost_selected(),
             TimelineMsg::SelectTab(index) => self.state.select_tab(index),

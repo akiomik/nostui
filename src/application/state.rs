@@ -15,7 +15,9 @@ use crate::{
         nostr_gateway::{CommandError, NostrCommand},
         status_bar::{Message, StatusBar},
         timeline::{
-            tab::TimelineTabType, text_note::TextNote, Message as TimelineMessage, Timeline,
+            tab::{TimelineOutcome, TimelineTabType},
+            text_note::TextNote,
+            Message as TimelineMessage, Timeline,
         },
     },
 };
@@ -98,7 +100,7 @@ impl<'a> AppState<'a> {
             Kind::TextNote => {
                 let current_loading_more_state = self.timeline.is_loading_more_for_tab(tab_type);
 
-                let command = self.timeline.update(TimelineMessage::NoteAddedToTab {
+                let _ = self.timeline.update(TimelineMessage::NoteAddedToTab {
                     event,
                     tab_type: tab_type.clone(),
                 });
@@ -114,7 +116,7 @@ impl<'a> AppState<'a> {
                     });
                 }
 
-                command
+                Command::none()
             }
             Kind::Metadata => {
                 // Metadata is shared across all tabs
@@ -124,13 +126,22 @@ impl<'a> AppState<'a> {
                 }
                 Command::none()
             }
-            Kind::Repost => self.timeline.update(TimelineMessage::RepostAdded { event }),
-            Kind::Reaction => self
-                .timeline
-                .update(TimelineMessage::ReactionAdded { event }),
-            Kind::ZapReceipt => self
-                .timeline
-                .update(TimelineMessage::ZapReceiptAdded { event }),
+            Kind::Repost => {
+                let _ = self.timeline.update(TimelineMessage::RepostAdded { event });
+                Command::none()
+            }
+            Kind::Reaction => {
+                let _ = self
+                    .timeline
+                    .update(TimelineMessage::ReactionAdded { event });
+                Command::none()
+            }
+            Kind::ZapReceipt => {
+                let _ = self
+                    .timeline
+                    .update(TimelineMessage::ZapReceiptAdded { event });
+                Command::none()
+            }
             _ => Command::none(),
         }
     }
@@ -422,57 +433,69 @@ impl<'a> AppState<'a> {
 
     /// Move the selection to the previous timeline item.
     pub fn scroll_up(&mut self) -> Command<AppMsg> {
-        self.timeline.update(TimelineMessage::PreviousItemSelected)
+        let _ = self.timeline.update(TimelineMessage::PreviousItemSelected);
+        Command::none()
     }
 
     /// Move the selection to the next timeline item.
+    ///
+    /// When the selection is already at the bottom, the timeline reports
+    /// `LoadMoreRequested` and the application loads older events.
     pub fn scroll_down(&mut self) -> Command<AppMsg> {
-        self.timeline.update(TimelineMessage::NextItemSelected)
+        match self.timeline.update(TimelineMessage::NextItemSelected) {
+            TimelineOutcome::LoadMoreRequested => self.load_more_timeline(),
+            TimelineOutcome::None => Command::none(),
+        }
     }
 
     /// Select the timeline item at `index`.
     pub fn select_note(&mut self, index: usize) -> Command<AppMsg> {
-        self.timeline
-            .update(TimelineMessage::ItemSelected { index })
+        let _ = self
+            .timeline
+            .update(TimelineMessage::ItemSelected { index });
+        Command::none()
     }
 
     /// Clear the current timeline selection.
     pub fn deselect_note(&mut self) -> Command<AppMsg> {
-        self.timeline.update(TimelineMessage::ItemSelectionCleared)
+        let _ = self.timeline.update(TimelineMessage::ItemSelectionCleared);
+        Command::none()
     }
 
     /// Select the first timeline item.
     pub fn select_first_note(&mut self) -> Command<AppMsg> {
-        self.timeline.update(TimelineMessage::FirstItemSelected)
+        let _ = self.timeline.update(TimelineMessage::FirstItemSelected);
+        Command::none()
     }
 
     /// Select the last timeline item.
     pub fn select_last_note(&mut self) -> Command<AppMsg> {
-        self.timeline.update(TimelineMessage::LastItemSelected)
+        let _ = self.timeline.update(TimelineMessage::LastItemSelected);
+        Command::none()
     }
 
     /// Switch to the tab at `index`.
     pub fn select_tab(&mut self, index: usize) -> Command<AppMsg> {
-        let command = self.timeline.update(TimelineMessage::TabSelected { index });
+        let _ = self.timeline.update(TimelineMessage::TabSelected { index });
         log::debug!("Selected tab index: {}", self.timeline.active_tab_index());
-        command
+        Command::none()
     }
 
     /// Switch to the next tab (wraps around).
     pub fn next_tab(&mut self) -> Command<AppMsg> {
-        let command = self.timeline.update(TimelineMessage::NextTabSelected);
+        let _ = self.timeline.update(TimelineMessage::NextTabSelected);
         log::debug!("Switched to next tab: {}", self.timeline.active_tab_index());
-        command
+        Command::none()
     }
 
     /// Switch to the previous tab (wraps around).
     pub fn prev_tab(&mut self) -> Command<AppMsg> {
-        let command = self.timeline.update(TimelineMessage::PreviousTabSelected);
+        let _ = self.timeline.update(TimelineMessage::PreviousTabSelected);
         log::debug!(
             "Switched to previous tab: {}",
             self.timeline.active_tab_index()
         );
-        command
+        Command::none()
     }
 
     /// Start composing a new note.

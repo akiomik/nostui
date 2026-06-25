@@ -6,13 +6,11 @@ pub mod text_note;
 use std::collections::HashMap;
 
 use nostr_sdk::prelude::*;
-use tears::Command;
 
 use crate::{
-    application::message::AppMsg,
     domain::nostr::{find_event_id_from_last_e_tag, SortableEventId},
     model::timeline::{
-        tab::{Message as TabMessage, TimelineTab, TimelineTabType},
+        tab::{Message as TabMessage, TimelineOutcome, TimelineTab, TimelineTabType},
         text_note::{Message as TextNoteMessage, TextNote},
     },
 };
@@ -162,7 +160,7 @@ impl Timeline {
         tab.is_at_bottom()
     }
 
-    pub fn update(&mut self, message: Message) -> Command<AppMsg> {
+    pub fn update(&mut self, message: Message) -> TimelineOutcome {
         match message {
             Message::NoteAddedToTab { event, tab_type } => {
                 // Find the tab index for the specified tab type
@@ -171,7 +169,7 @@ impl Timeline {
                     None => {
                         // Tab not found - cannot add note
                         log::warn!("Cannot add note: tab {tab_type:?} not found");
-                        return Command::none();
+                        return TimelineOutcome::None;
                     }
                 };
 
@@ -226,7 +224,7 @@ impl Timeline {
                 // Check if a tab with the same type already exists
                 if self.find_tab_by_type(&tab_type).is_some() {
                     log::warn!("Tab with this type already exists");
-                    return Command::none();
+                    return TimelineOutcome::None;
                 }
 
                 // Create and add the new tab
@@ -240,13 +238,13 @@ impl Timeline {
                 // Validate index
                 if index >= self.tabs.len() {
                     log::warn!("Tab index out of bounds");
-                    return Command::none();
+                    return TimelineOutcome::None;
                 }
 
                 // Cannot remove the Home tab
                 if matches!(self.tabs[index].tab_type(), TimelineTabType::Home) {
                     log::warn!("Cannot remove the Home tab");
-                    return Command::none();
+                    return TimelineOutcome::None;
                 }
 
                 // Remove the tab
@@ -282,7 +280,7 @@ impl Timeline {
             }
         }
 
-        Command::none()
+        TimelineOutcome::None
     }
 }
 
