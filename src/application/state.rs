@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 use crate::{
     application::config::Config,
     application::message::AppMsg,
-    domain::nostr::{nip10::ReplyTagsBuilder, nip38::MusicStatus, Profile},
+    domain::nostr::{nip10::ReplyTagsBuilder, nip38::MusicStatus, FeedKind, Profile},
     model::{
         editor::{Editor, Message as EditorMessage},
         fps::{Fps, Message as FpsMessage},
@@ -15,9 +15,7 @@ use crate::{
         nostr_gateway::{CommandError, NostrCommand},
         status_bar::{Message, StatusBar},
         timeline::{
-            tab::{TimelineOutcome, TimelineTabType},
-            text_note::TextNote,
-            Message as TimelineMessage, Timeline,
+            tab::TimelineOutcome, text_note::TextNote, Message as TimelineMessage, Timeline,
         },
     },
 };
@@ -91,21 +89,21 @@ impl<'a> AppState<'a> {
     pub fn process_nostr_event_for_tab(
         &mut self,
         event: Event,
-        tab_type: &TimelineTabType,
+        feed: &FeedKind,
     ) -> Command<AppMsg> {
         // Receiving any event means startup has produced its first results.
         self.startup.mark_completed();
 
         match event.kind {
             Kind::TextNote => {
-                let current_loading_more_state = self.timeline.is_loading_more_for_tab(tab_type);
+                let current_loading_more_state = self.timeline.is_loading_more_for_feed(feed);
 
                 let _ = self.timeline.update(TimelineMessage::NoteAddedToTab {
                     event,
-                    tab_type: tab_type.clone(),
+                    feed: feed.clone(),
                 });
 
-                let new_loading_more_state = self.timeline.is_loading_more_for_tab(tab_type);
+                let new_loading_more_state = self.timeline.is_loading_more_for_feed(feed);
 
                 if current_loading_more_state == Some(true) && new_loading_more_state == Some(false)
                 {
@@ -153,26 +151,26 @@ impl<'a> AppState<'a> {
     /// message is shown (or an error message if the tab could not be created).
     pub fn open_author_timeline(&mut self, author_pubkey: PublicKey) -> Command<AppMsg> {
         let Ok(author_npub) = author_pubkey.to_bech32();
-        let tab_type = TimelineTabType::UserTimeline {
+        let feed = FeedKind::UserTimeline {
             pubkey: author_pubkey,
         };
 
         // Tab already open: just switch to it.
-        if let Some(index) = self.timeline.find_tab_by_type(&tab_type) {
+        if let Some(index) = self.timeline.find_tab_by_feed(&feed) {
             let _ = self.timeline.update(TimelineMessage::TabSelected { index });
             return Command::none();
         }
 
         // Otherwise create it, then subscribe and show the loading status.
-        let _ = self.timeline.update(TimelineMessage::TabAdded {
-            tab_type: tab_type.clone(),
-        });
+        let _ = self
+            .timeline
+            .update(TimelineMessage::TabAdded { feed: feed.clone() });
 
-        if self.timeline.find_tab_by_type(&tab_type).is_some() {
+        if self.timeline.find_tab_by_feed(&feed).is_some() {
             log::info!("Created new author timeline for {author_npub}");
 
             self.nostr
-                .update(NostrMessage::SubscriptionRequested { tab_type });
+                .update(NostrMessage::SubscriptionRequested { feed });
 
             self.status_bar.update(Message::MessageChanged {
                 label: author_npub,
@@ -197,16 +195,15 @@ impl<'a> AppState<'a> {
     pub fn close_current_tab(&mut self) -> Command<AppMsg> {
         let current_index = self.timeline.active_tab_index();
 
-        // Capture the tab type before removing the tab.
-        let tab_type = self.timeline.active_tab().tab_type().clone();
+        // Capture the feed before removing the tab.
+        let feed = self.timeline.active_tab().feed().clone();
 
         let _ = self.timeline.update(TimelineMessage::TabRemoved {
             index: current_index,
         });
 
         // Unsubscribe the subscriptions associated with the closed tab.
-        self.nostr
-            .update(NostrMessage::SubscriptionClosed { tab_type });
+        self.nostr.update(NostrMessage::SubscriptionClosed { feed });
 
         Command::none()
     }
@@ -362,7 +359,7 @@ impl<'a> AppState<'a> {
             });
         }
 
-        let Some(tab_type) = self
+        let Some(feed) = self
             .nostr
             .find_tab_by_subscription(subscription_id)
             .cloned()
@@ -371,12 +368,12 @@ impl<'a> AppState<'a> {
         };
 
         log::debug!(
-            "Routing event {} (kind: {:?}) to tab {tab_type:?}",
+            "Routing event {} (kind: {:?}) to tab {feed:?}",
             event.id,
             event.kind
         );
 
-        self.process_nostr_event_for_tab(event, &tab_type)
+        self.process_nostr_event_for_tab(event, &feed)
     }
 
     /// Request older events for the active tab, paginating before its oldest
@@ -389,11 +386,11 @@ impl<'a> AppState<'a> {
             return Command::none();
         };
 
-        let tab_type = self.timeline.active_tab().tab_type().clone();
+        let feed = self.timeline.active_tab().feed().clone();
         let tab_title = self.active_tab_title();
 
         self.nostr
-            .update(NostrMessage::HistoryRequested { tab_type, since });
+            .update(NostrMessage::HistoryRequested { feed, since });
 
         self.status_bar.update(Message::MessageChanged {
             label: tab_title,
@@ -526,12 +523,12 @@ impl<'a> AppState<'a> {
     /// Track a subscription that the relay layer created for a tab.
     pub fn track_subscription_created(
         &mut self,
-        tab_type: TimelineTabType,
+        feed: FeedKind,
         subscription_id: SubscriptionId,
     ) -> Command<AppMsg> {
-        log::info!("Subscription created for {tab_type:?}: {subscription_id:?}");
+        log::info!("Subscription created for {feed:?}: {subscription_id:?}");
         self.nostr.update(NostrMessage::SubscriptionCreated {
-            tab_type,
+            feed,
             sub_id: subscription_id,
         });
         Command::none()
@@ -620,11 +617,11 @@ mod tests {
         // Add a user timeline tab first (before adding any events)
         let author_keys = Keys::generate();
         let author_pubkey = author_keys.public_key();
-        let user_tab = TimelineTabType::UserTimeline {
+        let user_tab = FeedKind::UserTimeline {
             pubkey: author_pubkey,
         };
         let _ = state.timeline.update(TimelineMessage::TabAdded {
-            tab_type: user_tab.clone(),
+            feed: user_tab.clone(),
         });
 
         // Add event only to user timeline tab (this also stops loading)
@@ -653,7 +650,7 @@ mod tests {
         let mut state = AppState::new(Keys::generate().public_key());
 
         let event = create_text_note(&Keys::generate(), "hello", Timestamp::from(1000))?;
-        let command = state.process_nostr_event_for_tab(event, &TimelineTabType::Home);
+        let command = state.process_nostr_event_for_tab(event, &FeedKind::Home);
 
         // The command returned by the timeline update is propagated to the caller
         // rather than discarded. Adding a note currently issues no follow-up command.
@@ -679,27 +676,23 @@ mod tests {
         // Insert an initial note so oldest_timestamp exists.
         let keys = Keys::generate();
         let event1 = create_text_note(&keys, "newer", Timestamp::from(1000))?;
-        let _ = state.process_nostr_event_for_tab(event1, &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(event1, &FeedKind::Home);
 
         // Start loading more. (loading_more_since = oldest_timestamp = 1000)
         let _ = state.timeline.update(TimelineMessage::LastItemSelected);
         let _ = state.timeline.update(TimelineMessage::NextItemSelected);
         assert_eq!(
-            state
-                .timeline
-                .is_loading_more_for_tab(&TimelineTabType::Home),
+            state.timeline.is_loading_more_for_feed(&FeedKind::Home),
             Some(true)
         );
 
         // An older event completes the LoadMore operation.
         let event2 = create_text_note(&keys, "older", Timestamp::from(500))?;
-        let _ = state.process_nostr_event_for_tab(event2, &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(event2, &FeedKind::Home);
 
         assert_eq!(state.status_bar.message(), Some("[Home] loaded more"));
         assert_eq!(
-            state
-                .timeline
-                .is_loading_more_for_tab(&TimelineTabType::Home),
+            state.timeline.is_loading_more_for_feed(&FeedKind::Home),
             Some(false)
         );
 
@@ -718,11 +711,11 @@ mod tests {
         let author_keys = Keys::generate();
         let author_pubkey = author_keys.public_key();
         let Ok(author_npub) = author_pubkey.to_bech32();
-        let user_tab = TimelineTabType::UserTimeline {
+        let user_tab = FeedKind::UserTimeline {
             pubkey: author_pubkey,
         };
         let _ = state.timeline.update(TimelineMessage::TabAdded {
-            tab_type: user_tab.clone(),
+            feed: user_tab.clone(),
         });
 
         // Insert an initial note so oldest_timestamp exists.
@@ -732,7 +725,7 @@ mod tests {
         let _ = state.timeline.update(TimelineMessage::LastItemSelected);
         let _ = state.timeline.update(TimelineMessage::NextItemSelected);
         assert_eq!(
-            state.timeline.is_loading_more_for_tab(&user_tab),
+            state.timeline.is_loading_more_for_feed(&user_tab),
             Some(true)
         );
 
@@ -745,7 +738,7 @@ mod tests {
             Some(format!("[{}] loaded more", shorten_npub(author_npub)).as_ref())
         );
         assert_eq!(
-            state.timeline.is_loading_more_for_tab(&user_tab),
+            state.timeline.is_loading_more_for_feed(&user_tab),
             Some(false)
         );
 
@@ -765,7 +758,7 @@ mod tests {
             .custom_created_at(Timestamp::from(1000))
             .sign_with_keys(&author_keys)?;
 
-        let _ = state.process_nostr_event_for_tab(metadata_event, &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(metadata_event, &FeedKind::Home);
 
         let stored = state
             .user
@@ -792,7 +785,7 @@ mod tests {
             .custom_created_at(Timestamp::from(1000))
             .sign_with_keys(&author_keys)?;
 
-        let _ = state.process_nostr_event_for_tab(invalid_metadata_event, &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(invalid_metadata_event, &FeedKind::Home);
 
         assert_eq!(state.user.get_profile(&author_pubkey), None);
         assert_eq!(state.user.profile_count(), 0);
@@ -804,14 +797,14 @@ mod tests {
     fn test_open_author_timeline_switches_to_existing_tab() {
         let mut state = AppState::new(Keys::generate().public_key());
         let author_pubkey = Keys::generate().public_key();
-        let tab_type = TimelineTabType::UserTimeline {
+        let feed = FeedKind::UserTimeline {
             pubkey: author_pubkey,
         };
 
         // Pre-create the author tab, then move focus back to Home.
-        let _ = state.timeline.update(TimelineMessage::TabAdded {
-            tab_type: tab_type.clone(),
-        });
+        let _ = state
+            .timeline
+            .update(TimelineMessage::TabAdded { feed: feed.clone() });
         let _ = state
             .timeline
             .update(TimelineMessage::TabSelected { index: 0 });
@@ -821,7 +814,7 @@ mod tests {
 
         // Switches to the existing tab instead of creating a duplicate.
         assert_eq!(state.timeline.tabs().len(), 2);
-        assert_eq!(state.timeline.active_tab().tab_type(), &tab_type);
+        assert_eq!(state.timeline.active_tab().feed(), &feed);
     }
 
     #[test]
@@ -829,7 +822,7 @@ mod tests {
         let mut state = AppState::new(Keys::generate().public_key());
         let author_pubkey = Keys::generate().public_key();
         let Ok(author_npub) = author_pubkey.to_bech32();
-        let tab_type = TimelineTabType::UserTimeline {
+        let feed = FeedKind::UserTimeline {
             pubkey: author_pubkey,
         };
 
@@ -837,7 +830,7 @@ mod tests {
 
         // A new author tab is created, focused, and a loading status is shown.
         assert_eq!(state.timeline.tabs().len(), 2);
-        assert_eq!(state.timeline.active_tab().tab_type(), &tab_type);
+        assert_eq!(state.timeline.active_tab().feed(), &feed);
         assert_eq!(
             state.status_bar.message(),
             Some(format!("[{author_npub}] loading...").as_str())
@@ -848,40 +841,29 @@ mod tests {
     fn test_close_current_tab_removes_active_tab() {
         let mut state = AppState::new(Keys::generate().public_key());
         let author_pubkey = Keys::generate().public_key();
-        let tab_type = TimelineTabType::UserTimeline {
+        let feed = FeedKind::UserTimeline {
             pubkey: author_pubkey,
         };
-        let _ = state
-            .timeline
-            .update(TimelineMessage::TabAdded { tab_type });
+        let _ = state.timeline.update(TimelineMessage::TabAdded { feed });
         assert_eq!(state.timeline.active_tab_index(), 1);
 
         let _ = state.close_current_tab();
 
         // The active author tab is removed and focus falls back to Home.
         assert_eq!(state.timeline.tabs().len(), 1);
-        assert_eq!(
-            state.timeline.active_tab().tab_type(),
-            &TimelineTabType::Home
-        );
+        assert_eq!(state.timeline.active_tab().feed(), &FeedKind::Home);
     }
 
     #[test]
     fn test_close_current_tab_keeps_home_tab() {
         let mut state = AppState::new(Keys::generate().public_key());
-        assert_eq!(
-            state.timeline.active_tab().tab_type(),
-            &TimelineTabType::Home
-        );
+        assert_eq!(state.timeline.active_tab().feed(), &FeedKind::Home);
 
         let _ = state.close_current_tab();
 
         // Home cannot be closed, so the timeline is unchanged.
         assert_eq!(state.timeline.tabs().len(), 1);
-        assert_eq!(
-            state.timeline.active_tab().tab_type(),
-            &TimelineTabType::Home
-        );
+        assert_eq!(state.timeline.active_tab().feed(), &FeedKind::Home);
     }
 
     #[test]
@@ -901,7 +883,7 @@ mod tests {
 
         let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
         let Ok(note1) = event.id.to_bech32();
-        let _ = state.process_nostr_event_for_tab(event, &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
         let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
 
         let _ = state.react_to_selected();
@@ -921,7 +903,7 @@ mod tests {
 
         let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
         let Ok(note1) = event.id.to_bech32();
-        let _ = state.process_nostr_event_for_tab(event, &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
         let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
 
         let _ = state.repost_selected();
@@ -950,7 +932,7 @@ mod tests {
         let mut state = AppState::new(keys.public_key());
 
         let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
-        let _ = state.process_nostr_event_for_tab(event.clone(), &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(event.clone(), &FeedKind::Home);
         let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
 
         let _ = state.start_reply();
@@ -989,7 +971,7 @@ mod tests {
 
         // Select a note and start replying to it.
         let event = create_text_note(&keys, "original", Timestamp::from(1000))?;
-        let _ = state.process_nostr_event_for_tab(event, &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
         let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
         let _ = state.start_reply();
 
@@ -1044,7 +1026,7 @@ mod tests {
         // Associate a subscription with the Home tab.
         let sub_id = SubscriptionId::new("home_sub");
         state.nostr.update(NostrMessage::SubscriptionCreated {
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
             sub_id: sub_id.clone(),
         });
 
@@ -1075,7 +1057,7 @@ mod tests {
         let mut state = AppState::new(keys.public_key());
 
         let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
-        let _ = state.process_nostr_event_for_tab(event, &TimelineTabType::Home);
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
 
         let _ = state.load_more_timeline();
 

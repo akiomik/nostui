@@ -7,7 +7,7 @@
 //! - `Message`: messages emitted by the subscription back to the application
 //!
 //! These types live in `model` (not `domain`) because they reference
-//! `TimelineTabType`, a UI/model concept that the domain layer is intentionally
+//! `FeedKind`, a UI/model concept that the domain layer is intentionally
 //! kept free of. The adapter in `infrastructure` depends inward on this
 //! contract, inverting what used to be an `application`/`model` -> `infrastructure`
 //! dependency.
@@ -15,7 +15,7 @@
 use nostr_sdk::prelude::*;
 use tokio::sync::mpsc;
 
-use crate::model::timeline::tab::TimelineTabType;
+use crate::domain::nostr::FeedKind;
 
 /// Commands that can be sent to the Nostr subscription
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,12 +27,9 @@ pub enum NostrCommand {
     /// Remove a relay
     RemoveRelay { url: String },
     /// Load more timeline events before the specified timestamp for a specific tab
-    LoadMoreTimeline {
-        tab_type: TimelineTabType,
-        since: Timestamp,
-    },
+    LoadMoreTimeline { feed: FeedKind, since: Timestamp },
     /// Subscribe to a specific timeline tab
-    SubscribeTimeline { tab_type: TimelineTabType },
+    SubscribeTimeline { feed: FeedKind },
     /// Unsubscribe from multiple subscriptions
     Unsubscribe {
         subscription_ids: Vec<nostr_sdk::SubscriptionId>,
@@ -67,7 +64,7 @@ pub enum Message {
     Error { error: CommandError },
     /// A subscription was created for a specific tab
     SubscriptionCreated {
-        tab_type: TimelineTabType,
+        feed: FeedKind,
         subscription_id: nostr_sdk::SubscriptionId,
     },
 }

@@ -8,44 +8,27 @@ use std::collections::HashMap;
 use nostr_sdk::prelude::*;
 
 use crate::{
-    domain::nostr::{find_event_id_from_last_e_tag, SortableEventId},
+    domain::nostr::{find_event_id_from_last_e_tag, FeedKind, SortableEventId},
     model::timeline::{
-        tab::{Message as TabMessage, TimelineOutcome, TimelineTab, TimelineTabType},
+        tab::{Message as TabMessage, TimelineOutcome, TimelineTab},
         text_note::{Message as TextNoteMessage, TextNote},
     },
 };
 
 pub enum Message {
-    NoteAddedToTab {
-        event: Event,
-        tab_type: TimelineTabType,
-    },
-    ReactionAdded {
-        event: Event,
-    },
-    RepostAdded {
-        event: Event,
-    },
-    ZapReceiptAdded {
-        event: Event,
-    },
+    NoteAddedToTab { event: Event, feed: FeedKind },
+    ReactionAdded { event: Event },
+    RepostAdded { event: Event },
+    ZapReceiptAdded { event: Event },
     PreviousItemSelected,
     NextItemSelected,
     FirstItemSelected,
     LastItemSelected,
-    ItemSelected {
-        index: usize,
-    },
+    ItemSelected { index: usize },
     ItemSelectionCleared,
-    TabAdded {
-        tab_type: TimelineTabType,
-    },
-    TabRemoved {
-        index: usize,
-    },
-    TabSelected {
-        index: usize,
-    },
+    TabAdded { feed: FeedKind },
+    TabRemoved { index: usize },
+    TabSelected { index: usize },
     NextTabSelected,
     PreviousTabSelected,
 }
@@ -107,10 +90,10 @@ impl Timeline {
             .expect("BUG: active_tab_index is out of bounds")
     }
 
-    /// Find a tab by its type
+    /// Find a tab by its feed
     /// Returns the index of the tab if found, or None if not found
-    pub fn find_tab_by_type(&self, tab_type: &TimelineTabType) -> Option<usize> {
-        self.tabs.iter().position(|tab| tab.tab_type() == tab_type)
+    pub fn find_tab_by_feed(&self, feed: &FeedKind) -> Option<usize> {
+        self.tabs.iter().position(|tab| tab.feed() == feed)
     }
 
     /// Get the length of the active timeline
@@ -144,8 +127,8 @@ impl Timeline {
     }
 
     /// Check if currently loading more events
-    pub fn is_loading_more_for_tab(&self, tab_type: &TimelineTabType) -> Option<bool> {
-        self.find_tab_by_type(tab_type)
+    pub fn is_loading_more_for_feed(&self, feed: &FeedKind) -> Option<bool> {
+        self.find_tab_by_feed(feed)
             .map(|index| self.tabs[index].is_loading_more())
     }
 
@@ -162,13 +145,13 @@ impl Timeline {
 
     pub fn update(&mut self, message: Message) -> TimelineOutcome {
         match message {
-            Message::NoteAddedToTab { event, tab_type } => {
-                // Find the tab index for the specified tab type
-                let tab_index = match self.find_tab_by_type(&tab_type) {
+            Message::NoteAddedToTab { event, feed } => {
+                // Find the tab index for the specified feed
+                let tab_index = match self.find_tab_by_feed(&feed) {
                     Some(index) => index,
                     None => {
                         // Tab not found - cannot add note
-                        log::warn!("Cannot add note: tab {tab_type:?} not found");
+                        log::warn!("Cannot add note: tab {feed:?} not found");
                         return TimelineOutcome::None;
                     }
                 };
@@ -220,15 +203,15 @@ impl Timeline {
                 let tab = self.active_tab_mut();
                 return tab.update(TabMessage::SelectionCleared);
             }
-            Message::TabAdded { tab_type } => {
-                // Check if a tab with the same type already exists
-                if self.find_tab_by_type(&tab_type).is_some() {
+            Message::TabAdded { feed } => {
+                // Check if a tab for the same feed already exists
+                if self.find_tab_by_feed(&feed).is_some() {
                     log::warn!("Tab with this type already exists");
                     return TimelineOutcome::None;
                 }
 
                 // Create and add the new tab
-                let new_tab = TimelineTab::new(tab_type);
+                let new_tab = TimelineTab::new(feed);
                 self.tabs.push(new_tab);
 
                 // Switch to the new tab
@@ -242,7 +225,7 @@ impl Timeline {
                 }
 
                 // Cannot remove the Home tab
-                if matches!(self.tabs[index].tab_type(), TimelineTabType::Home) {
+                if matches!(self.tabs[index].feed(), FeedKind::Home) {
                     log::warn!("Cannot remove the Home tab");
                     return TimelineOutcome::None;
                 }
@@ -356,31 +339,31 @@ mod tests {
         let timeline = Timeline::default();
         let active_tab = timeline.active_tab();
 
-        assert_eq!(active_tab.tab_type(), &TimelineTabType::Home);
+        assert_eq!(active_tab.feed(), &FeedKind::Home);
         assert_eq!(active_tab.len(), 0);
     }
 
     #[test]
-    fn test_find_tab_by_type() {
+    fn test_find_tab_by_feed() {
         let mut timeline = Timeline::default();
 
         // Home tab should be at index 0
-        assert_eq!(timeline.find_tab_by_type(&TimelineTabType::Home), Some(0));
+        assert_eq!(timeline.find_tab_by_feed(&FeedKind::Home), Some(0));
 
         // Non-existent tab should return None
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         assert_eq!(
-            timeline.find_tab_by_type(&TimelineTabType::UserTimeline { pubkey }),
+            timeline.find_tab_by_feed(&FeedKind::UserTimeline { pubkey }),
             None
         );
 
         // Add a user timeline tab
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         assert_eq!(
-            timeline.find_tab_by_type(&TimelineTabType::UserTimeline { pubkey }),
+            timeline.find_tab_by_feed(&FeedKind::UserTimeline { pubkey }),
             Some(1)
         );
     }
@@ -393,7 +376,7 @@ mod tests {
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event,
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         assert_eq!(timeline.len(), 1);
@@ -410,7 +393,7 @@ mod tests {
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::NoteAddedToTab {
             event,
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // Note should not be added
@@ -425,12 +408,12 @@ mod tests {
 
         // Add a note only to a non-active tab
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
         let event = create_test_event(1000, 1, "Note");
         let _ = timeline.update(Message::NoteAddedToTab {
             event,
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // The active tab (UserTimeline) has the note
@@ -451,7 +434,7 @@ mod tests {
         // Add a user timeline tab
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // Add the same event to both tabs
@@ -460,12 +443,12 @@ mod tests {
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event: event.clone(),
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event,
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // Event should be stored only once in centralized storage
@@ -488,17 +471,17 @@ mod tests {
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event: event2,
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event: event1,
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event: event3,
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         assert_eq!(timeline.len(), 3);
@@ -515,7 +498,7 @@ mod tests {
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event: text_event.clone(),
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         // Add a reaction to the text note
@@ -558,7 +541,7 @@ mod tests {
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event: text_event.clone(),
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         // Add a repost
@@ -585,7 +568,7 @@ mod tests {
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event: text_event,
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         // Add a zap receipt
@@ -609,7 +592,7 @@ mod tests {
             let event = create_test_event(1000 + i, i as u8, &format!("Note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
-                tab_type: TimelineTabType::Home,
+                feed: FeedKind::Home,
             });
         }
 
@@ -631,7 +614,7 @@ mod tests {
             let event = create_test_event(1000 + i, i as u8, &format!("Note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
-                tab_type: TimelineTabType::Home,
+                feed: FeedKind::Home,
             });
         }
 
@@ -661,7 +644,7 @@ mod tests {
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event,
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         let _ = timeline.update(Message::ItemSelected { index: 0 });
@@ -683,7 +666,7 @@ mod tests {
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event,
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         let note = timeline.note_by_index(0);
@@ -703,7 +686,7 @@ mod tests {
             let event = create_test_event(1000 + i, i as u8, &format!("Note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
-                tab_type: TimelineTabType::Home,
+                feed: FeedKind::Home,
             });
         }
 
@@ -715,7 +698,7 @@ mod tests {
         let _ = timeline.update(Message::NextItemSelected);
 
         // Verify loading state
-        let is_loading = timeline.is_loading_more_for_tab(&TimelineTabType::Home);
+        let is_loading = timeline.is_loading_more_for_feed(&FeedKind::Home);
         assert_eq!(is_loading, Some(true));
     }
 
@@ -727,14 +710,14 @@ mod tests {
         let event1 = create_test_event(2000, 1, "Recent note");
         let _ = timeline.update(Message::NoteAddedToTab {
             event: event1,
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         // Select the last item and scroll down to trigger loading more
         let _ = timeline.update(Message::LastItemSelected);
         let _ = timeline.update(Message::NextItemSelected);
         assert_eq!(
-            timeline.is_loading_more_for_tab(&TimelineTabType::Home),
+            timeline.is_loading_more_for_feed(&FeedKind::Home),
             Some(true)
         );
 
@@ -742,12 +725,12 @@ mod tests {
         let event2 = create_test_event(1000, 2, "Older note");
         let _ = timeline.update(Message::NoteAddedToTab {
             event: event2,
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         // Loading should complete automatically
         assert_eq!(
-            timeline.is_loading_more_for_tab(&TimelineTabType::Home),
+            timeline.is_loading_more_for_feed(&FeedKind::Home),
             Some(false)
         );
     }
@@ -764,7 +747,7 @@ mod tests {
             let event = create_test_event(1000 + i, i as u8, &format!("Note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
-                tab_type: TimelineTabType::Home,
+                feed: FeedKind::Home,
             });
         }
 
@@ -784,14 +767,14 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         assert_eq!(timeline.tabs().len(), 2);
         assert_eq!(timeline.active_tab_index(), 1); // Should switch to new tab
         assert_eq!(
-            timeline.active_tab().tab_type(),
-            &TimelineTabType::UserTimeline { pubkey }
+            timeline.active_tab().feed(),
+            &FeedKind::UserTimeline { pubkey }
         );
     }
 
@@ -801,12 +784,12 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // Try to add the same tab again
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // Should still have only 2 tabs (Home + UserTimeline)
@@ -819,7 +802,7 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         assert_eq!(timeline.tabs().len(), 2);
@@ -841,7 +824,7 @@ mod tests {
 
         // Home tab should still exist
         assert_eq!(timeline.tabs().len(), 1);
-        assert_eq!(timeline.active_tab().tab_type(), &TimelineTabType::Home);
+        assert_eq!(timeline.active_tab().feed(), &FeedKind::Home);
     }
 
     #[test]
@@ -863,10 +846,10 @@ mod tests {
         let pubkey2 = PublicKey::from_slice(&[2u8; 32]).expect("Valid pubkey");
 
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey: pubkey1 },
+            feed: FeedKind::UserTimeline { pubkey: pubkey1 },
         });
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey: pubkey2 },
+            feed: FeedKind::UserTimeline { pubkey: pubkey2 },
         });
 
         // Now we have: [Home, User1, User2], active = 2
@@ -887,7 +870,7 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // Active tab is now the user timeline (index 1)
@@ -907,7 +890,7 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // Switch to Home tab
@@ -935,7 +918,7 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // Start at Home (index 0)
@@ -957,7 +940,7 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // Start at user timeline (index 1)
@@ -979,7 +962,7 @@ mod tests {
         // Add a user timeline tab
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         // Add notes to Home tab
@@ -988,7 +971,7 @@ mod tests {
             let event = create_test_event(1000 + i, i as u8, &format!("Home note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
-                tab_type: TimelineTabType::Home,
+                feed: FeedKind::Home,
             });
         }
 
@@ -997,7 +980,7 @@ mod tests {
             let event = create_test_event(2000 + i, i as u8, &format!("User note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
-                tab_type: TimelineTabType::UserTimeline { pubkey },
+                feed: FeedKind::UserTimeline { pubkey },
             });
         }
 
@@ -1027,7 +1010,7 @@ mod tests {
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::TabAdded {
-            tab_type: TimelineTabType::UserTimeline { pubkey },
+            feed: FeedKind::UserTimeline { pubkey },
         });
 
         assert_eq!(timeline.last_tab_index(), 1);

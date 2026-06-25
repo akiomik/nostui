@@ -379,11 +379,9 @@ impl<'a> TearsApp<'a> {
         match msg {
             NostrSubscriptionMessage::Ready { sender } => self.state.on_connection_ready(sender),
             NostrSubscriptionMessage::SubscriptionCreated {
-                tab_type,
+                feed,
                 subscription_id,
-            } => self
-                .state
-                .track_subscription_created(tab_type, subscription_id),
+            } => self.state.track_subscription_created(feed, subscription_id),
             NostrSubscriptionMessage::Notification(notif) => match *notif {
                 // NOTE: We use `RelayPoolNotification::Message` instead of `RelayPoolNotification::Event`
                 // because:
@@ -433,9 +431,9 @@ impl<'a> TearsApp<'a> {
 mod tests {
     use super::*;
     use crate::application::config::Config;
+    use crate::domain::nostr::FeedKind;
     use crate::model::editor::Message as EditorMessage;
     use crate::model::status_bar::Message as StatusBarMessage;
-    use crate::model::timeline::tab::TimelineTabType;
     use crate::model::timeline::Message as TimelineMessage;
 
     /// Create a test app instance
@@ -466,7 +464,7 @@ mod tests {
             .expect("Failed to sign test event");
         let _ = app
             .state
-            .process_nostr_event_for_tab(event, &TimelineTabType::Home);
+            .process_nostr_event_for_tab(event, &FeedKind::Home);
 
         // Set selection and status message
         let _ = app
@@ -500,7 +498,7 @@ mod tests {
             .expect("Failed to sign test event");
         let _ = app
             .state
-            .process_nostr_event_for_tab(event, &TimelineTabType::Home);
+            .process_nostr_event_for_tab(event, &FeedKind::Home);
 
         // Set selection and status message
         let _ = app
@@ -561,10 +559,10 @@ mod tests {
             .expect("Failed to sign test event");
         let _ = app
             .state
-            .process_nostr_event_for_tab(event1, &TimelineTabType::Home);
+            .process_nostr_event_for_tab(event1, &FeedKind::Home);
         let _ = app
             .state
-            .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
+            .process_nostr_event_for_tab(event2, &FeedKind::Home);
 
         // Select somewhere in the middle
         let _ = app
@@ -593,10 +591,10 @@ mod tests {
             .expect("Failed to sign test event");
         let _ = app
             .state
-            .process_nostr_event_for_tab(event1, &TimelineTabType::Home);
+            .process_nostr_event_for_tab(event1, &FeedKind::Home);
         let _ = app
             .state
-            .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
+            .process_nostr_event_for_tab(event2, &FeedKind::Home);
 
         // Start with no selection
         let _ = app
@@ -623,7 +621,7 @@ mod tests {
             .expect("Failed to sign test event");
         let _ = app
             .state
-            .process_nostr_event_for_tab(event, &TimelineTabType::Home);
+            .process_nostr_event_for_tab(event, &FeedKind::Home);
 
         // Directly test the delegation by calling SelectFirst
         let _ = app.update(AppMsg::Timeline(TimelineMsg::SelectFirst));
@@ -646,10 +644,10 @@ mod tests {
             .expect("Failed to sign test event");
         let _ = app
             .state
-            .process_nostr_event_for_tab(event1, &TimelineTabType::Home);
+            .process_nostr_event_for_tab(event1, &FeedKind::Home);
         let _ = app
             .state
-            .process_nostr_event_for_tab(event2, &TimelineTabType::Home);
+            .process_nostr_event_for_tab(event2, &FeedKind::Home);
 
         // Directly test the delegation by calling SelectLast
         let _ = app.update(AppMsg::Timeline(TimelineMsg::SelectLast));

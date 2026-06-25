@@ -85,7 +85,8 @@ impl Default for HomeListComponent {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::timeline::{tab::TimelineTabType, Message};
+    use crate::domain::nostr::FeedKind;
+    use crate::model::timeline::Message;
 
     use super::*;
     use nostr_sdk::prelude::*;
@@ -106,7 +107,7 @@ mod tests {
         let event = EventBuilder::text_note(japanese_text).sign_with_keys(&note_keys)?;
         let _ = state.timeline.update(Message::NoteAddedToTab {
             event,
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         // Render the note

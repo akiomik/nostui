@@ -17,7 +17,7 @@ use nostr_sdk::prelude::*;
 use sorted_vec::{FindOrInsert, ReverseSortedSet};
 
 use crate::domain::{
-    nostr::{Profile, SortableEventId},
+    nostr::{FeedKind, Profile, SortableEventId},
     text::shorten_npub,
 };
 
@@ -38,15 +38,6 @@ pub enum TimelineOutcome {
     None,
     /// The selection reached the bottom; older events should be loaded.
     LoadMoreRequested,
-}
-
-/// Represents the type of timeline tab
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TimelineTabType {
-    /// Home timeline (global feed)
-    Home,
-    /// User timeline (specific author's posts)
-    UserTimeline { pubkey: PublicKey },
 }
 
 /// Messages that can be sent to update the timeline tab state
@@ -80,7 +71,7 @@ pub enum Message {
 /// Represents a single timeline tab with its own state
 #[derive(Debug, Clone)]
 pub struct TimelineTab {
-    tab_type: TimelineTabType,
+    feed: FeedKind,
     /// Sorted list of event IDs (newest first)
     /// The actual event data is stored in TimelineState::events
     notes: ReverseSortedSet<SortableEventId>,
@@ -90,9 +81,9 @@ pub struct TimelineTab {
 
 impl TimelineTab {
     /// Create a new timeline tab with the specified type
-    pub fn new(tab_type: TimelineTabType) -> Self {
+    pub fn new(feed: FeedKind) -> Self {
         Self {
-            tab_type,
+            feed,
             notes: ReverseSortedSet::new(),
             selection: Selection::new(),
             pagination: Pagination::new(),
@@ -101,17 +92,17 @@ impl TimelineTab {
 
     /// Create a new Home timeline tab
     pub fn new_home() -> Self {
-        Self::new(TimelineTabType::Home)
+        Self::new(FeedKind::Home)
     }
 
-    pub fn tab_type(&self) -> &TimelineTabType {
-        &self.tab_type
+    pub fn feed(&self) -> &FeedKind {
+        &self.feed
     }
 
     pub fn tab_title(&self, profiles: &HashMap<PublicKey, Profile>) -> String {
-        match self.tab_type {
-            TimelineTabType::Home => "Home".to_string(),
-            TimelineTabType::UserTimeline { pubkey } => profiles
+        match self.feed {
+            FeedKind::Home => "Home".to_string(),
+            FeedKind::UserTimeline { pubkey } => profiles
                 .get(&pubkey)
                 .and_then(|profile| profile.handle())
                 .unwrap_or_else(|| {
@@ -298,13 +289,13 @@ mod tests {
     }
 
     #[test]
-    fn test_timeline_tab_type() {
+    fn test_timeline_feed() {
         let home_tab = TimelineTab::new_home();
-        assert_eq!(home_tab.tab_type, TimelineTabType::Home);
+        assert_eq!(home_tab.feed, FeedKind::Home);
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        let user_tab = TimelineTab::new(TimelineTabType::UserTimeline { pubkey });
-        assert_eq!(user_tab.tab_type, TimelineTabType::UserTimeline { pubkey });
+        let user_tab = TimelineTab::new(FeedKind::UserTimeline { pubkey });
+        assert_eq!(user_tab.feed, FeedKind::UserTimeline { pubkey });
     }
 
     #[test]
@@ -653,7 +644,7 @@ mod tests {
     #[test]
     fn test_tab_title_user_timeline_with_handle() {
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        let tab = TimelineTab::new(TimelineTabType::UserTimeline { pubkey });
+        let tab = TimelineTab::new(FeedKind::UserTimeline { pubkey });
 
         let mut metadata = Metadata::new();
         metadata = metadata.name("alice");
@@ -668,7 +659,7 @@ mod tests {
     #[test]
     fn test_tab_title_user_timeline_with_empty_name() {
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        let tab = TimelineTab::new(TimelineTabType::UserTimeline { pubkey });
+        let tab = TimelineTab::new(FeedKind::UserTimeline { pubkey });
 
         let mut metadata = Metadata::new();
         metadata = metadata.name("");
@@ -685,7 +676,7 @@ mod tests {
     #[test]
     fn test_tab_title_user_timeline_without_profile() {
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
-        let tab = TimelineTab::new(TimelineTabType::UserTimeline { pubkey });
+        let tab = TimelineTab::new(FeedKind::UserTimeline { pubkey });
 
         let profiles = HashMap::new();
 

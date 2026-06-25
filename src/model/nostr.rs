@@ -2,8 +2,8 @@ use nostr_sdk::prelude::*;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
+use crate::domain::nostr::FeedKind;
 use crate::model::nostr_gateway::NostrCommand;
-use crate::model::timeline::tab::TimelineTabType;
 
 pub enum Message {
     ConnectionReady {
@@ -13,17 +13,17 @@ pub enum Message {
         event_builder: EventBuilder,
     },
     SubscriptionRequested {
-        tab_type: TimelineTabType,
+        feed: FeedKind,
     },
     SubscriptionCreated {
-        tab_type: TimelineTabType,
+        feed: FeedKind,
         sub_id: SubscriptionId,
     },
     SubscriptionClosed {
-        tab_type: TimelineTabType,
+        feed: FeedKind,
     },
     HistoryRequested {
-        tab_type: TimelineTabType,
+        feed: FeedKind,
         since: Timestamp,
     },
     ConnectionClosed,
@@ -38,7 +38,7 @@ pub struct Nostr {
     /// Track subscription IDs for each timeline tab
     /// Home tab has 3 subscriptions (backward, forward, profile)
     /// User timelines have 1 subscription
-    timeline_subscriptions: HashMap<TimelineTabType, Vec<nostr_sdk::SubscriptionId>>,
+    timeline_subscriptions: HashMap<FeedKind, Vec<nostr_sdk::SubscriptionId>>,
 }
 
 impl Nostr {
@@ -50,21 +50,18 @@ impl Nostr {
         self.command_sender.is_some()
     }
 
-    pub fn is_subscribed(&self, tab_type: &TimelineTabType) -> bool {
+    pub fn is_subscribed(&self, feed: &FeedKind) -> bool {
         self.timeline_subscriptions
-            .get(tab_type)
+            .get(feed)
             .is_some_and(|subs| !subs.is_empty())
     }
 
-    /// Find the tab type that owns a specific subscription ID
-    pub fn find_tab_by_subscription(
-        &self,
-        subscription_id: &SubscriptionId,
-    ) -> Option<&TimelineTabType> {
+    /// Find the feed that owns a specific subscription ID
+    pub fn find_tab_by_subscription(&self, subscription_id: &SubscriptionId) -> Option<&FeedKind> {
         self.timeline_subscriptions
             .iter()
             .find(|(_, sub_ids)| sub_ids.contains(subscription_id))
-            .map(|(tab_type, _)| tab_type)
+            .map(|(feed, _)| feed)
     }
 
     pub fn update(&mut self, message: Message) {
@@ -77,42 +74,39 @@ impl Nostr {
                     let _ = sender.send(NostrCommand::SendEventBuilder { event_builder });
                 }
             }
-            Message::SubscriptionRequested { tab_type } => {
-                if matches!(tab_type, TimelineTabType::Home) {
+            Message::SubscriptionRequested { feed } => {
+                if matches!(feed, FeedKind::Home) {
                     return;
                 }
 
-                if self.timeline_subscriptions.contains_key(&tab_type) {
+                if self.timeline_subscriptions.contains_key(&feed) {
                     // Already subscribed or in-flight.
                     return;
                 }
 
                 if let Some(sender) = self.command_sender.as_ref() {
                     // Mark as in-flight before sending, so repeated calls are rejected.
-                    self.timeline_subscriptions
-                        .insert(tab_type.clone(), Vec::new());
+                    self.timeline_subscriptions.insert(feed.clone(), Vec::new());
 
                     if sender
-                        .send(NostrCommand::SubscribeTimeline {
-                            tab_type: tab_type.clone(),
-                        })
+                        .send(NostrCommand::SubscribeTimeline { feed: feed.clone() })
                         .is_err()
                     {
                         // NOTE: Avoid leaving an "in-flight" mark when the command didn't go through.
-                        self.timeline_subscriptions.remove(&tab_type);
+                        self.timeline_subscriptions.remove(&feed);
                     }
                 }
             }
-            Message::SubscriptionCreated { tab_type, sub_id } => {
+            Message::SubscriptionCreated { feed, sub_id } => {
                 self.timeline_subscriptions
-                    .entry(tab_type)
+                    .entry(feed)
                     .or_default()
                     .push(sub_id);
             }
-            Message::SubscriptionClosed { tab_type } => {
+            Message::SubscriptionClosed { feed } => {
                 let subscription_ids = self
                     .timeline_subscriptions
-                    .remove(&tab_type)
+                    .remove(&feed)
                     .unwrap_or_default();
 
                 if !subscription_ids.is_empty() {
@@ -121,11 +115,11 @@ impl Nostr {
                     }
                 }
 
-                self.timeline_subscriptions.remove(&tab_type);
+                self.timeline_subscriptions.remove(&feed);
             }
-            Message::HistoryRequested { tab_type, since } => {
+            Message::HistoryRequested { feed, since } => {
                 if let Some(sender) = self.command_sender.as_ref() {
-                    let _ = sender.send(NostrCommand::LoadMoreTimeline { tab_type, since });
+                    let _ = sender.send(NostrCommand::LoadMoreTimeline { feed, since });
                 }
             }
             Message::ConnectionClosed => {
@@ -144,8 +138,8 @@ impl Nostr {
 mod tests {
     use super::*;
 
-    fn create_test_tab_type() -> TimelineTabType {
-        TimelineTabType::UserTimeline {
+    fn create_test_tab_type() -> FeedKind {
+        FeedKind::UserTimeline {
             pubkey: PublicKey::from_slice(&[0u8; 32]).expect("valid public key"),
         }
     }
@@ -178,35 +172,35 @@ mod tests {
     #[test]
     fn test_is_subscribed_returns_false_when_no_subscription() {
         let nostr = Nostr::new();
-        let tab_type = create_test_tab_type();
+        let feed = create_test_tab_type();
 
-        assert!(!nostr.is_subscribed(&tab_type));
+        assert!(!nostr.is_subscribed(&feed));
     }
 
     #[test]
     fn test_is_subscribed_returns_false_when_subscription_list_is_empty() {
         let mut nostr = Nostr::new();
-        let tab_type = create_test_tab_type();
+        let feed = create_test_tab_type();
 
         nostr
             .timeline_subscriptions
-            .insert(tab_type.clone(), Vec::new());
+            .insert(feed.clone(), Vec::new());
 
-        assert!(!nostr.is_subscribed(&tab_type));
+        assert!(!nostr.is_subscribed(&feed));
     }
 
     #[test]
     fn test_is_subscribed_returns_true_when_subscription_exists() {
         let mut nostr = Nostr::new();
-        let tab_type = create_test_tab_type();
+        let feed = create_test_tab_type();
         let sub_id = SubscriptionId::new("test_sub");
 
         nostr.update(Message::SubscriptionCreated {
-            tab_type: tab_type.clone(),
+            feed: feed.clone(),
             sub_id,
         });
 
-        assert!(nostr.is_subscribed(&tab_type));
+        assert!(nostr.is_subscribed(&feed));
     }
 
     #[test]
@@ -218,17 +212,17 @@ mod tests {
     }
 
     #[test]
-    fn test_find_tab_by_subscription_returns_tab_type_when_found() {
+    fn test_find_tab_by_subscription_returns_feed_when_found() {
         let mut nostr = Nostr::new();
-        let tab_type = create_test_tab_type();
+        let feed = create_test_tab_type();
         let sub_id = SubscriptionId::new("test_sub");
 
         nostr.update(Message::SubscriptionCreated {
-            tab_type: tab_type.clone(),
+            feed: feed.clone(),
             sub_id: sub_id.clone(),
         });
 
-        assert_eq!(nostr.find_tab_by_subscription(&sub_id), Some(&tab_type));
+        assert_eq!(nostr.find_tab_by_subscription(&sub_id), Some(&feed));
     }
 
     #[test]
@@ -280,60 +274,54 @@ mod tests {
         nostr.update(Message::ConnectionReady { command_sender: tx });
 
         nostr.update(Message::SubscriptionRequested {
-            tab_type: TimelineTabType::Home,
+            feed: FeedKind::Home,
         });
 
         // No command should be sent for Home tab
         assert!(rx.try_recv().is_err());
-        assert!(!nostr
-            .timeline_subscriptions
-            .contains_key(&TimelineTabType::Home));
+        assert!(!nostr.timeline_subscriptions.contains_key(&FeedKind::Home));
     }
 
     #[test]
     fn test_update_subscription_requested_creates_subscription() {
         let mut nostr = Nostr::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let tab_type = create_test_tab_type();
+        let feed = create_test_tab_type();
 
         nostr.update(Message::ConnectionReady { command_sender: tx });
 
-        nostr.update(Message::SubscriptionRequested {
-            tab_type: tab_type.clone(),
-        });
+        nostr.update(Message::SubscriptionRequested { feed: feed.clone() });
 
         // Verify in-flight mark was set
-        assert!(nostr.timeline_subscriptions.contains_key(&tab_type));
+        assert!(nostr.timeline_subscriptions.contains_key(&feed));
         assert_eq!(
             nostr
                 .timeline_subscriptions
-                .get(&tab_type)
+                .get(&feed)
                 .expect("subscription exists"),
             &Vec::<SubscriptionId>::new()
         );
 
         // Verify command was sent
         let received = rx.try_recv();
-        assert_eq!(received, Ok(NostrCommand::SubscribeTimeline { tab_type }));
+        assert_eq!(received, Ok(NostrCommand::SubscribeTimeline { feed }));
     }
 
     #[test]
     fn test_update_subscription_requested_ignores_duplicate_request() {
         let mut nostr = Nostr::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let tab_type = create_test_tab_type();
+        let feed = create_test_tab_type();
 
         nostr.update(Message::ConnectionReady { command_sender: tx });
 
-        nostr.update(Message::SubscriptionRequested {
-            tab_type: tab_type.clone(),
-        });
+        nostr.update(Message::SubscriptionRequested { feed: feed.clone() });
 
         // First command should be sent
         assert!(rx.try_recv().is_ok());
 
         // Second request should be ignored
-        nostr.update(Message::SubscriptionRequested { tab_type });
+        nostr.update(Message::SubscriptionRequested { feed });
 
         // No second command should be sent
         assert!(rx.try_recv().is_err());
@@ -342,17 +330,17 @@ mod tests {
     #[test]
     fn test_update_subscription_created_adds_subscription_id() {
         let mut nostr = Nostr::new();
-        let tab_type = create_test_tab_type();
+        let feed = create_test_tab_type();
         let sub_id = SubscriptionId::new("test_sub");
 
         nostr.update(Message::SubscriptionCreated {
-            tab_type: tab_type.clone(),
+            feed: feed.clone(),
             sub_id: sub_id.clone(),
         });
 
         let subs = nostr
             .timeline_subscriptions
-            .get(&tab_type)
+            .get(&feed)
             .expect("subscription exists");
         assert_eq!(subs, &vec![sub_id]);
     }
@@ -360,23 +348,23 @@ mod tests {
     #[test]
     fn test_update_subscription_created_appends_to_existing_subscriptions() {
         let mut nostr = Nostr::new();
-        let tab_type = create_test_tab_type();
+        let feed = create_test_tab_type();
         let sub_id1 = SubscriptionId::new("test_sub1");
         let sub_id2 = SubscriptionId::new("test_sub2");
 
         nostr.update(Message::SubscriptionCreated {
-            tab_type: tab_type.clone(),
+            feed: feed.clone(),
             sub_id: sub_id1.clone(),
         });
 
         nostr.update(Message::SubscriptionCreated {
-            tab_type: tab_type.clone(),
+            feed: feed.clone(),
             sub_id: sub_id2.clone(),
         });
 
         let subs = nostr
             .timeline_subscriptions
-            .get(&tab_type)
+            .get(&feed)
             .expect("subscription exists");
         assert_eq!(subs, &vec![sub_id1, sub_id2]);
     }
@@ -385,22 +373,20 @@ mod tests {
     fn test_update_subscription_closed_removes_subscription_and_sends_unsubscribe() {
         let mut nostr = Nostr::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let tab_type = create_test_tab_type();
+        let feed = create_test_tab_type();
         let sub_id = SubscriptionId::new("test_sub");
 
         nostr.update(Message::ConnectionReady { command_sender: tx });
 
         nostr.update(Message::SubscriptionCreated {
-            tab_type: tab_type.clone(),
+            feed: feed.clone(),
             sub_id: sub_id.clone(),
         });
 
-        nostr.update(Message::SubscriptionClosed {
-            tab_type: tab_type.clone(),
-        });
+        nostr.update(Message::SubscriptionClosed { feed: feed.clone() });
 
         // Verify subscription was removed
-        assert!(!nostr.timeline_subscriptions.contains_key(&tab_type));
+        assert!(!nostr.timeline_subscriptions.contains_key(&feed));
 
         // Verify unsubscribe command was sent
         let received = rx.try_recv();
@@ -416,11 +402,11 @@ mod tests {
     fn test_update_subscription_closed_handles_non_existent_subscription() {
         let mut nostr = Nostr::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let tab_type = create_test_tab_type();
+        let feed = create_test_tab_type();
 
         nostr.update(Message::ConnectionReady { command_sender: tx });
 
-        nostr.update(Message::SubscriptionClosed { tab_type });
+        nostr.update(Message::SubscriptionClosed { feed });
 
         // No unsubscribe command should be sent for empty subscription list
         assert!(rx.try_recv().is_err());
@@ -430,34 +416,31 @@ mod tests {
     fn test_update_history_requested_sends_load_more_command() {
         let mut nostr = Nostr::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let tab_type = create_test_tab_type();
+        let feed = create_test_tab_type();
         let since = Timestamp::from(1234567890);
 
         nostr.update(Message::ConnectionReady { command_sender: tx });
 
         nostr.update(Message::HistoryRequested {
-            tab_type: tab_type.clone(),
+            feed: feed.clone(),
             since,
         });
 
         // Verify command was sent
         let received = rx.try_recv();
-        assert_eq!(
-            received,
-            Ok(NostrCommand::LoadMoreTimeline { tab_type, since })
-        );
+        assert_eq!(received, Ok(NostrCommand::LoadMoreTimeline { feed, since }));
     }
 
     #[test]
     fn test_update_connection_closed_clears_state_and_sends_shutdown() {
         let mut nostr = Nostr::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let tab_type = create_test_tab_type();
+        let feed = create_test_tab_type();
         let sub_id = SubscriptionId::new("test_sub");
 
         nostr.update(Message::ConnectionReady { command_sender: tx });
 
-        nostr.update(Message::SubscriptionCreated { tab_type, sub_id });
+        nostr.update(Message::SubscriptionCreated { feed, sub_id });
 
         nostr.update(Message::ConnectionClosed);
 
