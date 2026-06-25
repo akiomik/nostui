@@ -15,9 +15,8 @@ use crate::application::config::Config;
 use crate::application::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
 use crate::application::state::AppState;
 use crate::infrastructure::subscription::media::MediaEvents;
-use crate::infrastructure::subscription::nostr::{
-    Message as NostrSubscriptionMessage, NostrEvents,
-};
+use crate::infrastructure::subscription::nostr::NostrEvents;
+use crate::model::nostr_gateway::Message as NostrSubscriptionMessage;
 use crate::presentation::components::Components;
 use crate::presentation::config::keybindings::Action as KeyAction;
 

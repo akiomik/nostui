@@ -13,64 +13,10 @@ use crate::domain::nostr::timeline_filter::{
     home_load_more_filter, home_timeline_filters, user_load_more_filter, user_timeline_filters,
     with_own_pubkey,
 };
+use crate::model::nostr_gateway::{CommandError, Message, NostrCommand};
 use crate::model::timeline::tab::TimelineTabType;
 
 const DEFAULT_CONTACT_LIST_TIMEOUT_SECS: u64 = 10;
-
-/// Commands that can be sent to the Nostr subscription
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NostrCommand {
-    /// Send an event to relays
-    SendEventBuilder { event_builder: EventBuilder },
-    /// Add a new relay
-    AddRelay { url: String },
-    /// Remove a relay
-    RemoveRelay { url: String },
-    /// Load more timeline events before the specified timestamp for a specific tab
-    LoadMoreTimeline {
-        tab_type: TimelineTabType,
-        since: Timestamp,
-    },
-    /// Subscribe to a specific timeline tab
-    SubscribeTimeline { tab_type: TimelineTabType },
-    /// Unsubscribe from multiple subscriptions
-    Unsubscribe {
-        subscription_ids: Vec<nostr_sdk::SubscriptionId>,
-    },
-    /// Shutdown the subscription and disconnect from all relays
-    Shutdown,
-}
-
-/// Errors that can occur during command execution
-#[derive(Debug, Clone)]
-pub enum CommandError {
-    /// Failed to send event to relays
-    SendEventFailed { error: String },
-    /// Failed to add relay
-    AddRelayFailed { url: String, error: String },
-    /// Failed to connect to relay
-    ConnectRelayFailed { url: String, error: String },
-    /// Failed to remove relay
-    RemoveRelayFailed { url: String, error: String },
-}
-
-/// Messages emitted by the Nostr subscription
-#[derive(Debug, Clone)]
-pub enum Message {
-    /// Subscription is ready, provides command sender for user to send commands
-    Ready {
-        sender: mpsc::UnboundedSender<NostrCommand>,
-    },
-    /// A notification from the relay pool
-    Notification(Box<RelayPoolNotification>),
-    /// An error occurred during command execution
-    Error { error: CommandError },
-    /// A subscription was created for a specific tab
-    SubscriptionCreated {
-        tab_type: TimelineTabType,
-        subscription_id: nostr_sdk::SubscriptionId,
-    },
-}
 
 #[derive(Debug, Clone)]
 pub struct NostrEvents {
