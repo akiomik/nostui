@@ -11,7 +11,7 @@ use crate::{
     model::{
         editor::{Editor, Message as EditorMessage},
         fps::{Fps, Message as FpsMessage},
-        nostr::{Message as NostrMessage, Nostr},
+        nostr::{Message as NostrMessage, Nostr, NostrOutcome},
         nostr_gateway::{CommandError, NostrCommand},
         status_bar::{Message, StatusBar},
         timeline::{
@@ -58,6 +58,10 @@ pub struct AppState<'a> {
     pub fps: Fps,
     pub status_bar: StatusBar,
     pub startup: Startup,
+    /// Sender for dispatching commands to the Nostr subscription worker.
+    /// Owned here (not in `model::nostr`) so the application layer performs the
+    /// I/O while `model` stays side-effect free; set once the worker is ready.
+    command_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
 }
 
 /// Configuration state - holds all user-configurable settings
@@ -167,8 +171,10 @@ impl<'a> AppState<'a> {
         if self.timeline.find_tab_by_feed(&feed).is_some() {
             log::info!("Created new author timeline for {author_npub}");
 
-            self.nostr
+            let outcome = self
+                .nostr
                 .update(NostrMessage::SubscriptionRequested { feed });
+            self.dispatch_nostr(outcome);
 
             self.status_bar.update(Message::MessageChanged {
                 label: author_npub,
@@ -201,7 +207,8 @@ impl<'a> AppState<'a> {
         });
 
         // Unsubscribe the subscriptions associated with the closed tab.
-        self.nostr.update(NostrMessage::SubscriptionClosed { feed });
+        let outcome = self.nostr.update(NostrMessage::SubscriptionClosed { feed });
+        self.dispatch_nostr(outcome);
 
         Command::none()
     }
@@ -231,8 +238,10 @@ impl<'a> AppState<'a> {
         let event_builder = build(note);
         log::info!("{label} event: {note_id}");
 
-        self.nostr
+        let outcome = self
+            .nostr
             .update(NostrMessage::EventSubmitted { event_builder });
+        self.dispatch_nostr(outcome);
 
         self.status_bar.update(Message::MessageChanged {
             label: label.to_owned(),
@@ -280,8 +289,10 @@ impl<'a> AppState<'a> {
             EventBuilder::text_note(&content)
         };
 
-        self.nostr
+        let outcome = self
+            .nostr
             .update(NostrMessage::EventSubmitted { event_builder });
+        self.dispatch_nostr(outcome);
 
         self.status_bar.update(Message::MessageChanged {
             label: "Posted".to_owned(),
@@ -305,8 +316,10 @@ impl<'a> AppState<'a> {
         let content = status.content();
         let event_builder = status.live_status_builder();
 
-        self.nostr
+        let outcome = self
+            .nostr
             .update(NostrMessage::EventSubmitted { event_builder });
+        self.dispatch_nostr(outcome);
 
         self.status_bar.update(Message::MessageChanged {
             label: "Music".to_owned(),
@@ -321,6 +334,25 @@ impl<'a> AppState<'a> {
         self.timeline.active_tab().tab_title(self.user.profiles())
     }
 
+    /// Dispatch a [`NostrOutcome`] produced by `model::nostr` to the worker.
+    ///
+    /// `model::nostr::update` is side-effect free and only reports the command
+    /// to send; the application owns the sender and performs the actual I/O.
+    fn dispatch_nostr(&self, outcome: NostrOutcome) {
+        let NostrOutcome::Send(command) = outcome else {
+            return;
+        };
+
+        let Some(sender) = self.command_sender.as_ref() else {
+            log::warn!("Dropping Nostr command, worker not ready: {command:?}");
+            return;
+        };
+
+        if sender.send(command).is_err() {
+            log::error!("Failed to send Nostr command: subscription worker is gone");
+        }
+    }
+
     /// Record that the Nostr subscription is ready and store its command sender,
     /// then show the initial "loading" status for the active tab.
     pub fn on_connection_ready(
@@ -330,8 +362,9 @@ impl<'a> AppState<'a> {
         log::info!("NostrEvents subscription ready");
 
         let tab_title = self.active_tab_title();
-        self.nostr
-            .update(NostrMessage::ConnectionReady { command_sender });
+        self.command_sender = Some(command_sender);
+        let outcome = self.nostr.update(NostrMessage::ConnectionReady);
+        self.dispatch_nostr(outcome);
         self.status_bar.update(Message::MessageChanged {
             label: tab_title,
             message: "loading...".to_owned(),
@@ -514,7 +547,9 @@ impl<'a> AppState<'a> {
 
     /// Close the Nostr connection: unsubscribe and disconnect from relays.
     pub fn close_connection(&mut self) -> Command<AppMsg> {
-        self.nostr.update(NostrMessage::ConnectionClosed);
+        let outcome = self.nostr.update(NostrMessage::ConnectionClosed);
+        self.dispatch_nostr(outcome);
+        self.command_sender = None;
         Command::none()
     }
 
@@ -525,10 +560,11 @@ impl<'a> AppState<'a> {
         subscription_id: SubscriptionId,
     ) -> Command<AppMsg> {
         log::info!("Subscription created for {feed:?}: {subscription_id:?}");
-        self.nostr.update(NostrMessage::SubscriptionCreated {
+        let outcome = self.nostr.update(NostrMessage::SubscriptionCreated {
             feed,
             sub_id: subscription_id,
         });
+        self.dispatch_nostr(outcome);
         Command::none()
     }
 

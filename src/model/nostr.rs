@@ -1,14 +1,11 @@
 use nostr_sdk::prelude::*;
 use std::collections::HashMap;
-use tokio::sync::mpsc;
 
 use crate::domain::nostr::FeedKind;
 use crate::model::nostr_gateway::NostrCommand;
 
 pub enum Message {
-    ConnectionReady {
-        command_sender: mpsc::UnboundedSender<NostrCommand>,
-    },
+    ConnectionReady,
     EventSubmitted {
         event_builder: EventBuilder,
     },
@@ -29,11 +26,25 @@ pub enum Message {
     ConnectionClosed,
 }
 
+/// Follow-up effect the application must dispatch after a [`Nostr`] update.
+///
+/// `Nostr`, like the rest of `model`, is side-effect free: `update` mutates
+/// state and returns this outcome instead of sending on the gateway channel.
+/// The application layer owns the command sender and performs the send.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum NostrOutcome {
+    /// No command needs to be sent.
+    #[default]
+    None,
+    /// Dispatch this command to the subscription worker.
+    Send(NostrCommand),
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Nostr {
-    /// Command sender for NostrEvents subscription
-    /// This is set when the subscription emits a Ready message
-    command_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
+    /// Whether the subscription worker is connected and accepting commands.
+    /// Set when the subscription emits a `Ready` message, cleared on shutdown.
+    connected: bool,
 
     /// Track subscription IDs for each feed
     /// The home feed has 3 subscriptions (backward, forward, profile)
@@ -47,7 +58,7 @@ impl Nostr {
     }
 
     pub fn is_ready(&self) -> bool {
-        self.command_sender.is_some()
+        self.connected
     }
 
     pub fn is_subscribed(&self, feed: &FeedKind) -> bool {
@@ -64,68 +75,70 @@ impl Nostr {
             .map(|(feed, _)| feed)
     }
 
-    pub fn update(&mut self, message: Message) {
+    pub fn update(&mut self, message: Message) -> NostrOutcome {
         match message {
-            Message::ConnectionReady { command_sender } => {
-                self.command_sender = Some(command_sender);
+            Message::ConnectionReady => {
+                self.connected = true;
+                NostrOutcome::None
             }
             Message::EventSubmitted { event_builder } => {
-                if let Some(sender) = self.command_sender.as_ref() {
-                    let _ = sender.send(NostrCommand::SendEventBuilder { event_builder });
+                if self.connected {
+                    NostrOutcome::Send(NostrCommand::SendEventBuilder { event_builder })
+                } else {
+                    NostrOutcome::None
                 }
             }
             Message::SubscriptionRequested { feed } => {
                 if matches!(feed, FeedKind::Home) {
-                    return;
+                    return NostrOutcome::None;
                 }
 
                 if self.feed_subscriptions.contains_key(&feed) {
                     // Already subscribed or in-flight.
-                    return;
+                    return NostrOutcome::None;
                 }
 
-                if let Some(sender) = self.command_sender.as_ref() {
-                    // Mark as in-flight before sending, so repeated calls are rejected.
-                    self.feed_subscriptions.insert(feed.clone(), Vec::new());
-
-                    if sender
-                        .send(NostrCommand::Subscribe { feed: feed.clone() })
-                        .is_err()
-                    {
-                        // NOTE: Avoid leaving an "in-flight" mark when the command didn't go through.
-                        self.feed_subscriptions.remove(&feed);
-                    }
+                if !self.connected {
+                    return NostrOutcome::None;
                 }
+
+                // Mark as in-flight before dispatching, so repeated calls are rejected.
+                self.feed_subscriptions.insert(feed.clone(), Vec::new());
+                NostrOutcome::Send(NostrCommand::Subscribe { feed })
             }
             Message::SubscriptionCreated { feed, sub_id } => {
                 self.feed_subscriptions
                     .entry(feed)
                     .or_default()
                     .push(sub_id);
+                NostrOutcome::None
             }
             Message::SubscriptionClosed { feed } => {
                 let subscription_ids = self.feed_subscriptions.remove(&feed).unwrap_or_default();
 
-                if !subscription_ids.is_empty() {
-                    if let Some(sender) = self.command_sender.as_ref() {
-                        let _ = sender.send(NostrCommand::Unsubscribe { subscription_ids });
-                    }
+                if !subscription_ids.is_empty() && self.connected {
+                    NostrOutcome::Send(NostrCommand::Unsubscribe { subscription_ids })
+                } else {
+                    NostrOutcome::None
                 }
-
-                self.feed_subscriptions.remove(&feed);
             }
             Message::HistoryRequested { feed, since } => {
-                if let Some(sender) = self.command_sender.as_ref() {
-                    let _ = sender.send(NostrCommand::LoadMore { feed, since });
+                if self.connected {
+                    NostrOutcome::Send(NostrCommand::LoadMore { feed, since })
+                } else {
+                    NostrOutcome::None
                 }
             }
             Message::ConnectionClosed => {
-                if let Some(sender) = self.command_sender.as_ref() {
-                    let _ = sender.send(NostrCommand::Shutdown);
-                }
-
-                self.command_sender = None;
+                let was_connected = self.connected;
+                self.connected = false;
                 self.feed_subscriptions.clear();
+
+                if was_connected {
+                    NostrOutcome::Send(NostrCommand::Shutdown)
+                } else {
+                    NostrOutcome::None
+                }
             }
         }
     }
@@ -143,23 +156,22 @@ mod tests {
     fn test_new_creates_default_instance() {
         let nostr = Nostr::new();
 
-        assert!(nostr.command_sender.is_none());
+        assert!(!nostr.is_ready());
         assert_eq!(nostr.feed_subscriptions, HashMap::new());
     }
 
     #[test]
-    fn test_is_ready_returns_false_when_no_command_sender() {
+    fn test_is_ready_returns_false_when_not_connected() {
         let nostr = Nostr::new();
 
         assert!(!nostr.is_ready());
     }
 
     #[test]
-    fn test_is_ready_returns_true_when_command_sender_exists() {
+    fn test_is_ready_returns_true_after_connection_ready() {
         let mut nostr = Nostr::new();
-        let (tx, _rx) = mpsc::unbounded_channel();
 
-        nostr.update(Message::ConnectionReady { command_sender: tx });
+        assert_eq!(nostr.update(Message::ConnectionReady), NostrOutcome::None);
 
         assert!(nostr.is_ready());
     }
@@ -219,71 +231,64 @@ mod tests {
     }
 
     #[test]
-    fn test_update_connection_ready_sets_command_sender() {
+    fn test_update_connection_ready_sets_connected() {
         let mut nostr = Nostr::new();
-        let (tx, _rx) = mpsc::unbounded_channel();
 
-        nostr.update(Message::ConnectionReady { command_sender: tx });
+        let outcome = nostr.update(Message::ConnectionReady);
 
-        assert!(nostr.command_sender.is_some());
+        assert_eq!(outcome, NostrOutcome::None);
+        assert!(nostr.is_ready());
     }
 
     #[test]
-    fn test_update_event_submitted_sends_command_when_ready() {
+    fn test_update_event_submitted_returns_send_when_ready() {
         let mut nostr = Nostr::new();
-        let (tx, mut rx) = mpsc::unbounded_channel();
         let event_builder = EventBuilder::text_note("test");
 
-        nostr.update(Message::ConnectionReady { command_sender: tx });
+        nostr.update(Message::ConnectionReady);
 
-        nostr.update(Message::EventSubmitted {
+        let outcome = nostr.update(Message::EventSubmitted {
             event_builder: event_builder.clone(),
         });
 
-        // Verify command was sent
-        let received = rx.try_recv();
         assert_eq!(
-            received,
-            Ok(NostrCommand::SendEventBuilder { event_builder })
+            outcome,
+            NostrOutcome::Send(NostrCommand::SendEventBuilder { event_builder })
         );
     }
 
     #[test]
-    fn test_update_event_submitted_does_nothing_when_not_ready() {
+    fn test_update_event_submitted_returns_none_when_not_ready() {
         let mut nostr = Nostr::new();
         let event_builder = EventBuilder::text_note("test");
 
-        // No command sender set, so nothing should happen
-        nostr.update(Message::EventSubmitted { event_builder });
+        let outcome = nostr.update(Message::EventSubmitted { event_builder });
 
-        // No panic means test passed
+        assert_eq!(outcome, NostrOutcome::None);
     }
 
     #[test]
     fn test_update_subscription_requested_ignores_home_tab() {
         let mut nostr = Nostr::new();
-        let (tx, mut rx) = mpsc::unbounded_channel();
 
-        nostr.update(Message::ConnectionReady { command_sender: tx });
+        nostr.update(Message::ConnectionReady);
 
-        nostr.update(Message::SubscriptionRequested {
+        let outcome = nostr.update(Message::SubscriptionRequested {
             feed: FeedKind::Home,
         });
 
-        // No command should be sent for Home tab
-        assert!(rx.try_recv().is_err());
+        assert_eq!(outcome, NostrOutcome::None);
         assert!(!nostr.feed_subscriptions.contains_key(&FeedKind::Home));
     }
 
     #[test]
     fn test_update_subscription_requested_creates_subscription() {
         let mut nostr = Nostr::new();
-        let (tx, mut rx) = mpsc::unbounded_channel();
         let feed = create_test_feed();
 
-        nostr.update(Message::ConnectionReady { command_sender: tx });
+        nostr.update(Message::ConnectionReady);
 
-        nostr.update(Message::SubscriptionRequested { feed: feed.clone() });
+        let outcome = nostr.update(Message::SubscriptionRequested { feed: feed.clone() });
 
         // Verify in-flight mark was set
         assert!(nostr.feed_subscriptions.contains_key(&feed));
@@ -295,29 +300,41 @@ mod tests {
             &Vec::<SubscriptionId>::new()
         );
 
-        // Verify command was sent
-        let received = rx.try_recv();
-        assert_eq!(received, Ok(NostrCommand::Subscribe { feed }));
+        // Verify the subscribe command was reported
+        assert_eq!(
+            outcome,
+            NostrOutcome::Send(NostrCommand::Subscribe { feed })
+        );
+    }
+
+    #[test]
+    fn test_update_subscription_requested_ignores_request_when_not_connected() {
+        let mut nostr = Nostr::new();
+        let feed = create_test_feed();
+
+        // Not connected yet, so no in-flight mark and no command.
+        let outcome = nostr.update(Message::SubscriptionRequested { feed: feed.clone() });
+
+        assert_eq!(outcome, NostrOutcome::None);
+        assert!(!nostr.feed_subscriptions.contains_key(&feed));
     }
 
     #[test]
     fn test_update_subscription_requested_ignores_duplicate_request() {
         let mut nostr = Nostr::new();
-        let (tx, mut rx) = mpsc::unbounded_channel();
         let feed = create_test_feed();
 
-        nostr.update(Message::ConnectionReady { command_sender: tx });
+        nostr.update(Message::ConnectionReady);
 
-        nostr.update(Message::SubscriptionRequested { feed: feed.clone() });
-
-        // First command should be sent
-        assert!(rx.try_recv().is_ok());
+        let first = nostr.update(Message::SubscriptionRequested { feed: feed.clone() });
+        assert_eq!(
+            first,
+            NostrOutcome::Send(NostrCommand::Subscribe { feed: feed.clone() })
+        );
 
         // Second request should be ignored
-        nostr.update(Message::SubscriptionRequested { feed });
-
-        // No second command should be sent
-        assert!(rx.try_recv().is_err());
+        let second = nostr.update(Message::SubscriptionRequested { feed });
+        assert_eq!(second, NostrOutcome::None);
     }
 
     #[test]
@@ -363,29 +380,27 @@ mod tests {
     }
 
     #[test]
-    fn test_update_subscription_closed_removes_subscription_and_sends_unsubscribe() {
+    fn test_update_subscription_closed_removes_subscription_and_returns_unsubscribe() {
         let mut nostr = Nostr::new();
-        let (tx, mut rx) = mpsc::unbounded_channel();
         let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
 
-        nostr.update(Message::ConnectionReady { command_sender: tx });
+        nostr.update(Message::ConnectionReady);
 
         nostr.update(Message::SubscriptionCreated {
             feed: feed.clone(),
             sub_id: sub_id.clone(),
         });
 
-        nostr.update(Message::SubscriptionClosed { feed: feed.clone() });
+        let outcome = nostr.update(Message::SubscriptionClosed { feed: feed.clone() });
 
         // Verify subscription was removed
         assert!(!nostr.feed_subscriptions.contains_key(&feed));
 
-        // Verify unsubscribe command was sent
-        let received = rx.try_recv();
+        // Verify unsubscribe command was reported
         assert_eq!(
-            received,
-            Ok(NostrCommand::Unsubscribe {
+            outcome,
+            NostrOutcome::Send(NostrCommand::Unsubscribe {
                 subscription_ids: vec![sub_id]
             })
         );
@@ -394,55 +409,61 @@ mod tests {
     #[test]
     fn test_update_subscription_closed_handles_non_existent_subscription() {
         let mut nostr = Nostr::new();
-        let (tx, mut rx) = mpsc::unbounded_channel();
         let feed = create_test_feed();
 
-        nostr.update(Message::ConnectionReady { command_sender: tx });
+        nostr.update(Message::ConnectionReady);
 
-        nostr.update(Message::SubscriptionClosed { feed });
+        let outcome = nostr.update(Message::SubscriptionClosed { feed });
 
-        // No unsubscribe command should be sent for empty subscription list
-        assert!(rx.try_recv().is_err());
+        // No unsubscribe command for an empty subscription list
+        assert_eq!(outcome, NostrOutcome::None);
     }
 
     #[test]
-    fn test_update_history_requested_sends_load_more_command() {
+    fn test_update_history_requested_returns_load_more_command() {
         let mut nostr = Nostr::new();
-        let (tx, mut rx) = mpsc::unbounded_channel();
         let feed = create_test_feed();
         let since = Timestamp::from(1234567890);
 
-        nostr.update(Message::ConnectionReady { command_sender: tx });
+        nostr.update(Message::ConnectionReady);
 
-        nostr.update(Message::HistoryRequested {
+        let outcome = nostr.update(Message::HistoryRequested {
             feed: feed.clone(),
             since,
         });
 
-        // Verify command was sent
-        let received = rx.try_recv();
-        assert_eq!(received, Ok(NostrCommand::LoadMore { feed, since }));
+        assert_eq!(
+            outcome,
+            NostrOutcome::Send(NostrCommand::LoadMore { feed, since })
+        );
     }
 
     #[test]
-    fn test_update_connection_closed_clears_state_and_sends_shutdown() {
+    fn test_update_connection_closed_clears_state_and_returns_shutdown() {
         let mut nostr = Nostr::new();
-        let (tx, mut rx) = mpsc::unbounded_channel();
         let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
 
-        nostr.update(Message::ConnectionReady { command_sender: tx });
+        nostr.update(Message::ConnectionReady);
 
         nostr.update(Message::SubscriptionCreated { feed, sub_id });
 
-        nostr.update(Message::ConnectionClosed);
+        let outcome = nostr.update(Message::ConnectionClosed);
 
         // Verify state was cleared
-        assert!(nostr.command_sender.is_none());
+        assert!(!nostr.is_ready());
         assert_eq!(nostr.feed_subscriptions, HashMap::new());
 
-        // Verify shutdown command was sent
-        let received = rx.try_recv();
-        assert_eq!(received, Ok(NostrCommand::Shutdown));
+        // Verify shutdown command was reported
+        assert_eq!(outcome, NostrOutcome::Send(NostrCommand::Shutdown));
+    }
+
+    #[test]
+    fn test_update_connection_closed_returns_none_when_not_connected() {
+        let mut nostr = Nostr::new();
+
+        let outcome = nostr.update(Message::ConnectionClosed);
+
+        assert_eq!(outcome, NostrOutcome::None);
     }
 }
