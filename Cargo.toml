@@ -30,7 +30,7 @@ lazy_static = "1"
 libc = "0.2"
 log = "0.4"
 nostr-sdk = "0.44"
-nowhear = "0.3"
+nowhear = "0.5"
 percent-encoding = "2"
 ratatui = { version = "0.30", features = ["serde", "macros"] }
 regex = "1"

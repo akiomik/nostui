@@ -620,7 +620,7 @@ mod tests {
             album: None,
             album_artist: vec![],
             track_number: None,
-            art_url: None,
+            artwork: None,
         }
     }
 
