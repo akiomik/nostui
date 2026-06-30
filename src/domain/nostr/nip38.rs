@@ -63,7 +63,7 @@ mod tests {
             album: None,
             album_artist: vec![],
             track_number: None,
-            art_url: None,
+            artwork: None,
         }
     }
 
@@ -84,7 +84,7 @@ mod tests {
             album: None,
             album_artist: vec![],
             track_number: None,
-            art_url: None,
+            artwork: None,
         };
         let status = MusicStatus::new(track);
 
@@ -100,7 +100,7 @@ mod tests {
             album: None,
             album_artist: vec![],
             track_number: None,
-            art_url: None,
+            artwork: None,
         };
         let status = MusicStatus::new(track);
 
@@ -116,7 +116,7 @@ mod tests {
             album: None,
             album_artist: vec![],
             track_number: None,
-            art_url: None,
+            artwork: None,
         };
         let status = MusicStatus::new(track);
 
@@ -144,7 +144,7 @@ mod tests {
             album: None,
             album_artist: vec![],
             track_number: None,
-            art_url: None,
+            artwork: None,
         };
         let status = MusicStatus::new(track).expect("Failed to create MusicStatus");
 
@@ -163,7 +163,7 @@ mod tests {
             album: None,
             album_artist: vec![],
             track_number: None,
-            art_url: None,
+            artwork: None,
         };
         let status = MusicStatus::new(track).expect("Failed to create MusicStatus");
         let reference = status.reference();
@@ -241,7 +241,7 @@ mod tests {
             album: None,
             album_artist: vec![],
             track_number: None,
-            art_url: None,
+            artwork: None,
         };
         let music_status = MusicStatus::new(track).expect("Failed to create MusicStatus");
         let expected_reference = music_status.reference();
