@@ -31,3 +31,6 @@ log-tailf:
 [macos]
 flamegraph:
   CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --root
+
+samply:
+  CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release && samply record {{ justfile_directory() }}/target/release/nostui
