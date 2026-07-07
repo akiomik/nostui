@@ -9,7 +9,7 @@ use nowhear::{MediaEvent, MediaSourceError};
 use ratatui::prelude::*;
 use tears::prelude::*;
 use tears::subscription::terminal::TerminalEvents;
-use tears::subscription::time::{Message as TimerMessage, Timer};
+use tears::subscription::time::{Timer, TimerEvent};
 
 use crate::application::config::keybindings::Action as KeyAction;
 use crate::application::config::Config;
@@ -26,7 +26,7 @@ pub struct InitFlags {
     pub pubkey: PublicKey,
     pub config: Config,
     pub nostr_client: Client,
-    pub tick_rate: f64,
+    pub tick_timer: Timer,
 }
 
 /// Main Tears application structure
@@ -43,8 +43,8 @@ pub struct TearsApp<'a> {
     nostr_client: Arc<Client>,
     /// Configuration (including keybindings)
     config: Config,
-    /// Tick rate (Hz) for timer subscription
-    tick_rate: f64,
+    /// Timer subscription source for application ticks
+    tick_timer: Timer,
 }
 
 impl<'a> Application for TearsApp<'a> {
@@ -70,7 +70,7 @@ impl<'a> Application for TearsApp<'a> {
             components: RefCell::new(components),
             nostr_client,
             config,
-            tick_rate: flags.tick_rate,
+            tick_timer: flags.tick_timer,
         };
 
         // Return initial commands if needed
@@ -113,9 +113,9 @@ impl<'a> Application for TearsApp<'a> {
             // is not recreated every frame
             Subscription::new(NostrEvents::new(Arc::clone(&self.nostr_client)))
                 .map(|msg| AppMsg::Nostr(NostrMsg::SubscriptionMessage(msg))),
-            // Timer subscription - tick interval calculated from tick_rate
-            Subscription::new(Timer::new((1000.0 / self.tick_rate) as u64)).map(|msg| match msg {
-                TimerMessage::Tick => AppMsg::System(SystemMsg::Tick),
+            // Timer subscription - interval validated during initialization
+            Subscription::new(self.tick_timer.clone()).map(|msg| match msg {
+                TimerEvent::Tick => AppMsg::System(SystemMsg::Tick),
             }),
             Subscription::new(TerminalEvents::new()).map(|result| match result {
                 Ok(event) => {
@@ -450,7 +450,7 @@ mod tests {
             pubkey: keys.public_key(),
             config,
             nostr_client: client,
-            tick_rate: 16.0,
+            tick_timer: Timer::try_new(62).expect("test timer interval must be valid"),
         };
 
         let (app, _) = TearsApp::new(flags);

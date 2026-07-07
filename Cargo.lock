@@ -3338,9 +3338,9 @@ dependencies = [
 
 [[package]]
 name = "tears"
-version = "0.8.1"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d179eaedbe1ae9e13f44545979a09a139c44346a5adb0499dfb5cd8e62a96ab0"
+checksum = "c4ca104025461e3e2f21d435c9b68c42d1bea632c68793e37630582b79658d4e"
 dependencies = [
  "color-eyre",
  "crossterm 0.29.0",
@@ -3349,6 +3349,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
+ "tracing",
 ]
 
 [[package]]
