@@ -1,10 +1,10 @@
 #![deny(warnings)]
 
 use clap::Parser;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{eyre, Result};
 use nostr_sdk::prelude::*;
 use secrecy::ExposeSecret;
-use tears::Runtime;
+use tears::{subscription::time::Timer, Runtime};
 
 use nostui::{
     application::config::Config,
@@ -12,6 +12,23 @@ use nostui::{
     runtime::{InitFlags, TearsApp},
     utils::{initialize_logging, initialize_panic_handler},
 };
+
+fn tick_timer_from_rate(tick_rate: f64) -> Result<Timer> {
+    if !tick_rate.is_finite() || tick_rate <= 0.0 {
+        return Err(eyre!("tick rate must be a positive finite number"));
+    }
+
+    let interval_ms = 1000.0 / tick_rate;
+    if interval_ms > u64::MAX as f64 {
+        return Err(eyre!(
+            "tick rate is too low to convert to a timer interval: {tick_rate}"
+        ));
+    }
+
+    Timer::try_new(interval_ms as u64).ok_or_else(|| {
+        eyre!("tick rate is too high to produce a non-zero millisecond timer interval: {tick_rate}")
+    })
+}
 
 async fn tokio_main() -> Result<()> {
     initialize_logging()?;
@@ -50,7 +67,7 @@ async fn tokio_main() -> Result<()> {
         pubkey,
         config,
         nostr_client: client,
-        tick_rate: args.tick_rate,
+        tick_timer: tick_timer_from_rate(args.tick_rate)?,
     };
 
     // Setup terminal
@@ -62,7 +79,7 @@ async fn tokio_main() -> Result<()> {
         "Starting Tears application with frame_rate: {}",
         args.frame_rate
     );
-    let runtime = Runtime::<TearsApp>::new(init_flags, args.frame_rate as u32);
+    let runtime = Runtime::<TearsApp>::try_new(init_flags, args.frame_rate as u32)?;
     let result = runtime.run(&mut terminal).await;
 
     // Restore terminal
@@ -78,5 +95,31 @@ async fn main() -> Result<()> {
         Err(e)
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tick_timer_from_rate_accepts_positive_tick_rate() {
+        assert_eq!(
+            tick_timer_from_rate(16.0).expect("tick rate should be valid"),
+            Timer::try_new(62).expect("timer interval should be valid")
+        );
+        assert_eq!(
+            tick_timer_from_rate(1000.0).expect("tick rate should be valid"),
+            Timer::try_new(1).expect("timer interval should be valid")
+        );
+    }
+
+    #[test]
+    fn tick_timer_from_rate_rejects_invalid_tick_rate() {
+        assert!(tick_timer_from_rate(0.0).is_err());
+        assert!(tick_timer_from_rate(-1.0).is_err());
+        assert!(tick_timer_from_rate(f64::NAN).is_err());
+        assert!(tick_timer_from_rate(f64::INFINITY).is_err());
+        assert!(tick_timer_from_rate(1000.1).is_err());
     }
 }

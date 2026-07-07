@@ -41,7 +41,7 @@ signal-hook = "0.4"
 sorted-vec = "0.8"
 strip-ansi-escapes = "0.2"
 strum = { version = "0.28", features = ["derive"] }
-tears = "0.8"
+tears = "0.9.1"
 thousands = "0.2"
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
