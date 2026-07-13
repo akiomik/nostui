@@ -2061,7 +2061,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
- "signal-hook 0.4.1",
+ "signal-hook 0.4.4",
  "sorted-vec",
  "strip-ansi-escapes",
  "strum",
@@ -3197,9 +3197,9 @@ dependencies = [
 
 [[package]]
 name = "signal-hook"
-version = "0.4.1"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a37d01603c37b5466f808de79f845c7116049b0579adb70a6b7d47c1fa3a952"
+checksum = "b2a0c28ca5908dbdbcd52e6fdaa00358ab88637f8ab33e1f188dd510eb44b53d"
 dependencies = [
  "libc",
  "signal-hook-registry",
