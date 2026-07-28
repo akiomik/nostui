@@ -6,7 +6,7 @@ use futures::{
     StreamExt,
 };
 use nostr_sdk::prelude::*;
-use tears::{SubscriptionId, SubscriptionSource};
+use tears::SubscriptionSource;
 use tokio::sync::{broadcast, mpsc, RwLock};
 
 use crate::domain::nostr::feed_filter::{
@@ -336,6 +336,7 @@ impl NostrEvents {
 
 impl SubscriptionSource for NostrEvents {
     type Output = Message;
+    type Key = u64;
 
     fn stream(&self) -> BoxStream<'static, Self::Output> {
         let (msg_tx, msg_rx) = mpsc::unbounded_channel();
@@ -365,11 +366,10 @@ impl SubscriptionSource for NostrEvents {
         .boxed()
     }
 
-    fn id(&self) -> SubscriptionId {
-        // Use the Arc pointer address as a unique ID
-        // Same Arc<Client> instance = same ID, different Client instance = different ID
-        let ptr = Arc::as_ptr(&self.client) as usize as u64;
-        SubscriptionId::of::<Self>(ptr)
+    fn key(&self) -> Self::Key {
+        // Use the Arc pointer address as the structural key
+        // Same Arc<Client> instance = same key, different Client instance = different key
+        Arc::as_ptr(&self.client) as usize as u64
     }
 }
 
@@ -395,44 +395,40 @@ mod tests {
     }
 
     #[test]
-    fn test_subscription_id_uses_arc_pointer() {
+    fn test_subscription_key_uses_arc_pointer() {
         use tears::SubscriptionSource;
 
         let client = Arc::new(Client::default());
         let nostr_events1 = NostrEvents::new(Arc::clone(&client));
         let nostr_events2 = nostr_events1.clone();
 
-        // Same Arc<Client> should produce same ID
+        // Same Arc<Client> should produce same key
         assert_eq!(
-            nostr_events1.id(),
-            nostr_events2.id(),
-            "Cloned NostrEvents should share the same Arc and produce the same ID"
+            nostr_events1.key(),
+            nostr_events2.key(),
+            "Cloned NostrEvents should share the same Arc and produce the same key"
         );
 
-        // Verify ID is not zero (regression test for the bug where ID was always 0)
-        let id1 = nostr_events1.id();
+        // Verify key is not zero (regression test for the bug where ID was always 0)
+        let key1 = nostr_events1.key();
         let ptr1 = Arc::as_ptr(&nostr_events1.client) as usize as u64;
-        assert_eq!(
-            SubscriptionId::of::<NostrEvents>(ptr1),
-            id1,
-            "ID should be based on Arc pointer address"
-        );
+        assert_eq!(ptr1, key1, "Key should be based on Arc pointer address");
         assert_ne!(
             ptr1, 0,
             "Arc pointer address should not be zero in normal circumstances"
         );
 
-        // Reusing the same Arc should produce the same ID
+        // Reusing the same Arc should produce the same key
         let nostr_events3 = NostrEvents::new(Arc::clone(&client));
         assert_eq!(
-            nostr_events1.id(),
-            nostr_events3.id(),
-            "Different NostrEvents instances with the same Arc<Client> should have the same ID"
+            nostr_events1.key(),
+            nostr_events3.key(),
+            "Different NostrEvents instances with the same Arc<Client> should have the same key"
         );
     }
 
     #[test]
-    fn test_subscription_id_different_clients() {
+    fn test_subscription_key_different_clients() {
         use tears::SubscriptionSource;
 
         // Create two separate clients with different Arcs
@@ -442,14 +438,14 @@ mod tests {
         let nostr_events1 = NostrEvents::new(Arc::clone(&client1));
         let nostr_events2 = NostrEvents::new(Arc::clone(&client2));
 
-        // Different Arc<Client> instances should produce different IDs
+        // Different Arc<Client> instances should produce different keys
         assert_ne!(
-            nostr_events1.id(),
-            nostr_events2.id(),
-            "Different Arc<Client> instances should produce different subscription IDs"
+            nostr_events1.key(),
+            nostr_events2.key(),
+            "Different Arc<Client> instances should produce different subscription keys"
         );
 
-        // Verify both IDs use actual pointer addresses
+        // Verify both keys use actual pointer addresses
         let ptr1 = Arc::as_ptr(&nostr_events1.client) as usize as u64;
         let ptr2 = Arc::as_ptr(&nostr_events2.client) as usize as u64;
         assert_ne!(
@@ -459,20 +455,20 @@ mod tests {
     }
 
     #[test]
-    fn test_subscription_id_different_arc_instances() {
+    fn test_subscription_key_different_arc_instances() {
         use tears::SubscriptionSource;
 
         let client = Client::default();
 
-        // Creating separate Arc instances produces different IDs
+        // Creating separate Arc instances produces different keys
         let nostr_events1 = NostrEvents::new(Arc::new(client.clone()));
         let nostr_events2 = NostrEvents::new(Arc::new(client));
 
-        // Different Arc instances should produce different IDs
+        // Different Arc instances should produce different keys
         assert_ne!(
-            nostr_events1.id(),
-            nostr_events2.id(),
-            "Different Arc instances produce different subscription IDs"
+            nostr_events1.key(),
+            nostr_events2.key(),
+            "Different Arc instances produce different subscription keys"
         );
 
         // This demonstrates why you must share the same Arc<Client>

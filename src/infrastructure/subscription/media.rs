@@ -1,7 +1,7 @@
 use futures::stream;
 use futures::stream::{BoxStream, StreamExt};
 use nowhear::{MediaEvent, MediaSource, MediaSourceBuilder, MediaSourceError};
-use tears::{SubscriptionId, SubscriptionSource};
+use tears::SubscriptionSource;
 
 #[derive(Clone, Debug, Default)]
 pub struct MediaEvents;
@@ -15,6 +15,7 @@ impl MediaEvents {
 
 impl SubscriptionSource for MediaEvents {
     type Output = Result<MediaEvent, MediaSourceError>;
+    type Key = ();
 
     fn stream(&self) -> BoxStream<'static, Self::Output> {
         stream::once(async {
@@ -30,9 +31,7 @@ impl SubscriptionSource for MediaEvents {
         .boxed()
     }
 
-    fn id(&self) -> SubscriptionId {
-        SubscriptionId::of::<Self>(42)
-    }
+    fn key(&self) -> Self::Key {}
 }
 
 #[cfg(test)]

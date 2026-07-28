@@ -85,7 +85,7 @@ impl<'a> Application for TearsApp<'a> {
     // machine is to move the per-domain dispatch (`handle_timeline_msg`,
     // `handle_editor_msg`, `handle_nostr_msg`, ...) into `AppState::update(AppMsg)`,
     // leaving `TearsApp` as a thin tears adapter responsible only for IO-coupled
-    // concerns: key -> message mapping, subscriptions, and `Command::effect(Quit)`.
+    // concerns: key -> message mapping, subscriptions, and `Command::quit()`.
     // That would make `AppState` own both state and transitions, and would let its
     // fields become private (external code could only drive it via messages).
     fn update(&mut self, msg: AppMsg) -> Command<Self::Message> {
@@ -187,7 +187,7 @@ impl<'a> TearsApp<'a> {
                 let _ = self.state.close_connection();
 
                 // Trigger the quit action
-                Command::effect(Action::Quit)
+                Command::quit()
             }
             SystemMsg::Resize(width, height) => {
                 log::debug!("Terminal resized to {width}x{height}");
@@ -433,6 +433,8 @@ impl<'a> TearsApp<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
+
     use super::*;
     use crate::application::config::Config;
     use crate::domain::nostr::FeedKind;
@@ -450,7 +452,7 @@ mod tests {
             pubkey: keys.public_key(),
             config,
             nostr_client: client,
-            tick_timer: Timer::try_new(62).expect("test timer interval must be valid"),
+            tick_timer: Timer::new(NonZeroU64::new(62).expect("non-zero")),
         };
 
         let (app, _) = TearsApp::new(flags);
@@ -676,7 +678,7 @@ mod tests {
         let cmd = app.update(quit_msg);
         assert!(cmd.is_some());
 
-        // Command should be Action::Quit effect (we can't directly test this,
+        // Command should be a Command::quit() effect (we can't directly test this,
         // but the system should have processed it)
         // The test passes if no panic occurs
     }
