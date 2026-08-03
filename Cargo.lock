@@ -2066,9 +2066,9 @@ dependencies = [
 
 [[package]]
 name = "nowhear"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2fdd865922d4e1c5dbd7ef417cd529e1c21a556695b978c2b343e7574ad618e"
+checksum = "b9dd3ce0e2186ee7a2273aa4077ec5e7c0080079b310a9aa784c44646735b639"
 dependencies = [
  "base64",
  "futures",
