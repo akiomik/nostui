@@ -40,7 +40,7 @@ impl MusicStatus {
 
     /// Build a NIP-38 live status event for the currently playing track.
     pub fn live_status_builder(&self) -> EventBuilder {
-        EventBuilder::live_status(self.to_live_status(), self.content())
+        LiveStatusEvent::new(self.to_live_status(), self.content()).into_event_builder()
     }
 }
 
@@ -225,7 +225,7 @@ mod tests {
         let keys = Keys::generate();
         let event = status
             .live_status_builder()
-            .sign_with_keys(&keys)
+            .finalize(&keys)
             .expect("Failed to sign live status event");
 
         assert_eq!(event.kind, Kind::UserStatus);

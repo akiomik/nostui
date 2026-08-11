@@ -53,25 +53,17 @@ impl Ord for SortableEventId {
 /// their target event with an `e` tag; when multiple `e` tags are present, the
 /// last one identifies the target. Returns `None` if there is no `e` tag.
 pub fn find_event_id_from_last_e_tag(event: &Event) -> Option<EventId> {
-    event
-        .tags
-        .filter_standardized(TagKind::SingleLetter(SingleLetterTag::lowercase(
-            Alphabet::E,
-        )))
-        .last()
-        .and_then(|tag| match tag {
-            TagStandard::Event { event_id, .. } => Some(*event_id),
-            _ => None,
-        })
+    event.tags.event_ids().last()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use color_eyre::eyre::Result;
 
     #[test]
     fn test_sortable_event_id_creation() {
-        let event_id = EventId::all_zeros();
+        let event_id = EventId::from_byte_array([0; EventId::LEN]);
         let timestamp = Timestamp::from(1000);
 
         let sortable = SortableEventId::new(event_id, timestamp);
@@ -85,9 +77,9 @@ mod tests {
         let keys = Keys::generate();
         let timestamp = Timestamp::from(1234567890);
 
-        let event = EventBuilder::text_note("test")
+        let event = EventBuilder::new(Kind::TextNote, "test")
             .custom_created_at(timestamp)
-            .sign_with_keys(&keys)?;
+            .finalize(&keys)?;
 
         let sortable = SortableEventId::from_event(&event);
 
@@ -99,7 +91,7 @@ mod tests {
 
     #[test]
     fn test_sortable_event_id_ordering_by_timestamp() {
-        let event_id1 = EventId::all_zeros();
+        let event_id1 = EventId::from_byte_array([0; EventId::LEN]);
         let event_id2 = EventId::from_slice(&[1u8; 32]).expect("Valid event ID");
 
         let older = SortableEventId::new(event_id1, Timestamp::from(1000));
@@ -126,7 +118,7 @@ mod tests {
 
     #[test]
     fn test_sortable_event_id_equality() {
-        let event_id = EventId::all_zeros();
+        let event_id = EventId::from_byte_array([0; EventId::LEN]);
         let timestamp = Timestamp::from(1000);
 
         let sortable1 = SortableEventId::new(event_id, timestamp);
@@ -142,7 +134,10 @@ mod tests {
 
         let mut set: ReverseSortedSet<SortableEventId> = ReverseSortedSet::new();
 
-        let id1 = SortableEventId::new(EventId::all_zeros(), Timestamp::from(1000));
+        let id1 = SortableEventId::new(
+            EventId::from_byte_array([0; EventId::LEN]),
+            Timestamp::from(1000),
+        );
         let id2 = SortableEventId::new(
             EventId::from_slice(&[1u8; 32]).expect("Valid"),
             Timestamp::from(2000),
@@ -165,11 +160,11 @@ mod tests {
     #[test]
     fn test_find_event_id_from_last_e_tag() {
         let keys = Keys::generate();
-        let target_id = EventId::all_zeros();
+        let target_id = EventId::from_byte_array([0; EventId::LEN]);
 
         let event = EventBuilder::new(Kind::Reaction, "+")
             .tags(vec![Tag::event(target_id)])
-            .sign_with_keys(&keys)
+            .finalize(&keys)
             .expect("Failed to create event");
 
         let found_id = find_event_id_from_last_e_tag(&event);
@@ -179,12 +174,12 @@ mod tests {
     #[test]
     fn test_find_event_id_from_last_e_tag_multiple_tags() {
         let keys = Keys::generate();
-        let first_id = EventId::all_zeros();
+        let first_id = EventId::from_byte_array([0; EventId::LEN]);
         let last_id = EventId::from_slice(&[1u8; 32]).expect("Valid event ID");
 
         let event = EventBuilder::new(Kind::Reaction, "+")
             .tags(vec![Tag::event(first_id), Tag::event(last_id)])
-            .sign_with_keys(&keys)
+            .finalize(&keys)
             .expect("Failed to create event");
 
         // Should return the last 'e' tag
@@ -197,7 +192,7 @@ mod tests {
         let keys = Keys::generate();
 
         let event = EventBuilder::new(Kind::Reaction, "+")
-            .sign_with_keys(&keys)
+            .finalize(&keys)
             .expect("Failed to create event");
 
         let found_id = find_event_id_from_last_e_tag(&event);

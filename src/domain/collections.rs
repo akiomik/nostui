@@ -187,8 +187,9 @@ impl fmt::Display for EventSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nostr_sdk::nostr::{Kind, Timestamp};
+    use color_eyre::eyre::Result;
     use nostr_sdk::prelude::Signature;
+    use nostr_sdk::prelude::{Kind, Timestamp};
 
     fn create_test_event(id_suffix: u8, content: &str) -> Result<Event> {
         let mut id_bytes = [0u8; 32];

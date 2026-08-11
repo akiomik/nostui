@@ -10,7 +10,7 @@ use tears::{subscription::time::Timer, FrameRate, Runtime};
 
 use nostui::{
     application::config::Config,
-    infrastructure::{cli::Cli, nostr::PublicKeySigner},
+    infrastructure::cli::Cli,
     runtime::{InitFlags, TearsApp},
     utils::{initialize_logging, initialize_panic_handler},
 };
@@ -58,15 +58,14 @@ async fn tokio_main() -> Result<()> {
     let config = Config::new()?;
 
     // Create Nostr client
-    let (client, pubkey) = if config.key.expose_secret().starts_with("npub") {
+    let (client, pubkey, keys) = if config.key.expose_secret().starts_with("npub") {
         let pubkey = PublicKey::parse(config.key.expose_secret())?;
-        let signer = PublicKeySigner::new(pubkey);
-        (Client::new(signer), pubkey)
+        (Client::new(), pubkey, None)
     } else {
         let keys = Keys::parse(config.key.expose_secret())
             .or(Keys::parse(config.privatekey.expose_secret()))?;
         let pubkey = keys.public_key();
-        (Client::new(keys), pubkey)
+        (Client::new(), pubkey, Some(keys))
     };
     log::info!("Starting nostui with public key: {pubkey}");
 
@@ -83,6 +82,7 @@ async fn tokio_main() -> Result<()> {
     // Create initialization flags for TearsApp
     let init_flags = InitFlags {
         pubkey,
+        keys,
         config,
         nostr_client: client,
         tick_timer: tick_timer_from_rate(args.tick_rate)?,

@@ -1,16 +1,17 @@
+use nostr_sdk::prelude::PublicKey as NostrPublicKey;
 use ratatui::prelude::*;
 
 use crate::{domain::nostr::Profile, presentation::widgets::public_key::PublicKey};
 
 pub struct NameWithHandle {
-    pubkey: nostr_sdk::PublicKey,
+    pubkey: NostrPublicKey,
     display_name: Option<String>,
     handle: Option<String>,
     highlighted: bool,
 }
 
 impl NameWithHandle {
-    pub fn new(pubkey: nostr_sdk::PublicKey, profile: Option<&Profile>, highlighted: bool) -> Self {
+    pub fn new(pubkey: NostrPublicKey, profile: Option<&Profile>, highlighted: bool) -> Self {
         Self {
             pubkey,
             display_name: profile.and_then(|profile| profile.display_name()).cloned(),

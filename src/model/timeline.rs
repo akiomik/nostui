@@ -289,27 +289,35 @@ mod tests {
         id_bytes[31] = id_suffix; // Make each ID unique
 
         // Create a basic text note event
-        EventBuilder::text_note(content)
+        EventBuilder::new(Kind::TextNote, content)
             .custom_created_at(Timestamp::from(timestamp))
-            .sign_with_keys(&keys)
+            .finalize(&keys)
             .expect("Failed to create test event")
     }
 
     // Helper function to create a reaction event
     fn create_reaction_event(target_event: &Event, timestamp: u64) -> Event {
         let keys = Keys::generate();
-        EventBuilder::reaction(target_event, "+")
+        EventBuilder::new(Kind::Reaction, "+")
+            .tags([
+                Tag::event(target_event.id),
+                Tag::public_key(target_event.pubkey),
+            ])
             .custom_created_at(Timestamp::from(timestamp))
-            .sign_with_keys(&keys)
+            .finalize(&keys)
             .expect("Failed to create reaction event")
     }
 
     // Helper function to create a repost event
     fn create_repost_event(target_event: &Event, timestamp: u64) -> Event {
         let keys = Keys::generate();
-        EventBuilder::repost(target_event, None)
+        EventBuilder::new(Kind::Repost, target_event.as_json())
+            .tags([
+                Tag::event(target_event.id),
+                Tag::public_key(target_event.pubkey),
+            ])
             .custom_created_at(Timestamp::from(timestamp))
-            .sign_with_keys(&keys)
+            .finalize(&keys)
             .expect("Failed to create repost event")
     }
 
@@ -319,7 +327,7 @@ mod tests {
         EventBuilder::new(Kind::ZapReceipt, "")
             .tags(vec![Tag::event(target_event_id)])
             .custom_created_at(Timestamp::from(timestamp))
-            .sign_with_keys(&keys)
+            .finalize(&keys)
             .expect("Failed to create zap receipt event")
     }
 

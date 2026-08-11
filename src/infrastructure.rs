@@ -8,5 +8,4 @@
 //! - Performance monitoring
 
 pub mod cli;
-pub mod nostr;
 pub mod subscription;

@@ -1,14 +1,14 @@
-use nostr_sdk::ToBech32;
+use nostr_sdk::prelude::{PublicKey as NostrPublicKey, ToBech32};
 use ratatui::prelude::*;
 
 use crate::domain::text::shorten_npub;
 
 pub struct PublicKey {
-    key: nostr_sdk::PublicKey,
+    key: NostrPublicKey,
 }
 
 impl PublicKey {
-    pub fn new(key: nostr_sdk::PublicKey) -> Self {
+    pub fn new(key: NostrPublicKey) -> Self {
         Self { key }
     }
 
@@ -37,7 +37,7 @@ mod tests {
 
     #[test]
     fn test_new() -> Result<()> {
-        let key = nostr_sdk::PublicKey::from_str(
+        let key = NostrPublicKey::from_str(
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )?;
         let publickey = PublicKey::new(key);
@@ -49,7 +49,7 @@ mod tests {
 
     #[test]
     fn test_shortened() -> Result<()> {
-        let key = nostr_sdk::PublicKey::from_str(
+        let key = NostrPublicKey::from_str(
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )?;
         let publickey = PublicKey::new(key);
@@ -60,7 +60,7 @@ mod tests {
 
     #[test]
     fn test_from_public_key_to_text() -> Result<()> {
-        let key = nostr_sdk::PublicKey::from_str(
+        let key = NostrPublicKey::from_str(
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )?;
         let publickey = PublicKey::new(key);
@@ -74,7 +74,7 @@ mod tests {
 
     #[test]
     fn test_render_public_key_widget() -> Result<()> {
-        let key = nostr_sdk::PublicKey::from_str(
+        let key = NostrPublicKey::from_str(
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )?;
         let publickey = PublicKey::new(key);
@@ -111,7 +111,7 @@ mod tests {
         ];
 
         for key_str in keys {
-            let key = nostr_sdk::PublicKey::from_str(key_str)?;
+            let key = NostrPublicKey::from_str(key_str)?;
             let publickey = PublicKey::new(key);
             let shortened = publickey.shortened();
 
