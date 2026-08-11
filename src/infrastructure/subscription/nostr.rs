@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc, time::Duration};
 
 use futures::{
     stream::{self, BoxStream},
@@ -14,6 +14,15 @@ use crate::domain::nostr::feed_filter::{
 };
 use crate::domain::nostr::FeedKind;
 use crate::model::nostr_gateway::{CommandError, Message, NostrCommand};
+
+const CONTACT_LIST_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn followings_from_latest_contact_list(events: &BTreeSet<Event>) -> Vec<PublicKey> {
+    events
+        .first()
+        .map(|event| event.tags.public_keys().collect())
+        .unwrap_or_default()
+}
 
 #[derive(Debug, Clone)]
 pub struct NostrEvents {
@@ -62,15 +71,18 @@ impl NostrEvents {
         contact_list_cache: Arc<RwLock<Option<Vec<PublicKey>>>>,
         msg_tx: &mpsc::UnboundedSender<Message>,
     ) -> BoxStream<'static, ClientNotification> {
+        let filter = Filter::new()
+            .author(pubkey)
+            .kind(Kind::ContactList)
+            .limit(1);
+
         match client
-            .fetch_events(Filter::new().author(pubkey).kind(Kind::ContactList))
+            .fetch_events(filter)
+            .timeout(CONTACT_LIST_TIMEOUT)
             .await
         {
             Ok(events) => {
-                let mut followings: Vec<PublicKey> = events
-                    .into_iter()
-                    .flat_map(|event| event.tags.public_keys().collect::<Vec<_>>())
-                    .collect();
+                let mut followings = followings_from_latest_contact_list(&events);
                 // Always include the user's own posts in the home feed,
                 // even if they don't follow themselves.
                 followings = with_own_pubkey(followings, pubkey);
@@ -384,6 +396,31 @@ impl SubscriptionSource for NostrEvents {
 mod tests {
     use super::*;
     use futures::StreamExt;
+
+    #[test]
+    fn followings_use_only_the_latest_contact_list() {
+        let author = Keys::generate();
+        let unfollowed = Keys::generate();
+        let following = Keys::generate();
+
+        let old_contact_list = EventBuilder::new(Kind::ContactList, "")
+            .tags([Tag::public_key(unfollowed.public_key())])
+            .custom_created_at(Timestamp::from(1))
+            .finalize(&author)
+            .expect("valid contact list event");
+        let latest_contact_list = EventBuilder::new(Kind::ContactList, "")
+            .tags([Tag::public_key(following.public_key())])
+            .custom_created_at(Timestamp::from(2))
+            .finalize(&author)
+            .expect("valid contact list event");
+
+        let events = BTreeSet::from([old_contact_list, latest_contact_list]);
+
+        assert_eq!(
+            followings_from_latest_contact_list(&events),
+            vec![following.public_key()]
+        );
+    }
 
     #[tokio::test]
     async fn test_first_message_is_ready() {
