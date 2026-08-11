@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use futures::{
     stream::{self, BoxStream},
@@ -7,7 +6,7 @@ use futures::{
 };
 use nostr_sdk::prelude::*;
 use tears::SubscriptionSource;
-use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::sync::{mpsc, RwLock};
 
 use crate::domain::nostr::feed_filter::{
     home_feed_filters, home_load_more_filter, mention_feed_filters, mention_load_more_filter,
@@ -16,11 +15,11 @@ use crate::domain::nostr::feed_filter::{
 use crate::domain::nostr::FeedKind;
 use crate::model::nostr_gateway::{CommandError, Message, NostrCommand};
 
-const DEFAULT_CONTACT_LIST_TIMEOUT_SECS: u64 = 10;
-
 #[derive(Debug, Clone)]
 pub struct NostrEvents {
     client: Arc<Client>,
+    pubkey: PublicKey,
+    keys: Option<Keys>,
     /// Cached contact list (following) fetched during initialization
     /// Shared across all instances via `Arc<RwLock<>>`
     contact_list: Arc<RwLock<Option<Vec<PublicKey>>>>,
@@ -37,16 +36,19 @@ impl NostrEvents {
     ///
     /// ```
     /// use std::sync::Arc;
-    /// use nostr_sdk::Client;
+    /// use nostr_sdk::prelude::Client;
     /// use nostui::infrastructure::subscription::nostr::NostrEvents;
     ///
     /// let client = Arc::new(Client::default());
-    /// let nostr_events = NostrEvents::new(Arc::clone(&client));
+    /// let keys = nostr_sdk::prelude::Keys::generate();
+    /// let nostr_events = NostrEvents::new(Arc::clone(&client), keys.public_key(), Some(keys));
     /// ```
     #[must_use]
-    pub fn new(client: Arc<Client>) -> Self {
+    pub fn new(client: Arc<Client>, pubkey: PublicKey, keys: Option<Keys>) -> Self {
         Self {
             client,
+            pubkey,
+            keys,
             contact_list: Arc::new(RwLock::new(None)),
         }
     }
@@ -56,21 +58,22 @@ impl NostrEvents {
     /// Sends SubscriptionCreated messages for NostrState to track
     async fn initialize_home_feed(
         client: &Client,
+        pubkey: PublicKey,
         contact_list_cache: Arc<RwLock<Option<Vec<PublicKey>>>>,
         msg_tx: &mpsc::UnboundedSender<Message>,
-    ) -> broadcast::Receiver<RelayPoolNotification> {
+    ) -> BoxStream<'static, ClientNotification> {
         match client
-            .get_contact_list_public_keys(Duration::from_secs(DEFAULT_CONTACT_LIST_TIMEOUT_SECS))
+            .fetch_events(Filter::new().author(pubkey).kind(Kind::ContactList))
             .await
         {
-            Ok(mut followings) => {
+            Ok(events) => {
+                let mut followings: Vec<PublicKey> = events
+                    .into_iter()
+                    .flat_map(|event| event.tags.public_keys().collect::<Vec<_>>())
+                    .collect();
                 // Always include the user's own posts in the home feed,
                 // even if they don't follow themselves.
-                if let Ok(signer) = client.signer().await {
-                    if let Ok(own_pubkey) = signer.get_public_key().await {
-                        followings = with_own_pubkey(followings, own_pubkey);
-                    }
-                }
+                followings = with_own_pubkey(followings, pubkey);
 
                 // Cache the contact list (including own pubkey) for future use
                 {
@@ -83,9 +86,9 @@ impl NostrEvents {
 
                 // Subscribe to both feed and profile data concurrently
                 let result = tokio::try_join!(
-                    client.subscribe(feed_backward_filter, None),
-                    client.subscribe(feed_forward_filter, None),
-                    client.subscribe(profile_filter, None)
+                    client.subscribe(feed_backward_filter),
+                    client.subscribe(feed_forward_filter),
+                    client.subscribe(profile_filter)
                 );
 
                 if let Ok((sub_id1, sub_id2, sub_id3)) = result {
@@ -93,15 +96,15 @@ impl NostrEvents {
                     let feed = FeedKind::Home;
                     let _ = msg_tx.send(Message::SubscriptionCreated {
                         feed: feed.clone(),
-                        subscription_id: sub_id1.val,
+                        subscription_id: sub_id1.value,
                     });
                     let _ = msg_tx.send(Message::SubscriptionCreated {
                         feed: feed.clone(),
-                        subscription_id: sub_id2.val,
+                        subscription_id: sub_id2.value,
                     });
                     let _ = msg_tx.send(Message::SubscriptionCreated {
                         feed,
-                        subscription_id: sub_id3.val,
+                        subscription_id: sub_id3.value,
                     });
                 }
 
@@ -118,16 +121,27 @@ impl NostrEvents {
     async fn handle_command(
         cmd: NostrCommand,
         client: &Client,
+        pubkey: PublicKey,
+        keys: Option<&Keys>,
         contact_list_cache: Arc<RwLock<Option<Vec<PublicKey>>>>,
         msg_tx: &mpsc::UnboundedSender<Message>,
     ) {
         match cmd {
             NostrCommand::SendEventBuilder { event_builder } => {
-                if let Err(e) = client.send_event_builder(event_builder).await {
+                let result: Result<(), String> = match keys {
+                    Some(keys) => match event_builder.finalize(keys) {
+                        Ok(event) => client
+                            .send_event(&event)
+                            .await
+                            .map(|_| ())
+                            .map_err(|e| e.to_string()),
+                        Err(e) => Err(e.to_string()),
+                    },
+                    None => Err(String::from("cannot send events in read-only mode")),
+                };
+                if let Err(e) = result {
                     let _ = msg_tx.send(Message::Error {
-                        error: CommandError::SendEventFailed {
-                            error: e.to_string(),
-                        },
+                        error: CommandError::SendEventFailed { error: e },
                     });
                 }
             }
@@ -170,26 +184,16 @@ impl NostrEvents {
                             return;
                         }
                     },
-                    FeedKind::Mention => {
-                        let Ok(signer) = client.signer().await else {
-                            log::warn!("No signer available, cannot load more mention events");
-                            return;
-                        };
-                        let Ok(own_pubkey) = signer.get_public_key().await else {
-                            log::warn!("Failed to get public key, cannot load more mention events");
-                            return;
-                        };
-                        mention_load_more_filter(own_pubkey, since)
-                    }
+                    FeedKind::Mention => mention_load_more_filter(pubkey, since),
                     FeedKind::Author(pubkey) => user_load_more_filter(*pubkey, since),
                 };
 
-                match client.subscribe(filter, None).await {
+                match client.subscribe(filter).await {
                     Ok(sub_id) => {
                         // Send SubscriptionCreated to track this load-more subscription
                         let _ = msg_tx.send(Message::SubscriptionCreated {
                             feed,
-                            subscription_id: sub_id.val,
+                            subscription_id: sub_id.value,
                         });
                     }
                     Err(e) => {
@@ -203,34 +207,23 @@ impl NostrEvents {
                         log::warn!("Home feed should be initialized, not subscribed via command");
                     }
                     FeedKind::Mention => {
-                        let Ok(signer) = client.signer().await else {
-                            log::error!("No signer available, cannot subscribe to mention feed");
-                            return;
-                        };
-                        let Ok(own_pubkey) = signer.get_public_key().await else {
-                            log::error!(
-                                "Failed to get public key, cannot subscribe to mention feed"
-                            );
-                            return;
-                        };
-
                         let [backward_filter, forward_filter] =
-                            mention_feed_filters(own_pubkey, Timestamp::now());
+                            mention_feed_filters(pubkey, Timestamp::now());
 
                         let result = tokio::try_join!(
-                            client.subscribe(backward_filter, None),
-                            client.subscribe(forward_filter, None)
+                            client.subscribe(backward_filter),
+                            client.subscribe(forward_filter)
                         );
 
                         match result {
                             Ok((sub_id1, sub_id2)) => {
                                 let _ = msg_tx.send(Message::SubscriptionCreated {
                                     feed: feed.clone(),
-                                    subscription_id: sub_id1.val,
+                                    subscription_id: sub_id1.value,
                                 });
                                 let _ = msg_tx.send(Message::SubscriptionCreated {
                                     feed,
-                                    subscription_id: sub_id2.val,
+                                    subscription_id: sub_id2.value,
                                 });
                             }
                             Err(e) => {
@@ -245,8 +238,8 @@ impl NostrEvents {
 
                         // Subscribe to both filters concurrently
                         let result = tokio::try_join!(
-                            client.subscribe(backward_filter, None),
-                            client.subscribe(forward_filter, None)
+                            client.subscribe(backward_filter),
+                            client.subscribe(forward_filter)
                         );
 
                         match result {
@@ -254,11 +247,11 @@ impl NostrEvents {
                                 // Send SubscriptionCreated messages for both subscriptions
                                 let _ = msg_tx.send(Message::SubscriptionCreated {
                                     feed: feed.clone(),
-                                    subscription_id: sub_id1.val,
+                                    subscription_id: sub_id1.value,
                                 });
                                 let _ = msg_tx.send(Message::SubscriptionCreated {
                                     feed,
-                                    subscription_id: sub_id2.val,
+                                    subscription_id: sub_id2.value,
                                 });
                             }
                             Err(e) => {
@@ -274,8 +267,10 @@ impl NostrEvents {
                     subscription_ids.len()
                 );
                 for sub_id in subscription_ids {
-                    client.unsubscribe(&sub_id).await;
-                    log::info!("Unsubscribed from {sub_id:?}");
+                    match client.unsubscribe(&sub_id).await {
+                        Ok(_) => log::info!("Unsubscribed from {sub_id:?}"),
+                        Err(e) => log::warn!("Failed to unsubscribe from {sub_id:?}: {e}"),
+                    }
                 }
             }
             NostrCommand::Shutdown => {
@@ -287,26 +282,29 @@ impl NostrEvents {
     /// Main subscription loop that processes notifications and commands
     async fn run_subscription_loop(
         client: Client,
+        pubkey: PublicKey,
+        keys: Option<Keys>,
         contact_list_cache: Arc<RwLock<Option<Vec<PublicKey>>>>,
         msg_tx: mpsc::UnboundedSender<Message>,
         mut cmd_rx: mpsc::UnboundedReceiver<NostrCommand>,
     ) {
         // Initialize the home feed subscription
         let mut notifications =
-            Self::initialize_home_feed(&client, Arc::clone(&contact_list_cache), &msg_tx).await;
+            Self::initialize_home_feed(&client, pubkey, Arc::clone(&contact_list_cache), &msg_tx)
+                .await;
 
         loop {
             tokio::select! {
                 // Handle incoming notifications from relays
-                notification = notifications.recv() => {
+                notification = notifications.next() => {
                     match notification {
-                        Ok(notif) => {
+                        Some(notif) => {
                             if msg_tx.send(Message::Notification(Box::new(notif))).is_err() {
                                 // Receiver dropped, exit loop
                                 break;
                             }
                         }
-                        Err(_) => {
+                        None => {
                             // Notification channel closed, exit loop
                             break;
                         }
@@ -321,7 +319,7 @@ impl NostrEvents {
                             break;
                         }
                         Some(cmd) => {
-                            Self::handle_command(cmd, &client, Arc::clone(&contact_list_cache), &msg_tx).await;
+                            Self::handle_command(cmd, &client, pubkey, keys.as_ref(), Arc::clone(&contact_list_cache), &msg_tx).await;
                         }
                         None => {
                             // Command channel closed, exit loop
@@ -344,6 +342,8 @@ impl SubscriptionSource for NostrEvents {
 
         // Clone the Arc, not the Client itself
         let client = Arc::clone(&self.client);
+        let pubkey = self.pubkey;
+        let keys = self.keys.clone();
         let contact_list_cache = Arc::clone(&self.contact_list);
 
         tokio::spawn(async move {
@@ -355,8 +355,15 @@ impl SubscriptionSource for NostrEvents {
 
             // Run the main subscription loop
             // Dereference Arc to get &Client for the function call
-            Self::run_subscription_loop((*client).clone(), contact_list_cache, msg_tx, cmd_rx)
-                .await;
+            Self::run_subscription_loop(
+                (*client).clone(),
+                pubkey,
+                keys,
+                contact_list_cache,
+                msg_tx,
+                cmd_rx,
+            )
+            .await;
         });
 
         stream::unfold(msg_rx, |mut rx| async move {
@@ -381,7 +388,7 @@ mod tests {
     #[tokio::test]
     async fn test_first_message_is_ready() {
         let client = Arc::new(Client::default());
-        let nostr_events = NostrEvents::new(client);
+        let nostr_events = NostrEvents::new(client, Keys::generate().public_key(), None);
 
         let mut stream = nostr_events.stream();
 
@@ -399,7 +406,8 @@ mod tests {
         use tears::SubscriptionSource;
 
         let client = Arc::new(Client::default());
-        let nostr_events1 = NostrEvents::new(Arc::clone(&client));
+        let nostr_events1 =
+            NostrEvents::new(Arc::clone(&client), Keys::generate().public_key(), None);
         let nostr_events2 = nostr_events1.clone();
 
         // Same Arc<Client> should produce same key
@@ -419,7 +427,8 @@ mod tests {
         );
 
         // Reusing the same Arc should produce the same key
-        let nostr_events3 = NostrEvents::new(Arc::clone(&client));
+        let nostr_events3 =
+            NostrEvents::new(Arc::clone(&client), Keys::generate().public_key(), None);
         assert_eq!(
             nostr_events1.key(),
             nostr_events3.key(),
@@ -435,8 +444,10 @@ mod tests {
         let client1 = Arc::new(Client::default());
         let client2 = Arc::new(Client::default());
 
-        let nostr_events1 = NostrEvents::new(Arc::clone(&client1));
-        let nostr_events2 = NostrEvents::new(Arc::clone(&client2));
+        let nostr_events1 =
+            NostrEvents::new(Arc::clone(&client1), Keys::generate().public_key(), None);
+        let nostr_events2 =
+            NostrEvents::new(Arc::clone(&client2), Keys::generate().public_key(), None);
 
         // Different Arc<Client> instances should produce different keys
         assert_ne!(
@@ -461,8 +472,12 @@ mod tests {
         let client = Client::default();
 
         // Creating separate Arc instances produces different keys
-        let nostr_events1 = NostrEvents::new(Arc::new(client.clone()));
-        let nostr_events2 = NostrEvents::new(Arc::new(client));
+        let nostr_events1 = NostrEvents::new(
+            Arc::new(client.clone()),
+            Keys::generate().public_key(),
+            None,
+        );
+        let nostr_events2 = NostrEvents::new(Arc::new(client), Keys::generate().public_key(), None);
 
         // Different Arc instances should produce different keys
         assert_ne!(

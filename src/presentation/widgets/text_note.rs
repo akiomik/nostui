@@ -51,7 +51,7 @@ impl<'a> TextNoteWidget<'a> {
     fn fixed_lines(&self) -> u16 {
         let base = Self::NAME_LINES + Self::META_LINES + Self::STATS_LINES + Self::SEPARATOR_LINES;
 
-        if self.text_note.find_reply_tag().is_some() {
+        if self.text_note.find_reply_event_id().is_some() {
             base + Self::REPLY_ANNOTATION_LINES
         } else {
             base
@@ -64,7 +64,7 @@ impl<'a> TextNoteWidget<'a> {
             .map(|pubkey| {
                 self.ctx
                     .profiles
-                    .get(pubkey)
+                    .get(&pubkey)
                     .map(|p| p.name())
                     .unwrap_or_else(|| {
                         let Ok(npub) = pubkey.to_bech32();
@@ -118,7 +118,7 @@ impl<'a> Widget for TextNoteWidget<'a> {
         // `fixed_lines`; keep the two in sync when changing the layout.
         let mut text = Text::default();
 
-        if let Some(TagStandard::Event { event_id, .. }) = self.text_note.find_reply_tag() {
+        if let Some(event_id) = self.text_note.find_reply_event_id() {
             let mentioned_names = self.mentioned_names();
             let reply_text = if mentioned_names.is_empty() {
                 let Ok(note1) = event_id.to_bech32();
@@ -150,8 +150,8 @@ impl<'a> Widget for TextNoteWidget<'a> {
         text.extend(content);
 
         let created_at = self.formatted_created_at();
-        let meta = match self.text_note.find_client_tag() {
-            Some(TagStandard::Client { name, .. }) => format!("{created_at} | via {name}"),
+        let meta = match self.text_note.find_client_name() {
+            Some(name) => format!("{created_at} | via {name}"),
             _ => created_at,
         };
         text.extend(Text::from(Line::styled(
@@ -178,19 +178,19 @@ impl<'a> Widget for TextNoteWidget<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nostr_sdk::nostr::{EventBuilder, Keys};
+    use nostr_sdk::prelude::{EventBuilder, Keys};
     use std::collections::HashMap;
     use std::error::Error;
 
     fn create_test_event(content: &str) -> Result<Event, Box<dyn Error>> {
         let keys = Keys::generate();
-        Ok(EventBuilder::text_note(content).sign_with_keys(&keys)?)
+        Ok(EventBuilder::new(Kind::TextNote, content).finalize(&keys)?)
     }
 
     fn create_test_event_with_tags(content: &str, tags: Vec<Tag>) -> Result<Event, Box<dyn Error>> {
         let keys = Keys::generate();
-        let builder = EventBuilder::text_note(content).tags(tags);
-        Ok(builder.sign_with_keys(&keys)?)
+        let builder = EventBuilder::new(Kind::TextNote, content).tags(tags);
+        Ok(builder.finalize(&keys)?)
     }
 
     fn create_test_profile(name: &str, display_name: Option<&str>) -> Profile {
@@ -581,7 +581,10 @@ mod tests {
 
     #[test]
     fn test_render_with_client_tag() -> Result<(), Box<dyn Error>> {
-        let client_tag = Tag::custom(TagKind::Client, vec!["TestClient", "https://test.com"]);
+        let client_tag = Tag::from(Nip89Tag::Client {
+            name: String::from("TestClient"),
+            address: None,
+        });
         let event = create_test_event_with_tags("Test", vec![client_tag])?;
         let text_note = TextNote::new(event);
 

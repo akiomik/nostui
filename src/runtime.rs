@@ -24,6 +24,7 @@ use crate::presentation::components::Components;
 #[derive(Debug)]
 pub struct InitFlags {
     pub pubkey: PublicKey,
+    pub keys: Option<Keys>,
     pub config: Config,
     pub nostr_client: Client,
     pub tick_timer: Timer,
@@ -41,6 +42,10 @@ pub struct TearsApp<'a> {
     components: RefCell<Components>,
     /// Nostr client (wrapped in Arc for sharing across subscriptions)
     nostr_client: Arc<Client>,
+    /// Current account's public key, used for read-only subscriptions.
+    pubkey: PublicKey,
+    /// Private keys used to sign outbound events, if the app is not in read-only mode.
+    keys: Option<Keys>,
     /// Configuration (including keybindings)
     config: Config,
     /// Timer subscription source for application ticks
@@ -69,7 +74,9 @@ impl<'a> Application for TearsApp<'a> {
             state,
             components: RefCell::new(components),
             nostr_client,
+            pubkey: flags.pubkey,
             config,
+            keys: flags.keys,
             tick_timer: flags.tick_timer,
         };
 
@@ -111,8 +118,12 @@ impl<'a> Application for TearsApp<'a> {
             // NostrEvents subscription - reuse the same Arc<Client> across frames
             // This ensures the subscription ID remains constant and the subscription
             // is not recreated every frame
-            Subscription::new(NostrEvents::new(Arc::clone(&self.nostr_client)))
-                .map(|msg| AppMsg::Nostr(NostrMsg::SubscriptionMessage(msg))),
+            Subscription::new(NostrEvents::new(
+                Arc::clone(&self.nostr_client),
+                self.pubkey,
+                self.keys.clone(),
+            ))
+            .map(|msg| AppMsg::Nostr(NostrMsg::SubscriptionMessage(msg))),
             // Timer subscription - interval validated during initialization
             Subscription::new(self.tick_timer.clone()).map(|msg| match msg {
                 TimerEvent::Tick => AppMsg::System(SystemMsg::Tick),
@@ -397,7 +408,7 @@ impl<'a> TearsApp<'a> {
                 // to properly route them to the correct tab.
                 // Ideally, we would cache all events globally and use `Event`, but that would
                 // require a significant architectural change.
-                RelayPoolNotification::Event {
+                ClientNotification::Event {
                     event,
                     subscription_id,
                     ..
@@ -408,13 +419,13 @@ impl<'a> TearsApp<'a> {
                     );
                     Command::none()
                 }
-                RelayPoolNotification::Message { message, .. } => {
+                ClientNotification::Message { message, .. } => {
                     log::debug!("Received relay message: {message:?}");
 
                     if let RelayMessage::Event {
                         subscription_id,
                         event,
-                    } = message
+                    } = *message
                     {
                         self.state
                             .route_relay_event(&subscription_id, event.into_owned())
@@ -422,7 +433,7 @@ impl<'a> TearsApp<'a> {
                         Command::none()
                     }
                 }
-                RelayPoolNotification::Shutdown => self.state.notify_subscription_shutdown(),
+                ClientNotification::Shutdown => self.state.notify_subscription_shutdown(),
             },
             NostrSubscriptionMessage::Error { error } => {
                 self.state.notify_subscription_error(error)
@@ -450,6 +461,7 @@ mod tests {
 
         let flags = InitFlags {
             pubkey: keys.public_key(),
+            keys: Some(keys),
             config,
             nostr_client: client,
             tick_timer: Timer::new(NonZeroU64::new(62).expect("non-zero")),
@@ -465,8 +477,8 @@ mod tests {
 
         // Add a test note to allow selection
         let keys = Keys::generate();
-        let event = EventBuilder::text_note("test note")
-            .sign_with_keys(&keys)
+        let event = EventBuilder::new(Kind::TextNote, "test note")
+            .finalize(&keys)
             .expect("Failed to sign test event");
         let _ = app
             .state
@@ -499,8 +511,8 @@ mod tests {
 
         // Add a test note to allow selection
         let keys = Keys::generate();
-        let event = EventBuilder::text_note("test note")
-            .sign_with_keys(&keys)
+        let event = EventBuilder::new(Kind::TextNote, "test note")
+            .finalize(&keys)
             .expect("Failed to sign test event");
         let _ = app
             .state
@@ -557,11 +569,11 @@ mod tests {
 
         // Add test notes to timeline
         let keys = Keys::generate();
-        let event1 = EventBuilder::text_note("test note 1")
-            .sign_with_keys(&keys)
+        let event1 = EventBuilder::new(Kind::TextNote, "test note 1")
+            .finalize(&keys)
             .expect("Failed to sign test event");
-        let event2 = EventBuilder::text_note("test note 2")
-            .sign_with_keys(&keys)
+        let event2 = EventBuilder::new(Kind::TextNote, "test note 2")
+            .finalize(&keys)
             .expect("Failed to sign test event");
         let _ = app
             .state
@@ -589,11 +601,11 @@ mod tests {
 
         // Add test notes to timeline
         let keys = Keys::generate();
-        let event1 = EventBuilder::text_note("test note 1")
-            .sign_with_keys(&keys)
+        let event1 = EventBuilder::new(Kind::TextNote, "test note 1")
+            .finalize(&keys)
             .expect("Failed to sign test event");
-        let event2 = EventBuilder::text_note("test note 2")
-            .sign_with_keys(&keys)
+        let event2 = EventBuilder::new(Kind::TextNote, "test note 2")
+            .finalize(&keys)
             .expect("Failed to sign test event");
         let _ = app
             .state
@@ -622,8 +634,8 @@ mod tests {
 
         // Add a test note
         let keys = Keys::generate();
-        let event = EventBuilder::text_note("test note")
-            .sign_with_keys(&keys)
+        let event = EventBuilder::new(Kind::TextNote, "test note")
+            .finalize(&keys)
             .expect("Failed to sign test event");
         let _ = app
             .state
@@ -642,11 +654,11 @@ mod tests {
 
         // Add test notes
         let keys = Keys::generate();
-        let event1 = EventBuilder::text_note("test note 1")
-            .sign_with_keys(&keys)
+        let event1 = EventBuilder::new(Kind::TextNote, "test note 1")
+            .finalize(&keys)
             .expect("Failed to sign test event");
-        let event2 = EventBuilder::text_note("test note 2")
-            .sign_with_keys(&keys)
+        let event2 = EventBuilder::new(Kind::TextNote, "test note 2")
+            .finalize(&keys)
             .expect("Failed to sign test event");
         let _ = app
             .state

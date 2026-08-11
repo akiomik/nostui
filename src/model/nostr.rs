@@ -47,7 +47,7 @@ pub struct Nostr {
     /// Track subscription IDs for each feed
     /// The home feed has 3 subscriptions (backward, forward, profile)
     /// Author feeds have 1 subscription
-    feed_subscriptions: HashMap<FeedKind, Vec<nostr_sdk::SubscriptionId>>,
+    feed_subscriptions: HashMap<FeedKind, Vec<SubscriptionId>>,
 }
 
 impl Nostr {
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn test_update_event_submitted_returns_send_when_ready() {
         let mut nostr = Nostr::new();
-        let event_builder = EventBuilder::text_note("test");
+        let event_builder = EventBuilder::new(Kind::TextNote, "test");
 
         let _ = nostr.update(Message::ConnectionReady);
 
@@ -265,7 +265,7 @@ mod tests {
     #[test]
     fn test_update_event_submitted_returns_none_when_not_ready() {
         let mut nostr = Nostr::new();
-        let event_builder = EventBuilder::text_note("test");
+        let event_builder = EventBuilder::new(Kind::TextNote, "test");
 
         let outcome = nostr.update(Message::EventSubmitted { event_builder });
 

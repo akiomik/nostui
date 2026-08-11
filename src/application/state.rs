@@ -306,10 +306,11 @@ impl<'a> AppState<'a> {
         let event_builder = if let Some(reply_to_event) = self.editor.reply_target() {
             log::info!("Publishing reply: {content}");
             // Build NIP-10 reply tags (root/reply markers, deduped p-tag).
-            EventBuilder::text_note(&content).tags(ReplyTagsBuilder::build(reply_to_event.clone()))
+            EventBuilder::new(Kind::TextNote, &content)
+                .tags(ReplyTagsBuilder::build(reply_to_event.clone()))
         } else {
             log::info!("Publishing note: {content}");
-            EventBuilder::text_note(&content)
+            EventBuilder::new(Kind::TextNote, &content)
         };
 
         let outcome = self
@@ -609,6 +610,7 @@ impl<'a> AppState<'a> {
 mod tests {
     use super::*;
     use crate::domain::{nostr::Profile, text::shorten_npub};
+    use color_eyre::eyre::Result;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use std::time::Duration;
 
@@ -625,9 +627,9 @@ mod tests {
     }
 
     fn create_text_note(keys: &Keys, content: &str, created_at: Timestamp) -> Result<Event> {
-        Ok(EventBuilder::text_note(content)
+        Ok(EventBuilder::new(Kind::TextNote, content)
             .custom_created_at(created_at)
-            .sign_with_keys(keys)?)
+            .finalize(keys)?)
     }
 
     #[test]
@@ -803,7 +805,7 @@ mod tests {
         let metadata = Metadata::new().name("alice").display_name("Alice");
         let metadata_event = EventBuilder::new(Kind::Metadata, metadata.as_json())
             .custom_created_at(Timestamp::from(1000))
-            .sign_with_keys(&author_keys)?;
+            .finalize(&author_keys)?;
 
         let _ = state.process_nostr_event_for_tab(metadata_event, &FeedKind::Home);
 
@@ -830,7 +832,7 @@ mod tests {
 
         let invalid_metadata_event = EventBuilder::new(Kind::Metadata, "not json")
             .custom_created_at(Timestamp::from(1000))
-            .sign_with_keys(&author_keys)?;
+            .finalize(&author_keys)?;
 
         let _ = state.process_nostr_event_for_tab(invalid_metadata_event, &FeedKind::Home);
 

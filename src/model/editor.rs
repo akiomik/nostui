@@ -118,8 +118,8 @@ mod tests {
 
     fn create_test_event() -> Event {
         let keys = Keys::generate();
-        EventBuilder::text_note("test content")
-            .sign_with_keys(&keys)
+        EventBuilder::new(Kind::TextNote, "test content")
+            .finalize(&keys)
             .expect("Failed to create test event")
     }
 

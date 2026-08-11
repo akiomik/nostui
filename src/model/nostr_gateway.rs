@@ -32,7 +32,7 @@ pub enum NostrCommand {
     Subscribe { feed: FeedKind },
     /// Unsubscribe from multiple subscriptions
     Unsubscribe {
-        subscription_ids: Vec<nostr_sdk::SubscriptionId>,
+        subscription_ids: Vec<SubscriptionId>,
     },
     /// Shutdown the subscription and disconnect from all relays
     Shutdown,
@@ -59,12 +59,12 @@ pub enum Message {
         sender: mpsc::UnboundedSender<NostrCommand>,
     },
     /// A notification from the relay pool
-    Notification(Box<RelayPoolNotification>),
+    Notification(Box<ClientNotification>),
     /// An error occurred during command execution
     Error { error: CommandError },
     /// A subscription was created for a specific tab
     SubscriptionCreated {
         feed: FeedKind,
-        subscription_id: nostr_sdk::SubscriptionId,
+        subscription_id: SubscriptionId,
     },
 }

@@ -1,5 +1,88 @@
-use nostr_sdk::nostr::{Alphabet, SingleLetterTag, TagKind, TagStandard};
 use nostr_sdk::prelude::*;
+
+enum TagStandard {
+    Event {
+        event_id: EventId,
+        relay_url: Option<RelayUrl>,
+        marker: Option<Marker>,
+        public_key: Option<PublicKey>,
+        uppercase: bool,
+    },
+    PublicKey {
+        public_key: PublicKey,
+        relay_url: Option<RelayUrl>,
+        alias: Option<String>,
+        uppercase: bool,
+    },
+}
+
+impl From<TagStandard> for Tag {
+    fn from(tag: TagStandard) -> Self {
+        match tag {
+            TagStandard::Event {
+                event_id,
+                relay_url,
+                marker,
+                public_key,
+                uppercase,
+            } => {
+                let _ = uppercase;
+                Nip10Tag::Event {
+                    id: event_id,
+                    relay_hint: relay_url,
+                    marker,
+                    public_key,
+                }
+                .into()
+            }
+            TagStandard::PublicKey {
+                public_key,
+                relay_url,
+                alias,
+                uppercase,
+            } => {
+                let _ = (alias, uppercase);
+                Nip01Tag::PublicKey {
+                    public_key,
+                    relay_hint: relay_url,
+                }
+                .into()
+            }
+        }
+    }
+}
+
+fn standardized(tag: &Tag) -> Option<TagStandard> {
+    match tag.kind() {
+        "e" => match Nip10Tag::try_from(tag).ok()? {
+            Nip10Tag::Event {
+                id,
+                relay_hint,
+                marker,
+                public_key,
+            } => Some(TagStandard::Event {
+                event_id: id,
+                relay_url: relay_hint,
+                marker,
+                public_key,
+                uppercase: false,
+            }),
+        },
+        "p" => match Nip01Tag::try_from(tag).ok()? {
+            Nip01Tag::PublicKey {
+                public_key,
+                relay_hint,
+            } => Some(TagStandard::PublicKey {
+                public_key,
+                relay_url: relay_hint,
+                alias: None,
+                uppercase: false,
+            }),
+            _ => None,
+        },
+        _ => None,
+    }
+}
 
 pub struct ReplyTagsBuilder {}
 
@@ -9,22 +92,20 @@ impl ReplyTagsBuilder {
             .tags
             .iter()
             .fold((vec![], vec![], vec![]), |mut acc, tag| {
-                match tag {
-                    tag if tag.kind()
-                        == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::E)) =>
-                    {
+                match tag.kind() {
+                    "e" => {
                         if let Some(TagStandard::Event {
                             event_id,
                             relay_url,
                             marker,
                             public_key: _,
                             uppercase: _,
-                        }) = tag.as_standardized()
+                        }) = standardized(tag)
                         {
                             if let Some(Marker::Reply) = marker {
                                 acc.0.push(Tag::from(TagStandard::Event {
-                                    event_id: *event_id,
-                                    relay_url: relay_url.clone(),
+                                    event_id,
+                                    relay_url,
                                     marker: None,
                                     public_key: None,
                                     uppercase: false,
@@ -34,11 +115,7 @@ impl ReplyTagsBuilder {
                             }
                         }
                     }
-                    tag if tag.kind()
-                        == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::P)) =>
-                    {
-                        acc.1.push(tag.clone())
-                    }
+                    "p" => acc.1.push(tag.clone()),
                     _ => acc.2.push(tag.clone()),
                 }
 
@@ -60,15 +137,10 @@ impl ReplyTagsBuilder {
         }));
 
         if !ptags.iter().any(|tag| {
-            if tag.kind() == TagKind::SingleLetter(SingleLetterTag::lowercase(Alphabet::P)) {
-                if let Some(TagStandard::PublicKey { public_key, .. }) = tag.as_standardized() {
-                    *public_key == reply_to.pubkey
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
+            matches!(
+                standardized(tag),
+                Some(TagStandard::PublicKey { public_key, .. }) if public_key == reply_to.pubkey
+            )
         }) {
             ptags.push(Tag::from(TagStandard::PublicKey {
                 public_key: reply_to.pubkey,
@@ -84,6 +156,7 @@ impl ReplyTagsBuilder {
 
 #[cfg(test)]
 mod tests {
+    use color_eyre::eyre::Result;
     use std::str::FromStr;
 
     use pretty_assertions::assert_eq;
@@ -305,8 +378,8 @@ mod tests {
         let author_ptag_count = tags
             .iter()
             .filter(|tag| {
-                if let Some(TagStandard::PublicKey { public_key, .. }) = tag.as_standardized() {
-                    *public_key == author_pubkey
+                if let Some(TagStandard::PublicKey { public_key, .. }) = standardized(tag) {
+                    public_key == author_pubkey
                 } else {
                     false
                 }
@@ -343,8 +416,8 @@ mod tests {
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )?;
         let has_author_ptag = tags.iter().any(|tag| {
-            if let Some(TagStandard::PublicKey { public_key, .. }) = tag.as_standardized() {
-                *public_key == author_pubkey
+            if let Some(TagStandard::PublicKey { public_key, .. }) = standardized(tag) {
+                public_key == author_pubkey
             } else {
                 false
             }
@@ -376,8 +449,8 @@ mod tests {
 
         // Check that the root tag preserves relay URL
         let root_tag = tags.iter().find(|tag| {
-            if let Some(TagStandard::Event { marker, .. }) = tag.as_standardized() {
-                *marker == Some(Marker::Root)
+            if let Some(TagStandard::Event { marker, .. }) = standardized(tag) {
+                marker == Some(Marker::Root)
             } else {
                 false
             }
@@ -389,9 +462,9 @@ mod tests {
         let reply_tag = tags.iter().find(|tag| {
             if let Some(TagStandard::Event {
                 event_id, marker, ..
-            }) = tag.as_standardized()
+            }) = standardized(tag)
             {
-                *event_id == event.id && *marker == Some(Marker::Reply)
+                event_id == event.id && marker == Some(Marker::Reply)
             } else {
                 false
             }
@@ -428,7 +501,7 @@ mod tests {
         // Count e-tags
         let etag_count = tags
             .iter()
-            .filter(|tag| matches!(tag.as_standardized(), Some(TagStandard::Event { .. })))
+            .filter(|tag| matches!(standardized(tag), Some(TagStandard::Event { .. })))
             .count();
 
         // The code only processes e-tags without markers or with "reply" markers in a special way
@@ -445,7 +518,7 @@ mod tests {
         // Verify the root tag exists
         let has_root = tags.iter().any(|tag| {
             matches!(
-                tag.as_standardized(),
+                standardized(tag),
                 Some(TagStandard::Event {
                     marker: Some(Marker::Root),
                     ..
@@ -457,7 +530,7 @@ mod tests {
         // Verify the new reply tag was added
         let has_reply = tags.iter().any(|tag| {
             matches!(
-                tag.as_standardized(),
+                standardized(tag),
                 Some(TagStandard::Event {
                     marker: Some(Marker::Reply),
                     ..
@@ -496,9 +569,9 @@ mod tests {
         let previous_reply_tag = tags.iter().find(|tag| {
             if let Some(TagStandard::Event {
                 event_id, marker, ..
-            }) = tag.as_standardized()
+            }) = standardized(tag)
             {
-                *event_id == reply_id && marker.is_none()
+                event_id == reply_id && marker.is_none()
             } else {
                 false
             }

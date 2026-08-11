@@ -2071,7 +2071,6 @@ dependencies = [
  "signal-hook 0.4.4",
  "sorted-vec",
  "strip-ansi-escapes",
- "strum",
  "tears",
  "thousands",
  "tokio",

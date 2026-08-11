@@ -60,13 +60,16 @@ impl TextNote {
         self.reposts.len()
     }
 
-    fn find_amount(&self, ev: &Event) -> Option<TagStandard> {
-        ev.tags.filter_standardized(TagKind::Amount).last().cloned()
+    fn find_amount(&self, ev: &Event) -> Option<Nip57Tag> {
+        ev.tags
+            .iter()
+            .filter_map(|tag| Nip57Tag::try_from(tag).ok())
+            .find(|tag| matches!(tag, Nip57Tag::Amount { .. }))
     }
 
     pub fn zap_amount(&self) -> u64 {
         self.zap_receipts.iter().fold(0, |acc, ev| {
-            if let Some(TagStandard::Amount { millisats, .. }) = self.find_amount(ev) {
+            if let Some(Nip57Tag::Amount { millisats, .. }) = self.find_amount(ev) {
                 acc + millisats
             } else {
                 acc
@@ -74,31 +77,38 @@ impl TextNote {
         })
     }
 
-    pub fn find_reply_tag(&self) -> Option<&TagStandard> {
+    pub fn find_reply_event_id(&self) -> Option<EventId> {
+        self.event.tags.event_ids().last()
+    }
+
+    pub fn find_client_name(&self) -> Option<String> {
         self.event
             .tags
-            .filter_standardized(TagKind::SingleLetter(SingleLetterTag::lowercase(
-                Alphabet::E,
-            )))
-            .last()
+            .iter()
+            .find_map(|tag| match Nip89Tag::try_from(tag) {
+                Ok(Nip89Tag::Client { name, .. }) => Some(name),
+                Err(_) => None,
+            })
     }
 
-    pub fn find_client_tag(&self) -> Option<&TagStandard> {
-        self.event.tags.find_standardized(TagKind::Client)
-    }
-
-    pub fn mentioned_pubkeys(&self) -> impl Iterator<Item = &PublicKey> {
+    pub fn mentioned_pubkeys(&self) -> impl Iterator<Item = PublicKey> + '_ {
         self.event.tags.public_keys()
     }
 
     /// Build a NIP-25 `+` reaction event targeting this note.
     pub fn reaction_builder(&self) -> EventBuilder {
-        EventBuilder::reaction(&self.event, "+")
+        EventBuilder::new(Kind::Reaction, "+").tags([
+            Tag::event(self.event.id),
+            Tag::public_key(self.event.pubkey),
+        ])
     }
 
     /// Build a NIP-18 repost event for this note.
     pub fn repost_builder(&self) -> EventBuilder {
-        EventBuilder::repost(&self.event, None)
+        EventBuilder::new(Kind::Repost, self.event.as_json()).tags([
+            Tag::event(self.event.id),
+            Tag::public_key(self.event.pubkey),
+        ])
     }
 
     pub fn update(&mut self, message: Message) {
@@ -119,12 +129,12 @@ impl TextNote {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nostr_sdk::nostr::Kind;
+    use nostr_sdk::prelude::Kind;
     use std::error::Error;
 
     fn create_test_event(content: &str) -> Result<Event, Box<dyn Error>> {
         let keys = Keys::generate();
-        Ok(EventBuilder::text_note(content).sign_with_keys(&keys)?)
+        Ok(EventBuilder::new(Kind::TextNote, content).finalize(&keys)?)
     }
 
     fn create_test_event_with_tags(
@@ -134,7 +144,7 @@ mod tests {
     ) -> Result<Event, Box<dyn Error>> {
         let keys = Keys::generate();
         let builder = EventBuilder::new(kind, content).tags(tags);
-        Ok(builder.sign_with_keys(&keys)?)
+        Ok(builder.finalize(&keys)?)
     }
 
     fn create_zap_receipt_event(
@@ -142,7 +152,7 @@ mod tests {
         millisats: u64,
     ) -> Result<Event, Box<dyn Error>> {
         let keys = Keys::generate();
-        let amount_tag = Tag::from_standardized(TagStandard::Amount {
+        let amount_tag = Tag::from(Nip57Tag::Amount {
             millisats,
             bolt11: None,
         });
@@ -150,7 +160,7 @@ mod tests {
 
         Ok(EventBuilder::new(Kind::ZapReceipt, "")
             .tags(vec![amount_tag, event_tag])
-            .sign_with_keys(&keys)?)
+            .finalize(&keys)?)
     }
 
     #[test]
@@ -246,12 +256,12 @@ mod tests {
         let text_note = TextNote::new(event.clone());
 
         let keys = Keys::generate();
-        let reaction = text_note.reaction_builder().sign_with_keys(&keys)?;
+        let reaction = text_note.reaction_builder().finalize(&keys)?;
 
         assert_eq!(reaction.kind, Kind::Reaction);
         assert_eq!(reaction.content, "+");
         assert_eq!(
-            reaction.tags.event_ids().copied().collect::<Vec<_>>(),
+            reaction.tags.event_ids().collect::<Vec<_>>(),
             vec![event.id]
         );
 
@@ -264,13 +274,10 @@ mod tests {
         let text_note = TextNote::new(event.clone());
 
         let keys = Keys::generate();
-        let repost = text_note.repost_builder().sign_with_keys(&keys)?;
+        let repost = text_note.repost_builder().finalize(&keys)?;
 
         assert_eq!(repost.kind, Kind::Repost);
-        assert_eq!(
-            repost.tags.event_ids().copied().collect::<Vec<_>>(),
-            vec![event.id]
-        );
+        assert_eq!(repost.tags.event_ids().collect::<Vec<_>>(), vec![event.id]);
 
         Ok(())
     }
@@ -293,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_reply_tag() -> Result<(), Box<dyn Error>> {
+    fn test_find_reply_event_id() -> Result<(), Box<dyn Error>> {
         let original_event = create_test_event("Original")?;
         let reply_event = create_test_event_with_tags(
             "Reply",
@@ -303,32 +310,31 @@ mod tests {
 
         let text_note = TextNote::new(reply_event);
 
-        assert!(matches!(
-            text_note.find_reply_tag(),
-            Some(TagStandard::Event { event_id, .. }) if *event_id == original_event.id
-        ));
+        assert_eq!(text_note.find_reply_event_id(), Some(original_event.id));
 
         Ok(())
     }
 
     #[test]
-    fn test_find_reply_tag_none() -> Result<(), Box<dyn Error>> {
+    fn test_find_reply_event_id_none() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Not a reply")?;
         let text_note = TextNote::new(event);
 
-        assert_eq!(text_note.find_reply_tag(), None);
+        assert_eq!(text_note.find_reply_event_id(), None);
 
         Ok(())
     }
 
     #[test]
-    fn test_find_client_tag() -> Result<(), Box<dyn Error>> {
-        let client_tag = Tag::custom(TagKind::Client, vec!["TestClient", "https://test.com"]);
+    fn test_find_client_name() -> Result<(), Box<dyn Error>> {
+        let client_tag = Tag::from(Nip89Tag::Client {
+            name: String::from("TestClient"),
+            address: None,
+        });
         let event = create_test_event_with_tags("Hello", Kind::TextNote, vec![client_tag])?;
         let text_note = TextNote::new(event);
 
-        let found_client = text_note.find_client_tag();
-        assert!(found_client.is_some());
+        assert_eq!(text_note.find_client_name().as_deref(), Some("TestClient"));
 
         Ok(())
     }
@@ -344,7 +350,7 @@ mod tests {
         let pubkeys: Vec<_> = text_note.mentioned_pubkeys().collect();
 
         assert_eq!(pubkeys.len(), 1);
-        assert_eq!(*pubkeys[0], mentioned_keys.public_key());
+        assert_eq!(pubkeys[0], mentioned_keys.public_key());
 
         Ok(())
     }

@@ -87,6 +87,7 @@ impl Default for HomeListComponent {
 mod tests {
     use crate::domain::nostr::FeedKind;
     use crate::model::timeline::Message;
+    use color_eyre::eyre::Result;
 
     use super::*;
     use nostr_sdk::prelude::*;
@@ -104,7 +105,7 @@ mod tests {
         // Create a note with Japanese text
         let note_keys = Keys::generate();
         let japanese_text = "初force pushめでたい";
-        let event = EventBuilder::text_note(japanese_text).sign_with_keys(&note_keys)?;
+        let event = EventBuilder::new(Kind::TextNote, japanese_text).finalize(&note_keys)?;
         let _ = state.timeline.update(Message::NoteAddedToTab {
             event,
             feed: FeedKind::Home,
