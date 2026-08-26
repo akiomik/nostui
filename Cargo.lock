@@ -2018,9 +2018,9 @@ dependencies = [
 
 [[package]]
 name = "nostr-sdk"
-version = "0.45.1"
+version = "0.45.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26c86342f367bd9b173ec4a697e936e3a82d6dad5b4aa06c0d35d9b4f88a8e72"
+checksum = "245f8642b10feecb0a40739a886ca1850e3be4e35dc6592b806ec437403ab9c9"
 dependencies = [
  "async-utility",
  "async-wsocket",
