@@ -178,4 +178,16 @@ mod tests {
         assert!(tick_timer_from_rate(f64::INFINITY).is_err());
         assert!(tick_timer_from_rate(1000.1).is_err());
     }
+
+    #[test]
+    fn tick_timer_from_rate_rejects_a_rate_whose_interval_overflows_u64_millis() {
+        // Positive and finite, so it clears the first guard, but 1000 / 1e-20 is far past
+        // `u64::MAX` milliseconds. Pin the message so this asserts the overflow guard
+        // rather than passing on whichever guard happens to fire.
+        let error = tick_timer_from_rate(1e-20).expect_err("tick rate should be rejected");
+        assert!(
+            error.to_string().contains("too low to convert"),
+            "expected the interval-overflow guard, got: {error}"
+        );
+    }
 }
