@@ -118,18 +118,20 @@ async fn tokio_main() -> Result<()> {
     // worker may never be polled before `run` returns. Doing it here does not depend on
     // that.
     //
-    // `shutdown` rather than `disconnect`, because this client is finished rather than
-    // merely idle: it shuts each relay down, empties the pool, and broadcasts
-    // `ClientNotification::Shutdown`. That broadcast is what lets the detached worker loop
-    // wake and exit on its own; `disconnect` sends nothing, so the loop stays parked until
-    // the tokio runtime drops it.
+    // `shutdown` rather than `disconnect`, for the lock it takes. `shutdown` acquires the
+    // relay pool's write lock, which an in-flight `send_event` holds for reading until it
+    // has its `OK` — ten seconds per relay by default. `disconnect` takes only a read lock
+    // and so never waits for one. Waiting is the point: what it waits for is the user's
+    // own post finishing.
     //
-    // Bounded, because `shutdown` takes the relay pool's write lock while an in-flight
-    // `send_event` holds the read lock for as long as it waits for `OK` — ten seconds per
-    // relay by default. Waiting on that lock is not wasted time: it is the user's own post
-    // finishing. Waiting on it unbounded is, because by this point the terminal is
-    // restored and the delay reads as a hang at the shell prompt, with SIGINT already
-    // taken over by the runtime's signal handler for the rest of the process lifetime.
+    // Not for the worker loop's sake — that exits either way. `Runtime::run` consumes the
+    // application, so by the time this line runs the command sender it held is dropped and
+    // the loop's `cmd_rx.recv()` has already returned `None`.
+    //
+    // Bounded, because waiting on that lock unbounded is not free: by this point the
+    // terminal is restored, so the delay reads as a hang at the shell prompt, with SIGINT
+    // already taken over by the runtime's signal handler for the rest of the process
+    // lifetime.
     //
     // `SHUTDOWN_TIMEOUT` buys the publish a grace period rather than a guarantee: it is
     // shorter than that ten-second wait, so a relay slow to ack still loses the post here.
@@ -143,8 +145,16 @@ async fn tokio_main() -> Result<()> {
     // a note still queued when this runs is lost, as it was before. Tracked in #511.
     log::info!("Shutting down the Nostr client...");
     if timeout(SHUTDOWN_TIMEOUT, client.shutdown()).await.is_err() {
-        log::warn!(
-            "Nostr client did not shut down within {SHUTDOWN_TIMEOUT:?}; exiting without it"
+        // On stderr, not only in the log. The user has been looking at a restored prompt
+        // for `SHUTDOWN_TIMEOUT` with no way to interrupt, and the thing that most likely
+        // held it there is their own last post not being acknowledged — which they can act
+        // on, and cannot learn any other way.
+        log::warn!("Nostr client did not shut down within {SHUTDOWN_TIMEOUT:?}");
+        eprintln!(
+            "{}: relays did not respond within {}s; a post made just before quitting may \
+             not have been published",
+            env!("CARGO_PKG_NAME"),
+            SHUTDOWN_TIMEOUT.as_secs()
         );
     }
 
