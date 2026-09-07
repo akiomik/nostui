@@ -336,6 +336,10 @@ impl<'a> AppState<'a> {
         // Only discard the draft once the publish is actually on its way. Closing the
         // editor loses the text for good — the next `ComposingStarted` clears the buffer
         // — so a submission that has already failed keeps it for another attempt.
+        //
+        // This covers the failures known before sending. One the relays report later
+        // still loses the text, because getting it back needs a way to put content into
+        // the editor that `model::editor` does not have yet: #514.
         if self.begin_publish(outcome, "Posted", content) {
             self.editor.update(EditorMessage::ComposingCanceled);
         }
@@ -429,6 +433,14 @@ impl<'a> AppState<'a> {
         true
     }
 
+    /// The status line [`Self::begin_publish`] writes while a publish is pending.
+    ///
+    /// [`Self::resolve_publish`] compares against it to tell whether the user is still
+    /// looking at this publish when the answer finally arrives.
+    fn pending_status_line(message: &str) -> String {
+        format!("[Sending] {}", message.replace('\n', " "))
+    }
+
     /// Settle the oldest unreported publish with the relay's answer.
     ///
     /// Matched positionally rather than by an id: the worker awaits each command inline
@@ -436,17 +448,37 @@ impl<'a> AppState<'a> {
     /// the entries were pushed.
     pub fn resolve_publish(&mut self, result: Result<(), String>) -> Command<AppMsg> {
         let Some(pending) = self.pending_publishes.pop_front() else {
+            // Nothing to attribute it to, so the content and label are unavailable. A
+            // failure is still worth saying: something the user asked for did not happen,
+            // and silence is what this whole change exists to remove.
             log::warn!("Publish outcome with nothing pending: {result:?}");
+            if let Err(reason) = result {
+                self.set_status_error("Send", reason);
+            }
             return Command::none();
         };
 
         match result {
-            Ok(()) => self.set_status(pending.settled_label, pending.message),
+            Ok(()) => {
+                // An answer can arrive seconds later — a relay may take its full ack
+                // timeout — by which time the user has moved on and the status bar is
+                // showing something newer. Confirming a success over the top of that is
+                // noise, so it only lands if this publish is still what is on screen.
+                if self.status_bar.message()
+                    == Some(Self::pending_status_line(&pending.message)).as_deref()
+                {
+                    self.set_status(pending.settled_label, pending.message);
+                } else {
+                    log::info!("Published: {}", pending.message);
+                }
+            }
             Err(reason) => {
                 log::error!("Failed to publish {}: {reason}", pending.message);
-                // Keeps the label and the content: with more than one publish outstanding
-                // — a NIP-38 status from a track change alongside a note the user just
-                // wrote — an error attributed to neither says nothing useful.
+                // Failures are shown whatever else is on screen: the user asked for this
+                // and it did not happen. Keeps the label and the content, because with
+                // more than one publish outstanding — a NIP-38 status from a track change
+                // alongside a note just written — an error attributed to neither says
+                // nothing useful.
                 self.set_status_error(
                     pending.settled_label,
                     format!("{}: {reason}", pending.message),
@@ -670,31 +702,13 @@ impl<'a> AppState<'a> {
         let outcome = self.nostr.update(NostrMessage::ConnectionClosed);
         let _ = self.dispatch_nostr(outcome);
         self.command_sender = None;
-        self.fail_pending_publishes("the connection closed");
+
+        // `pending_publishes` is deliberately left alone. The worker takes commands in
+        // order, so a publish queued ahead of the shutdown request still runs and still
+        // reports — failing them here would put "the connection closed" on screen for a
+        // note that then succeeds. Ones that genuinely never run are failed by the worker
+        // as it exits, so every entry is still settled by exactly one report.
         Command::none()
-    }
-
-    /// Fail every publish still waiting for an answer.
-    ///
-    /// The worker that would have reported them is going away, so nothing will settle
-    /// them. Clearing here keeps the positional matching a property of the code that
-    /// owns the queue: a leftover entry would otherwise settle the *next* connection's
-    /// first outcome against this connection's label and content.
-    fn fail_pending_publishes(&mut self, reason: &str) {
-        let abandoned: Vec<PendingPublish> = self.pending_publishes.drain(..).collect();
-
-        for pending in &abandoned {
-            log::error!("Publish abandoned, {reason}: {}", pending.message);
-        }
-
-        // One line of status for however many were lost — the most recent, since that is
-        // the one the user was most likely watching.
-        if let Some(last) = abandoned.last() {
-            self.set_status_error(
-                last.settled_label.clone(),
-                format!("{}: {reason}", last.message),
-            );
-        }
     }
 
     /// Track a subscription that the relay layer created for a tab.
@@ -1394,7 +1408,7 @@ mod tests {
     }
 
     #[test]
-    fn closing_the_connection_fails_whatever_was_still_pending() {
+    fn closing_the_connection_leaves_pending_publishes_for_the_worker() {
         let (mut state, _rx) = connected_state();
 
         let _ = state.publish_music_status(create_track("Song"));
@@ -1402,13 +1416,15 @@ mod tests {
 
         let _ = state.close_connection();
 
-        // Nothing will report these now, and a leftover entry would settle the next
-        // connection's first outcome against this submission.
-        assert!(state.pending_publishes.is_empty());
-        let message = state.status_bar.message().expect("a status message");
-        assert!(
-            message.starts_with("[ERR: Music] Song - Artist:"),
-            "expected the abandoned publish to be reported, got: {message}"
+        // Not cleared, and not failed. The worker takes commands in order, so this one
+        // runs before the shutdown request it was queued ahead of and reports its real
+        // outcome; anything that genuinely never runs is failed by the worker on its way
+        // out. Failing them here would report a loss for a note that then succeeds.
+        assert_eq!(state.pending_publishes.len(), 1);
+        assert_eq!(
+            state.status_bar.message(),
+            Some("[Sending] Song - Artist"),
+            "the pending status should stand until the worker answers"
         );
     }
 
@@ -1427,17 +1443,67 @@ mod tests {
         let _ = state.publish_music_status(create_track("Song"));
         assert_eq!(state.pending_publishes.len(), 2);
 
-        // The first outcome settles the first submission, not the most recent one.
-        let _ = state.resolve_publish(Ok(()));
+        // Failures rather than successes, so the assertions do not depend on which
+        // pending line happens to be on screen — each error names what it belongs to.
+        let _ = state.resolve_publish(Err(String::from("first")));
         assert_eq!(
             state.status_bar.message(),
-            Some(format!("[Reacted] {note1}").as_str())
+            Some(format!("[ERR: Reacted] {note1}: first").as_str())
         );
 
-        let _ = state.resolve_publish(Ok(()));
-        assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
+        let _ = state.resolve_publish(Err(String::from("second")));
+        assert_eq!(
+            state.status_bar.message(),
+            Some("[ERR: Music] Song - Artist: second")
+        );
 
         Ok(())
+    }
+
+    #[test]
+    fn a_late_success_does_not_overwrite_a_newer_status() {
+        let (mut state, _rx) = connected_state();
+
+        let _ = state.publish_music_status(create_track("Song"));
+
+        // The user moves on while the relay is still thinking.
+        let _ = state.open_mention_tab();
+        let moved_on = state.status_bar.message().map(ToOwned::to_owned);
+
+        let _ = state.resolve_publish(Ok(()));
+
+        assert_eq!(
+            state.status_bar.message(),
+            moved_on.as_deref(),
+            "a confirmation that arrives after the user has moved on is only noise"
+        );
+    }
+
+    #[test]
+    fn a_late_failure_is_shown_even_over_a_newer_status() {
+        let (mut state, _rx) = connected_state();
+
+        let _ = state.publish_music_status(create_track("Song"));
+        let _ = state.open_mention_tab();
+
+        let _ = state.resolve_publish(Err(String::from("refused")));
+
+        // Unlike a success, this is something the user asked for that did not happen.
+        assert_eq!(
+            state.status_bar.message(),
+            Some("[ERR: Music] Song - Artist: refused")
+        );
+    }
+
+    #[test]
+    fn an_unattributable_failure_is_still_reported() {
+        let (mut state, _rx) = connected_state();
+
+        // No pending entry, so there is no label or content to name — but staying silent
+        // about a failure is the behaviour this change exists to remove.
+        let _ = state.resolve_publish(Err(String::from("refused")));
+
+        assert_eq!(state.status_bar.message(), Some("[ERR: Send] refused"));
     }
 
     #[test]

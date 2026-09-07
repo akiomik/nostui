@@ -387,6 +387,13 @@ impl NostrEvents {
             }
         }
 
+        // Close before draining, not after. `cmd_rx` would otherwise stay open until this
+        // task returns, and a publish sent in that window would be accepted by the sender
+        // — so the application pushes a pending entry — and then never dequeued by anyone.
+        // Closing first makes those sends fail instead, which the application settles
+        // immediately. Items already buffered are still receivable.
+        cmd_rx.close();
+
         // Whatever is still queued will never run now. The application holds a pending
         // entry per submitted event and settles them in report order, so a publish that
         // simply vanishes here would sit as "Sending" forever and shift every later
