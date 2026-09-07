@@ -70,18 +70,31 @@ pub struct AppState<'a> {
     /// exactly once, so its reports arrive in the order the entries were pushed and
     /// can be matched positionally rather than by an id.
     pending_publishes: VecDeque<PendingPublish>,
-    /// The publish whose pending line the status bar is currently showing.
+    /// What the status bar is showing on a publish's behalf, if anything.
     ///
-    /// Cleared by every other write to the bar, so it answers "is this still mine?"
-    /// exactly, where comparing the rendered text could not tell two publishes of the
-    /// same content apart.
-    status_owner: Option<PublishId>,
+    /// Cleared by every other write to the bar, so it answers "is this still mine?" and
+    /// "is an unread failure up?" exactly, where comparing the rendered text could not
+    /// tell two publishes of the same content apart.
+    status_owner: Option<PublishStatus>,
     /// Source of [`PublishId`]s, monotonic for the life of the application.
     next_publish_id: u64,
 }
 
 /// Status-bar label shown while a publish is waiting for a relay's answer.
 const PENDING_LABEL: &str = "Sending";
+
+/// What the status bar is currently showing on some publish's behalf.
+///
+/// Recorded rather than inferred from the text: two publishes can render identically,
+/// and a failure has to be distinguishable from a pending line so a later success does
+/// not quietly wipe it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PublishStatus {
+    /// A publish's "Sending" line, still waiting for an answer.
+    Pending(PublishId),
+    /// A failure a publish reported, which nothing has replaced since.
+    Failed,
+}
 
 /// Identifies one submitted publish, so its own status line can be recognised without
 /// comparing rendered text.
@@ -495,7 +508,7 @@ impl<'a> AppState<'a> {
         });
 
         self.set_status(PENDING_LABEL, message);
-        self.status_owner = Some(id);
+        self.status_owner = Some(PublishStatus::Pending(id));
 
         true
     }
@@ -540,7 +553,7 @@ impl<'a> AppState<'a> {
         // it would go on claiming a publish is in flight that has definitively failed —
         // the same dishonest status this whole change exists to remove, inverted.
         if origin == PublishOrigin::Automatic {
-            if self.status_owner == Some(id) {
+            if self.status_owner == Some(PublishStatus::Pending(id)) {
                 let _ = self.clear_status_message();
             }
             return;
@@ -550,6 +563,7 @@ impl<'a> AppState<'a> {
         // as its content is a bech32 id — long, and far less use to the reader than why
         // it failed. Truncation should eat the id, not the cause.
         self.set_status_error(settled_label, format!("{reason} ({message})"));
+        self.status_owner = Some(PublishStatus::Failed);
     }
 
     /// Settle the oldest unreported publish with the relay's answer.
@@ -579,6 +593,11 @@ impl<'a> AppState<'a> {
                 // user has caused since. Swallowing it instead would leave "Sending" as
                 // the last thing they ever heard about their own note, which is worse.
                 //
+                // One thing it will not overwrite is another publish's failure. Two
+                // submissions settle in order, so a refused reaction followed by a
+                // successful repost would otherwise show the error for the length of one
+                // dispatch. Of the two, the error is the one worth keeping.
+                //
                 // An automatic one lands only where it would not be talking over
                 // anything: its own pending line, or an empty bar. Its answer can arrive
                 // a full ack timeout later, and a track change announced over whatever
@@ -586,9 +605,24 @@ impl<'a> AppState<'a> {
                 // Scrolling clears the status on every timeline message, so treating a
                 // cleared bar as "moved on" would stop `Music` ever appearing for anyone
                 // who touches the timeline while an ack is outstanding.
-                let announce = pending.origin == PublishOrigin::User
-                    || self.status_owner == Some(pending.id)
-                    || self.status_bar.message().is_none();
+                //
+                // It also stays quiet if a later automatic publish is still outstanding:
+                // entries settle in order, so announcing this one would leave the bar
+                // naming a track that has already been superseded.
+                let holds_failure = self.status_owner == Some(PublishStatus::Failed);
+                let newer_automatic_pending = self
+                    .pending_publishes
+                    .iter()
+                    .any(|queued| queued.origin == PublishOrigin::Automatic);
+
+                let announce = match pending.origin {
+                    PublishOrigin::User => !holds_failure,
+                    PublishOrigin::Automatic => {
+                        !newer_automatic_pending
+                            && (self.status_owner == Some(PublishStatus::Pending(pending.id))
+                                || self.status_bar.message().is_none())
+                    }
+                };
 
                 if announce {
                     self.set_status(pending.settled_label, pending.message);
@@ -1717,6 +1751,53 @@ mod tests {
         // Quiet, but not leaving the screen claiming a publish is still in flight —
         // nothing else clears the status bar on its own.
         assert_eq!(state.status_bar.message(), None);
+    }
+
+    #[test]
+    fn a_stale_automatic_success_does_not_name_the_wrong_track() -> Result<()> {
+        let (mut state, _rx) = connected_state();
+
+        // Two track changes inside one ack window, then a scroll clears the bar.
+        let _ = state.publish_music_status(create_track("Old"));
+        let _ = state.publish_music_status(create_track("New"));
+        let _ = state.clear_status_message();
+
+        // The older one is answered first. Announcing it would leave the bar naming a
+        // track that has already been superseded.
+        let _ = state.resolve_publish(Ok(()));
+        assert_eq!(state.status_bar.message(), None);
+
+        let _ = state.resolve_publish(Ok(()));
+        assert_eq!(state.status_bar.message(), Some("[Music] New - Artist"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn a_success_does_not_wipe_another_publishs_failure() -> Result<()> {
+        let (mut state, _rx) = connected_state();
+        let keys = Keys::generate();
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let Ok(note1) = event.id.to_bech32();
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+
+        // React and repost in quick succession; the reaction is refused, the repost works.
+        let _ = state.react_to_selected();
+        let _ = state.repost_selected();
+
+        let _ = state.resolve_publish(Err(String::from("refused")));
+        let _ = state.resolve_publish(Ok(()));
+
+        // Both settle in one burst, so confirming the repost would show the error for the
+        // length of a single dispatch. The error is the one worth keeping.
+        assert_eq!(
+            state.status_bar.message(),
+            Some(format!("[ERR: Reacted] refused ({note1})").as_str())
+        );
+
+        Ok(())
     }
 
     #[test]
