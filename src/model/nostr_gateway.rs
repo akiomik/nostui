@@ -67,7 +67,7 @@ pub enum Message {
     /// Reported exactly once per submitted event, in submission order: the worker
     /// awaits each command inline, so it neither starts the next publish nor reports
     /// out of order.
-    EventPublished { result: Result<(), CommandError> },
+    EventPublished { result: Result<(), String> },
     /// A subscription was created for a specific tab
     SubscriptionCreated {
         feed: FeedKind,

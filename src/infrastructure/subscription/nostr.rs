@@ -1,4 +1,8 @@
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+    time::Duration,
+};
 
 use futures::{
     stream::{self, BoxStream},
@@ -130,6 +134,49 @@ impl NostrEvents {
     }
 
     /// Handle a single command and send error messages if needed
+    /// Decide whether a completed `send_event` actually reached a relay.
+    ///
+    /// `Ok` from nostr-sdk does not mean the event was accepted: the pool returns
+    /// `Ok(output)` once it has tried every relay, recording per-relay rejections and
+    /// ack timeouts in `output.failed` and reserving `Err` for setup problems. An event
+    /// every relay refused therefore arrives here as `Ok` with an empty `success` set.
+    ///
+    /// One relay accepting is enough — the event exists on the network — so a partial
+    /// failure is logged rather than reported.
+    fn relay_verdict(output: &SendEventOutput) -> Result<(), String> {
+        if !output.success.is_empty() {
+            if !output.failed.is_empty() {
+                log::warn!(
+                    "Event {} accepted by {} relay(s), refused by {}",
+                    output.value,
+                    output.success.len(),
+                    Self::describe_failures(&output.failed)
+                );
+            }
+            return Ok(());
+        }
+
+        Err(if output.failed.is_empty() {
+            String::from("no relay accepted the event")
+        } else {
+            format!(
+                "no relay accepted the event: {}",
+                Self::describe_failures(&output.failed)
+            )
+        })
+    }
+
+    /// Render per-relay failures as `url: reason`, in a stable order so the same
+    /// outcome always reads the same way.
+    fn describe_failures(failed: &HashMap<RelayUrl, String>) -> String {
+        let mut reasons: Vec<String> = failed
+            .iter()
+            .map(|(url, reason)| format!("{url}: {reason}"))
+            .collect();
+        reasons.sort();
+        reasons.join(", ")
+    }
+
     async fn handle_command(
         cmd: NostrCommand,
         client: &Client,
@@ -142,11 +189,10 @@ impl NostrEvents {
             NostrCommand::SendEventBuilder { event_builder } => {
                 let result: Result<(), String> = match keys {
                     Some(keys) => match event_builder.finalize(keys) {
-                        Ok(event) => client
-                            .send_event(&event)
-                            .await
-                            .map(|_| ())
-                            .map_err(|e| e.to_string()),
+                        Ok(event) => match client.send_event(&event).await {
+                            Ok(output) => Self::relay_verdict(&output),
+                            Err(e) => Err(e.to_string()),
+                        },
                         Err(e) => Err(e.to_string()),
                     },
                     None => Err(String::from("cannot send events in read-only mode")),
@@ -154,9 +200,7 @@ impl NostrEvents {
                 // Reported either way: the application shows a publish as pending until
                 // this arrives, so a success that says nothing would leave it pending
                 // forever.
-                let _ = msg_tx.send(Message::EventPublished {
-                    result: result.map_err(|error| CommandError::SendEventFailed { error }),
-                });
+                let _ = msg_tx.send(Message::EventPublished { result });
             }
             NostrCommand::AddRelay { url } => {
                 if let Err(e) = client.add_relay(&url).await {
@@ -397,6 +441,69 @@ impl SubscriptionSource for NostrEvents {
 mod tests {
     use super::*;
     use futures::StreamExt;
+
+    fn relay_url(url: &str) -> RelayUrl {
+        RelayUrl::parse(url).expect("valid relay url")
+    }
+
+    fn send_output(success: &[&str], failed: &[(&str, &str)]) -> SendEventOutput {
+        let mut output: SendEventOutput = Output::new(EventId::from_byte_array([0u8; 32]));
+        for url in success {
+            output.success.insert(relay_url(url), EventSendStatus::Sent);
+        }
+        for (url, reason) in failed {
+            output.failed.insert(relay_url(url), (*reason).to_owned());
+        }
+        output
+    }
+
+    #[test]
+    fn a_send_every_relay_refused_is_a_failure() {
+        // nostr-sdk returns `Ok` once it has tried every relay, so an all-refused send
+        // arrives as `Ok` with nothing in `success`. Reporting that as a publish would
+        // put "Posted" on screen for a note no relay stored.
+        let output = send_output(&[], &[("wss://a.example", "blocked")]);
+
+        let error = NostrEvents::relay_verdict(&output).expect_err("should be a failure");
+        assert!(
+            error.contains("no relay accepted") && error.contains("blocked"),
+            "expected the relay's reason to survive, got: {error}"
+        );
+    }
+
+    #[test]
+    fn a_send_no_relay_answered_is_a_failure() {
+        let output = send_output(&[], &[]);
+
+        assert!(NostrEvents::relay_verdict(&output).is_err());
+    }
+
+    #[test]
+    fn one_relay_accepting_is_enough() {
+        // The event exists on the network, so a partial failure is logged, not reported.
+        let output = send_output(&["wss://a.example"], &[("wss://b.example", "rate-limited")]);
+
+        assert_eq!(NostrEvents::relay_verdict(&output), Ok(()));
+    }
+
+    #[test]
+    fn failure_reasons_read_the_same_way_every_time() {
+        // `failed` is a HashMap, so without sorting the same outcome would render in a
+        // different order each run.
+        let output = send_output(
+            &[],
+            &[
+                ("wss://b.example", "blocked"),
+                ("wss://a.example", "bad sig"),
+            ],
+        );
+
+        let error = NostrEvents::relay_verdict(&output).expect_err("should be a failure");
+        assert!(
+            error.find("a.example").expect("a") < error.find("b.example").expect("b"),
+            "expected a stable order, got: {error}"
+        );
+    }
 
     #[test]
     fn followings_use_only_the_latest_contact_list() {

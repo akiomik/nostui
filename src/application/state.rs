@@ -381,20 +381,18 @@ impl<'a> AppState<'a> {
         });
     }
 
-    /// Dispatch a [`NostrOutcome`] produced by `model::nostr` to the worker.
-    ///
-    /// `model::nostr::update` is side-effect free and only reports the command
-    /// to send; the application owns the sender and performs the actual I/O.
     /// Hand a submitted event to the worker and show it as pending.
     ///
     /// The status bar says "Sending" rather than `settled_label` until a relay has
     /// answered, because until then nothing has been published — the command only sits on
     /// the worker's queue. [`Self::resolve_publish`] supplies the ending.
     ///
-    /// When the event never reaches the worker at all — `model::nostr` declines it while
-    /// disconnected, or no worker is listening — there is nothing to wait for and no
+    /// When the event never reaches the worker at all there is nothing to wait for and no
     /// report will arrive, so this settles immediately as an error instead of leaving a
-    /// pending entry that can never be popped.
+    /// pending entry that can never be popped — and would shift every later outcome onto
+    /// the wrong submission. The three ways that happens are distinguished, because they
+    /// tell the user different things: the connection was never up, it is not up *yet*,
+    /// or it has gone away.
     fn begin_publish(
         &mut self,
         outcome: Option<NostrOutcome>,
@@ -403,8 +401,21 @@ impl<'a> AppState<'a> {
     ) {
         let message = message.into();
 
-        if !self.dispatch_nostr(outcome) {
+        if outcome.is_none() {
+            // `model::nostr` declines a submission while it believes it is disconnected.
             self.set_status_error(settled_label, "not connected");
+            return;
+        }
+
+        let worker_was_ready = self.command_sender.is_some();
+
+        if !self.dispatch_nostr(outcome) {
+            let reason = if worker_was_ready {
+                "connection lost"
+            } else {
+                "not connected yet"
+            };
+            self.set_status_error(settled_label, reason);
             return;
         }
 
@@ -420,7 +431,7 @@ impl<'a> AppState<'a> {
     /// Matched positionally rather than by an id: the worker awaits each command inline
     /// and reports every `SendEventBuilder` exactly once, so reports arrive in the order
     /// the entries were pushed.
-    pub fn resolve_publish(&mut self, result: Result<(), CommandError>) -> Command<AppMsg> {
+    pub fn resolve_publish(&mut self, result: Result<(), String>) -> Command<AppMsg> {
         let Some(pending) = self.pending_publishes.pop_front() else {
             log::warn!("Publish outcome with nothing pending: {result:?}");
             return Command::none();
@@ -428,15 +439,29 @@ impl<'a> AppState<'a> {
 
         match result {
             Ok(()) => self.set_status(pending.settled_label, pending.message),
-            Err(error) => {
-                log::error!("Failed to publish: {error:?}");
-                self.set_status_error("Send", format!("{error:?}"));
+            Err(reason) => {
+                log::error!("Failed to publish {}: {reason}", pending.message);
+                // Keeps the label and the content: with more than one publish outstanding
+                // — a NIP-38 status from a track change alongside a note the user just
+                // wrote — an error attributed to neither says nothing useful.
+                self.set_status_error(
+                    pending.settled_label,
+                    format!("{}: {reason}", pending.message),
+                );
             }
         }
 
         Command::none()
     }
 
+    /// Dispatch a [`NostrOutcome`] produced by `model::nostr` to the worker.
+    ///
+    /// `model::nostr::update` is side-effect free and only reports the command
+    /// to send; the application owns the sender and performs the actual I/O.
+    ///
+    /// Returns whether the command actually reached the worker. `false` means it was
+    /// dropped and nothing will ever be reported for it — which is what lets
+    /// [`Self::begin_publish`] settle a publish immediately instead of waiting forever.
     fn dispatch_nostr(&self, outcome: Option<NostrOutcome>) -> bool {
         let Some(NostrOutcome::Send(command)) = outcome else {
             return false;
@@ -1279,14 +1304,16 @@ mod tests {
         let _ = state.publish_music_status(create_track("Song"));
         assert_eq!(state.status_bar.message(), Some("[Sending] Song - Artist"));
 
-        let _ = state.resolve_publish(Err(CommandError::SendEventFailed {
-            error: String::from("relay refused"),
-        }));
+        let _ = state.resolve_publish(Err(String::from(
+            "no relay accepted the event: wss://relay.example: blocked",
+        )));
 
+        // The label and the content survive, so the user can tell *which* publish failed
+        // when more than one is outstanding.
         let message = state.status_bar.message().expect("a status message");
         assert!(
-            message.starts_with("[ERR: Send]") && message.contains("relay refused"),
-            "expected the failure to be reported, got: {message}"
+            message.starts_with("[ERR: Music] Song - Artist:") && message.contains("blocked"),
+            "expected the failed publish to be identified, got: {message}"
         );
     }
 
