@@ -102,23 +102,26 @@ async fn tokio_main() -> Result<()> {
 
     let result = run_on_terminal(init_flags).await;
 
-    // Signal relay termination. Quitting asks the subscription worker to disconnect, but
-    // a quit returned from `update` now terminates the runtime at that same dispatch, so
-    // the worker may never be polled before `run` returns. Issuing the signal here does
-    // not depend on it.
+    // Tear the client down. Quitting asks the subscription worker to disconnect, but a
+    // quit returned from `update` now terminates the runtime at that same dispatch, so the
+    // worker may never be polled before `run` returns. Doing it here does not depend on
+    // that.
     //
-    // Best effort: `Client::disconnect` marks each relay terminated and notifies its
-    // connection task, but does not wait for that task to send the WebSocket close frame,
-    // and nostr-sdk 0.45 exposes no way to wait for one. A relay whose task is not polled
-    // before the tokio runtime is dropped still sees the socket close without a close
-    // frame; this only makes sure the signal was issued.
+    // `shutdown` rather than `disconnect`, because this client is finished rather than
+    // merely idle: it shuts each relay down, empties the pool, and broadcasts
+    // `ClientNotification::Shutdown`. That broadcast is what lets the detached worker loop
+    // wake and exit on its own; `disconnect` sends nothing, so the loop stays parked until
+    // the tokio runtime drops it.
     //
-    // It also does not flush the worker's outbound queue, which it cannot reach: a note
-    // submitted just before quitting can still be in that queue, and terminating the
-    // relays here can fail its send. Dropping the tokio runtime a moment later would
-    // lose it anyway — the queue has no confirmation step at all. Tracked in #511.
-    log::info!("Disconnecting from relays...");
-    client.disconnect().await;
+    // Two things it still does not do. It does not wait for a relay's connection task to
+    // send the WebSocket close frame, and nostr-sdk 0.45 exposes no way to wait for one,
+    // so a task not polled before the runtime is dropped still closes without one. And it
+    // cannot flush the worker's outbound queue, which it has no handle on: a note
+    // submitted just before quitting can still be queued there, and tearing the relays
+    // down can fail its send. Dropping the runtime a moment later would lose it anyway —
+    // that queue has no confirmation step at all. Tracked in #511.
+    log::info!("Shutting down the Nostr client...");
+    client.shutdown().await;
 
     result
 }
