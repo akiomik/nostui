@@ -194,7 +194,10 @@ impl<'a> TearsApp<'a> {
         match msg {
             SystemMsg::Quit => {
                 log::info!("Quit requested - initiating graceful shutdown");
-                // Unsubscribe from all timeline subscriptions and disconnect from relays
+                // Ask the subscription worker to unsubscribe and disconnect. The send is
+                // synchronous, but the quit below now terminates the runtime at this same
+                // dispatch, so the worker is not guaranteed to be polled before `run`
+                // returns. `main` disconnects again after `run` for that reason.
                 let _ = self.state.close_connection();
 
                 // Trigger the quit action
@@ -205,7 +208,9 @@ impl<'a> TearsApp<'a> {
                 // Terminal resize is handled automatically by ratatui
                 Command::none()
             }
-            // Track app FPS based on tick events (approximately matches render FPS)
+            // Count ticks for the FPS display. This measures how often the application
+            // processes a tick, not how often it renders: the runtime renders when a pass
+            // leaves the view dirty, which no longer tracks the tick interval.
             SystemMsg::Tick => self.state.record_tick(),
             SystemMsg::ShowError(error) => self.state.show_error(error),
             SystemMsg::KeyInput(key) => self.handle_key_input(key),

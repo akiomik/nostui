@@ -65,12 +65,14 @@ async fn tokio_main() -> Result<()> {
     log::info!("Connecting to relays...");
     client.connect().await;
 
-    // Create initialization flags for TearsApp
+    // Create initialization flags for TearsApp. The client is cheap to clone (it is
+    // reference-counted internally), and the clone kept here is what closes the relay
+    // connections after the runtime has stopped.
     let init_flags = InitFlags {
         pubkey,
         keys,
         config,
-        nostr_client: client,
+        nostr_client: client.clone(),
         tick_timer: tick_timer_from_rate(args.tick_rate)?,
     };
 
@@ -85,6 +87,14 @@ async fn tokio_main() -> Result<()> {
 
     // Restore terminal
     ratatui::restore();
+
+    // Close the relay connections. Quitting asks the subscription worker to disconnect,
+    // but a quit returned from `update` now terminates the runtime at that same dispatch,
+    // so the worker may never be polled before `run` returns. Disconnecting here makes
+    // the WebSocket close frame independent of that race; it is a no-op if the worker
+    // already got there.
+    log::info!("Disconnecting from relays...");
+    client.disconnect().await;
 
     Ok(result?)
 }
