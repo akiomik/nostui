@@ -446,6 +446,14 @@ impl<'a> AppState<'a> {
             // away. This is only here to stop the gateway believing it is still connected.
             let _ = self.nostr.update(NostrMessage::ConnectionClosed);
             self.command_sender = None;
+
+            // `pending_publishes` is deliberately left alone. A worker that exited
+            // normally already drained and reported them, and tears keeps a finished
+            // run's queued output deliverable, so those reports still arrive; failing
+            // them here would report a loss and then have the real outcome turn up
+            // unattributable. One that died without draining leaves them behind instead,
+            // but a finished subscription restarts at the next re-evaluation, and the
+            // `Ready` that follows clears the queue.
             self.report_publish_failure(origin, settled_label, &message, "connection lost");
             return false;
         }
@@ -533,11 +541,16 @@ impl<'a> AppState<'a> {
                 // and it is what showing "Sending" promised. In particular a newer
                 // publish's pending line replacing theirs is not them moving on.
                 //
-                // An automatic one lands only while it is still what is on screen. Its
-                // answer can arrive a full ack timeout later, and announcing a track
-                // change over whatever the user turned to since is noise.
+                // An automatic one lands only where it would not be talking over
+                // anything: its own pending line, or an empty bar. Its answer can arrive
+                // a full ack timeout later, and a track change announced over whatever
+                // the user turned to since is noise — but an empty bar is not that.
+                // Scrolling clears the status on every timeline message, so treating a
+                // cleared bar as "moved on" would stop `Music` ever appearing for anyone
+                // who touches the timeline while an ack is outstanding.
                 let announce = pending.origin == PublishOrigin::User
-                    || self.status_bar.shows(PENDING_LABEL, &pending.message);
+                    || self.status_bar.shows(PENDING_LABEL, &pending.message)
+                    || self.status_bar.message().is_none();
 
                 if announce {
                     self.set_status(pending.settled_label, pending.message);
@@ -597,17 +610,21 @@ impl<'a> AppState<'a> {
 
         let tab_title = self.active_tab_title();
 
-        // A second worker would report against entries queued for the first, offsetting
-        // every outcome from here on. Unreachable today — `NostrEvents::key` is the
-        // `Arc<Client>` pointer, so tears never rebuilds the stream — but the queue is
-        // only positionally matched, and this is the one place that assumption could
-        // break silently.
-        self.fail_pending_publishes("the connection was re-established");
-
         self.command_sender = Some(command_sender);
         let outcome = self.nostr.update(NostrMessage::ConnectionReady);
         let _ = self.dispatch_nostr(outcome);
         self.set_status(tab_title, "loading...");
+
+        // After the "loading" line, not before it. A second worker reports against its
+        // own commands only, so entries queued for the first would offset every outcome
+        // from here on — but the report of what was lost is worth more than the loading
+        // notice, and doing this first would have it overwritten a line later.
+        //
+        // Unreachable today: `NostrEvents::key` is the `Arc<Client>` pointer, so a second
+        // worker only appears if the first one's stream ended. The queue is only
+        // positionally matched, and this is the one place that assumption could break
+        // silently.
+        self.fail_pending_publishes("the connection was re-established");
 
         Command::none()
     }
@@ -1656,6 +1673,23 @@ mod tests {
         // Quiet, but not leaving the screen claiming a publish is still in flight —
         // nothing else clears the status bar on its own.
         assert_eq!(state.status_bar.message(), None);
+    }
+
+    #[test]
+    fn an_automatic_success_lands_on_a_cleared_bar() {
+        let (mut state, _rx) = connected_state();
+
+        let _ = state.publish_music_status(create_track("Song"));
+
+        // Scrolling clears the status on every timeline message, and an ack can take ten
+        // seconds — so a cleared bar has to count as "nothing to talk over", or `Music`
+        // would stop appearing for anyone who touches the timeline while one is in
+        // flight.
+        let _ = state.clear_status_message();
+
+        let _ = state.resolve_publish(Ok(()));
+
+        assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
     }
 
     #[test]
