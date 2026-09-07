@@ -4,6 +4,7 @@ build:
   cargo build --all-features --workspace
 
 lint:
+  typos
   cargo clippy --all-targets --all-features --workspace -- -D warnings
 
 test:
