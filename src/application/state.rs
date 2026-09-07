@@ -1774,7 +1774,7 @@ mod tests {
     }
 
     #[test]
-    fn a_success_does_not_wipe_another_publishs_failure() -> Result<()> {
+    fn a_success_does_not_wipe_another_publishes_failure() -> Result<()> {
         let (mut state, _rx) = connected_state();
         let keys = Keys::generate();
 
