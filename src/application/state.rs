@@ -353,9 +353,10 @@ impl<'a> AppState<'a> {
         // editor loses the text for good — the next `ComposingStarted` clears the buffer
         // — so a submission that has already failed keeps it for another attempt.
         //
-        // This covers the failures known before sending. One the relays report later
-        // still loses the text, because getting it back needs a way to put content into
-        // the editor that `model::editor` does not have yet: #514.
+        // This covers the failures this layer can see before sending. Ones reported back
+        // later still lose the text — including read-only mode, which only the worker
+        // knows about — because getting it back needs a way to put content into the
+        // editor that `model::editor` does not have yet: #514.
         if self.begin_publish(outcome, PublishOrigin::User, "Posted", content) {
             self.editor.update(EditorMessage::ComposingCanceled);
         }
@@ -459,6 +460,24 @@ impl<'a> AppState<'a> {
         true
     }
 
+    /// Fail every publish still waiting for an answer.
+    ///
+    /// Only for the case where the reports themselves are gone. A publish whose worker is
+    /// still running settles on its own report, success or failure — failing those here
+    /// would claim a loss for something that then succeeds.
+    fn fail_pending_publishes(&mut self, reason: &str) {
+        let abandoned: Vec<PendingPublish> = self.pending_publishes.drain(..).collect();
+
+        for pending in abandoned {
+            self.report_publish_failure(
+                pending.origin,
+                &pending.settled_label,
+                &pending.message,
+                reason,
+            );
+        }
+    }
+
     /// Report a publish that failed, as loudly as its origin deserves.
     fn report_publish_failure(
         &mut self,
@@ -473,7 +492,15 @@ impl<'a> AppState<'a> {
         // user can do about one failing — so it stays in the log rather than painting an
         // error over whatever they are actually doing. A track change during startup
         // would otherwise report a failure for something they never asked for.
+        //
+        // Quiet is not the same as leaving the screen wrong, though. If its own "Sending"
+        // line is still up, retire it: nothing else clears the status bar on its own, so
+        // it would go on claiming a publish is in flight that has definitively failed —
+        // the same dishonest status this whole change exists to remove, inverted.
         if origin == PublishOrigin::Automatic {
+            if self.status_bar.shows(PENDING_LABEL, message) {
+                let _ = self.clear_status_message();
+            }
             return;
         }
 
@@ -569,6 +596,14 @@ impl<'a> AppState<'a> {
         log::info!("NostrEvents subscription ready");
 
         let tab_title = self.active_tab_title();
+
+        // A second worker would report against entries queued for the first, offsetting
+        // every outcome from here on. Unreachable today — `NostrEvents::key` is the
+        // `Arc<Client>` pointer, so tears never rebuilds the stream — but the queue is
+        // only positionally matched, and this is the one place that assumption could
+        // break silently.
+        self.fail_pending_publishes("the connection was re-established");
+
         self.command_sender = Some(command_sender);
         let outcome = self.nostr.update(NostrMessage::ConnectionReady);
         let _ = self.dispatch_nostr(outcome);
@@ -1607,6 +1642,50 @@ mod tests {
         let _ = state.resolve_publish(Err(String::from("refused")));
 
         assert_eq!(state.status_bar.message(), Some("[ERR: Send] refused"));
+    }
+
+    #[test]
+    fn an_automatic_failure_retires_its_own_pending_line() {
+        let (mut state, _rx) = connected_state();
+
+        let _ = state.publish_music_status(create_track("Song"));
+        assert_eq!(state.status_bar.message(), Some("[Sending] Song - Artist"));
+
+        let _ = state.resolve_publish(Err(String::from("refused")));
+
+        // Quiet, but not leaving the screen claiming a publish is still in flight —
+        // nothing else clears the status bar on its own.
+        assert_eq!(state.status_bar.message(), None);
+    }
+
+    #[test]
+    fn an_automatic_failure_leaves_a_newer_status_alone() {
+        let (mut state, _rx) = connected_state();
+
+        let _ = state.publish_music_status(create_track("Song"));
+        let _ = state.open_mention_tab();
+        let moved_on = state.status_bar.message().map(ToOwned::to_owned);
+
+        let _ = state.resolve_publish(Err(String::from("refused")));
+
+        // Its line is already gone, so there is nothing of its own to retire and it must
+        // not clear what replaced it.
+        assert_eq!(state.status_bar.message(), moved_on.as_deref());
+    }
+
+    #[test]
+    fn becoming_ready_again_clears_publishes_the_old_worker_owed() {
+        let (mut state, _rx) = connected_state();
+
+        let _ = state.publish_music_status(create_track("Song"));
+        assert_eq!(state.pending_publishes.len(), 1);
+
+        // A second worker reports against its own commands only; entries left from the
+        // first would offset every outcome from here on.
+        let (tx, _rx2) = mpsc::unbounded_channel();
+        let _ = state.on_connection_ready(tx);
+
+        assert!(state.pending_publishes.is_empty());
     }
 
     #[test]
