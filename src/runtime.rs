@@ -236,7 +236,7 @@ impl<'a> TearsApp<'a> {
         // Fallback: handle special keys not in config
         match key.code {
             // Escape key - unselect/cancel (delegates to TimelineMsg::Deselect)
-            KeyCode::Esc => Command::message(AppMsg::Timeline(TimelineMsg::Deselect)),
+            KeyCode::Esc => Command::message(AppMsg::Timeline(TimelineMsg::Deselect)).into(),
             _ => Command::none(),
         }
     }
@@ -248,13 +248,15 @@ impl<'a> TearsApp<'a> {
         // not a quit command. Only hardcoded special keys are processed.
         match (key.code, key.modifiers) {
             // Escape: cancel composing
-            (KeyCode::Esc, _) => Command::message(AppMsg::Editor(EditorMsg::CancelComposing)),
+            (KeyCode::Esc, _) => {
+                Command::message(AppMsg::Editor(EditorMsg::CancelComposing)).into()
+            }
             // Ctrl+P: submit note (hardcoded for safety)
             (KeyCode::Char('p'), KeyModifiers::CONTROL) => {
-                Command::message(AppMsg::Editor(EditorMsg::SubmitNote))
+                Command::message(AppMsg::Editor(EditorMsg::SubmitNote)).into()
             }
             // All other keys are passed to textarea for input
-            _ => Command::message(AppMsg::Editor(EditorMsg::ProcessTextAreaInput(key))),
+            _ => Command::message(AppMsg::Editor(EditorMsg::ProcessTextAreaInput(key))).into(),
         }
     }
 
@@ -262,42 +264,52 @@ impl<'a> TearsApp<'a> {
     fn handle_action(&mut self, action: KeyAction) -> Command<AppMsg> {
         match action {
             // Navigation
-            KeyAction::ScrollUp => Command::message(AppMsg::Timeline(TimelineMsg::ScrollUp)),
-            KeyAction::ScrollDown => Command::message(AppMsg::Timeline(TimelineMsg::ScrollDown)),
+            KeyAction::ScrollUp => Command::message(AppMsg::Timeline(TimelineMsg::ScrollUp)).into(),
+            KeyAction::ScrollDown => {
+                Command::message(AppMsg::Timeline(TimelineMsg::ScrollDown)).into()
+            }
             KeyAction::ScrollToTop => {
                 // Delegate to TimelineMsg::SelectFirst
-                Command::message(AppMsg::Timeline(TimelineMsg::SelectFirst))
+                Command::message(AppMsg::Timeline(TimelineMsg::SelectFirst)).into()
             }
             KeyAction::ScrollToBottom => {
                 // Delegate to TimelineMsg::SelectLast
-                Command::message(AppMsg::Timeline(TimelineMsg::SelectLast))
+                Command::message(AppMsg::Timeline(TimelineMsg::SelectLast)).into()
             }
             KeyAction::Unselect => {
                 // Delegate to TimelineMsg::Deselect to keep logic centralized
-                Command::message(AppMsg::Timeline(TimelineMsg::Deselect))
+                Command::message(AppMsg::Timeline(TimelineMsg::Deselect)).into()
             }
 
             // Compose/interactions
-            KeyAction::NewTextNote => Command::message(AppMsg::Editor(EditorMsg::StartComposing)),
-            KeyAction::ReplyTextNote => Command::message(AppMsg::Editor(EditorMsg::StartReply)),
-            KeyAction::React => Command::message(AppMsg::Timeline(TimelineMsg::ReactToSelected)),
-            KeyAction::Repost => Command::message(AppMsg::Timeline(TimelineMsg::RepostSelected)),
+            KeyAction::NewTextNote => {
+                Command::message(AppMsg::Editor(EditorMsg::StartComposing)).into()
+            }
+            KeyAction::ReplyTextNote => {
+                Command::message(AppMsg::Editor(EditorMsg::StartReply)).into()
+            }
+            KeyAction::React => {
+                Command::message(AppMsg::Timeline(TimelineMsg::ReactToSelected)).into()
+            }
+            KeyAction::Repost => {
+                Command::message(AppMsg::Timeline(TimelineMsg::RepostSelected)).into()
+            }
 
             // Tab management
             KeyAction::OpenAuthorTimeline => {
-                Command::message(AppMsg::Timeline(TimelineMsg::OpenAuthorTimeline))
+                Command::message(AppMsg::Timeline(TimelineMsg::OpenAuthorTimeline)).into()
             }
             KeyAction::OpenMentionTab => {
-                Command::message(AppMsg::Timeline(TimelineMsg::OpenMentionTab))
+                Command::message(AppMsg::Timeline(TimelineMsg::OpenMentionTab)).into()
             }
             KeyAction::CloseCurrentTab => {
-                Command::message(AppMsg::Timeline(TimelineMsg::CloseCurrentTab))
+                Command::message(AppMsg::Timeline(TimelineMsg::CloseCurrentTab)).into()
             }
-            KeyAction::PrevTab => Command::message(AppMsg::Timeline(TimelineMsg::PrevTab)),
-            KeyAction::NextTab => Command::message(AppMsg::Timeline(TimelineMsg::NextTab)),
+            KeyAction::PrevTab => Command::message(AppMsg::Timeline(TimelineMsg::PrevTab)).into(),
+            KeyAction::NextTab => Command::message(AppMsg::Timeline(TimelineMsg::NextTab)).into(),
 
             // System
-            KeyAction::Quit => Command::message(AppMsg::System(SystemMsg::Quit)),
+            KeyAction::Quit => Command::message(AppMsg::System(SystemMsg::Quit)).into(),
             KeyAction::SubmitTextNote => {
                 // Only valid in composing mode, handled separately
                 Command::none()
