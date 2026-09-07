@@ -467,10 +467,13 @@ impl<'a> AppState<'a> {
             //
             // Record the loss rather than only reporting it, so the next publish says
             // "not connected" instead of rediscovering the dead worker every time.
-            // Yields a `Shutdown` command, which is deliberately dropped rather than
-            // dispatched: the worker it would be addressed to is the one that just went
-            // away. This is only here to stop the gateway believing it is still connected.
-            let _ = self.nostr.update(NostrMessage::ConnectionClosed);
+            // `ConnectionLost`, not `ConnectionClosed`: the latter also clears the
+            // tracked feed subscriptions, which is right when nostui is closing the
+            // connection deliberately and wrong here. The tabs are still open, and their
+            // subscription ids are what a replacement worker needs in order to
+            // unsubscribe — dropping them leaks the subscription relay-side and leaves
+            // the tab on screen receiving nothing.
+            let _ = self.nostr.update(NostrMessage::ConnectionLost);
             self.command_sender = None;
 
             // `pending_publishes` is deliberately left alone. A worker that exited
@@ -556,13 +559,12 @@ impl<'a> AppState<'a> {
     /// the entries were pushed.
     pub fn resolve_publish(&mut self, result: Result<(), String>) -> Command<AppMsg> {
         let Some(pending) = self.pending_publishes.pop_front() else {
-            // Nothing to attribute it to, so the content and label are unavailable. A
-            // failure is still worth saying: something the user asked for did not happen,
-            // and silence is what this whole change exists to remove.
+            // Logged, not shown. There is no entry, so neither what failed nor whether
+            // the user asked for it is known — and an automatic publish reported this way
+            // would paint exactly the error `report_publish_failure` suppresses. The one
+            // path that retires entries early, `fail_pending_publishes`, reports them as
+            // it goes, so the user has already been told whatever there was to tell.
             log::warn!("Publish outcome with nothing pending: {result:?}");
-            if let Err(reason) = result {
-                self.set_status_error("Send", reason);
-            }
             return Command::none();
         };
 
@@ -571,6 +573,11 @@ impl<'a> AppState<'a> {
                 // A user's publish always gets its confirmation: they are waiting on it,
                 // and it is what showing "Sending" promised. In particular a newer
                 // publish's pending line replacing theirs is not them moving on.
+                //
+                // The cost is deliberate: nostr-sdk waits for every relay, not the first
+                // ack, so this can arrive ten seconds later and land over a status the
+                // user has caused since. Swallowing it instead would leave "Sending" as
+                // the last thing they ever heard about their own note, which is worse.
                 //
                 // An automatic one lands only where it would not be talking over
                 // anything: its own pending line, or an empty bar. Its answer can arrive
@@ -1685,14 +1692,17 @@ mod tests {
     }
 
     #[test]
-    fn an_unattributable_failure_is_still_reported() {
+    fn an_unattributable_failure_is_logged_rather_than_shown() {
         let (mut state, _rx) = connected_state();
+        let before = state.status_bar.message().map(ToOwned::to_owned);
 
-        // No pending entry, so there is no label or content to name — but staying silent
-        // about a failure is the behaviour this change exists to remove.
+        // With no entry, neither what failed nor whether the user asked for it is known,
+        // and an automatic publish surfaced this way would paint exactly the error that
+        // `report_publish_failure` suppresses. The only path that retires entries early
+        // reports them as it goes, so there is nothing left to tell.
         let _ = state.resolve_publish(Err(String::from("refused")));
 
-        assert_eq!(state.status_bar.message(), Some("[ERR: Send] refused"));
+        assert_eq!(state.status_bar.message(), before.as_deref());
     }
 
     #[test]
@@ -1780,6 +1790,31 @@ mod tests {
         let _ = state.on_connection_ready(tx);
 
         assert!(state.pending_publishes.is_empty());
+    }
+
+    #[test]
+    fn losing_the_worker_keeps_the_tracked_subscriptions() {
+        let (mut state, rx) = connected_state();
+        let feed = FeedKind::Author(Keys::generate().public_key());
+        let sub_id = SubscriptionId::new("author_sub");
+
+        let _ = state
+            .timeline
+            .update(TimelineMessage::TabAdded { feed: feed.clone() });
+        let _ = state.track_subscription_created(feed.clone(), sub_id.clone());
+
+        // The worker goes away without being asked to.
+        drop(rx);
+        let _ = state.publish_music_status(create_track("Song"));
+
+        // The tab is still open, and its subscription id is what a replacement worker
+        // needs to unsubscribe. Losing it leaks the subscription relay-side and leaves
+        // the tab on screen receiving nothing.
+        assert!(
+            state.nostr.is_subscribed(&feed),
+            "a lost worker must not discard what the open tabs are subscribed to"
+        );
+        assert_eq!(state.nostr.find_tab_by_subscription(&sub_id), Some(&feed));
     }
 
     #[test]

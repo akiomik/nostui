@@ -16,12 +16,8 @@ impl StatusBar {
     }
 
     fn set_message(&mut self, label: String, message: String) {
-        self.message = Some(Self::render(&label, &message));
-    }
-
-    fn render(label: &str, message: &str) -> String {
         let normalized_message = message.replace("\n", " ");
-        format!("[{label}] {normalized_message}")
+        self.message = Some(format!("[{label}] {normalized_message}"));
     }
 
     pub fn update(&mut self, message: Message) {

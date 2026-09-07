@@ -24,6 +24,13 @@ pub enum Message {
         since: Timestamp,
     },
     ConnectionClosed,
+    /// The worker went away without being asked to.
+    ///
+    /// Distinct from [`Message::ConnectionClosed`], which is what nostui sends when it
+    /// is closing the connection on purpose and the tracked subscriptions are genuinely
+    /// finished. Here the tabs are still open and their subscription ids are still what
+    /// a replacement worker would need to unsubscribe from, so they are kept.
+    ConnectionLost,
 }
 
 /// Follow-up effect the application must dispatch after a [`Nostr`] update.
@@ -131,6 +138,11 @@ impl Nostr {
                 } else {
                     None
                 }
+            }
+            Message::ConnectionLost => {
+                self.connected = false;
+                // No command: the worker this would be addressed to is the one that left.
+                None
             }
             Message::ConnectionClosed => {
                 let was_connected = self.connected;
