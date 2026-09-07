@@ -75,8 +75,9 @@ pub struct AppState<'a> {
 /// A publish that has been handed to the worker but not yet confirmed by a relay.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PendingPublish {
-    /// Status-bar label to show once the relay accepts it — the past-tense word the
-    /// status bar has always shown for this kind of event.
+    /// Status-bar label to show once the relay accepts it — the word the status bar has
+    /// always used for this kind of event, whether or not it reads as a verb
+    /// ("Posted", "Reacted", "Reposted", but also "Music").
     settled_label: String,
     /// What was published, shown while pending and again once settled.
     message: String,
@@ -386,9 +387,9 @@ impl<'a> AppState<'a> {
     /// to send; the application owns the sender and performs the actual I/O.
     /// Hand a submitted event to the worker and show it as pending.
     ///
-    /// The status bar says "sending" rather than the past-tense `settled_label` until a
-    /// relay has answered, because until then nothing has been published — the command
-    /// only sits on the worker's queue. [`Self::resolve_publish`] supplies the ending.
+    /// The status bar says "Sending" rather than `settled_label` until a relay has
+    /// answered, because until then nothing has been published — the command only sits on
+    /// the worker's queue. [`Self::resolve_publish`] supplies the ending.
     ///
     /// When the event never reaches the worker at all — `model::nostr` declines it while
     /// disconnected, or no worker is listening — there is nothing to wait for and no
