@@ -412,6 +412,16 @@ impl<'a> TearsApp<'a> {
     }
 
     /// Handle NostrEvents subscription messages
+    ///
+    /// Every arm here returns a redrawing command, so on tears 0.11 each inbound relay
+    /// notification that lands in its own pass costs one full render. With the frame rate
+    /// gone there is no ceiling above that, and on a busy feed redraw frequency tracks
+    /// relay throughput where 0.10.x clamped it to `--frame-rate`.
+    ///
+    /// This is a known, accepted regression, not an oversight. `Command::without_redraw`
+    /// is not the fix: it declares that the update did not change the visible view, which
+    /// is false for an arm that appends to the timeline. Bounding it properly means
+    /// deciding per message whether the view actually changed — tracked in #510.
     fn handle_nostr_subscription_message(
         &mut self,
         msg: NostrSubscriptionMessage,

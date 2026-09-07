@@ -19,6 +19,12 @@ use tokio::time::timeout;
 /// than this loses it exactly as it did before the wait existed.
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// How long the shutdown may take before the wait is announced on stderr.
+///
+/// Short enough that a pause the user can notice is always explained, long enough that a
+/// shutdown finishing normally — the overwhelming majority — says nothing at all.
+const SHUTDOWN_GRACE: Duration = Duration::from_millis(250);
+
 use nostui::{
     application::config::Config,
     infrastructure::cli::Cli,
@@ -144,24 +150,36 @@ async fn tokio_main() -> Result<()> {
     // cannot flush the worker's outbound *queue*, only whatever send is already in flight:
     // a note still queued when this runs is lost, as it was before. Tracked in #511.
     log::info!("Shutting down the Nostr client...");
-    if timeout(SHUTDOWN_TIMEOUT, client.shutdown()).await.is_err() {
-        // On stderr, not only in the log. The user has been looking at a restored prompt
-        // for `SHUTDOWN_TIMEOUT` with no way to interrupt, and the thing that most likely
-        // held it there is an unacknowledged publish — which they can act on, and cannot
-        // learn any other way.
-        //
+    let shutdown = client.shutdown();
+    tokio::pin!(shutdown);
+
+    // Announced in two stages, so that the pause is never silent but a normal quit is
+    // never noisy. Almost every shutdown finishes well inside `SHUTDOWN_GRACE` and prints
+    // nothing; one that does not has become perceptible, and by then the user is at a
+    // restored prompt that has stopped answering Ctrl-C, so it has to say why.
+    if timeout(SHUTDOWN_GRACE, &mut shutdown).await.is_err() {
+        eprintln!(
+            "{}: waiting up to {}s for relays to finish...",
+            env!("CARGO_PKG_NAME"),
+            SHUTDOWN_TIMEOUT.as_secs()
+        );
+
         // Stated as a condition, not a diagnosis. A publish is the likeliest holder of the
         // read lock, but `subscribe` and `unsubscribe` take it too, so the wait does not
         // prove anything was being published — and when something was, it need not be a
         // note: reactions, reposts, and NIP-38 status events from a track change all take
         // the same path. Report what is known, and let the reader decide if it applies.
-        log::warn!("Nostr client did not shut down within {SHUTDOWN_TIMEOUT:?}");
-        eprintln!(
-            "{}: relays did not finish shutting down within {}s; if anything was \
-             published just before quitting, it may not have reached them",
-            env!("CARGO_PKG_NAME"),
-            SHUTDOWN_TIMEOUT.as_secs()
-        );
+        if timeout(SHUTDOWN_TIMEOUT - SHUTDOWN_GRACE, shutdown)
+            .await
+            .is_err()
+        {
+            log::warn!("Nostr client did not shut down within {SHUTDOWN_TIMEOUT:?}");
+            eprintln!(
+                "{}: relays did not finish shutting down; if anything was published just \
+                 before quitting, it may not have reached them",
+                env!("CARGO_PKG_NAME")
+            );
+        }
     }
 
     result

@@ -21,7 +21,10 @@ into layers under `src/`, each a top-level module declared in `lib.rs`.
 | `utils` | Neutral leaf helpers (logging, panic, paths). | (nothing internal) |
 
 `main.rs` is the binary entry point: it parses the CLI, loads `Config`, builds
-the Nostr client, and hands an `InitFlags` to the `runtime`.
+the Nostr client, and hands an `InitFlags` to the `runtime`. It also owns the
+edges of the process that the `runtime` cannot: taking the terminal over and
+restoring it on every path out, and shutting the Nostr client down once
+`Runtime::run` has returned.
 
 ## The dependency rule
 
