@@ -150,13 +150,15 @@ async fn tokio_main() -> Result<()> {
         // held it there is an unacknowledged publish — which they can act on, and cannot
         // learn any other way.
         //
-        // "An event", not "a post": every publish takes this path, so the one still in
-        // flight may equally be a reaction, a repost, or a NIP-38 status that a track
-        // change produced without the user publishing anything at all.
+        // Stated as a condition, not a diagnosis. A publish is the likeliest holder of the
+        // read lock, but `subscribe` and `unsubscribe` take it too, so the wait does not
+        // prove anything was being published — and when something was, it need not be a
+        // note: reactions, reposts, and NIP-38 status events from a track change all take
+        // the same path. Report what is known, and let the reader decide if it applies.
         log::warn!("Nostr client did not shut down within {SHUTDOWN_TIMEOUT:?}");
         eprintln!(
-            "{}: relays did not respond within {}s; an event published just before \
-             quitting may not have reached them",
+            "{}: relays did not finish shutting down within {}s; if anything was \
+             published just before quitting, it may not have reached them",
             env!("CARGO_PKG_NAME"),
             SHUTDOWN_TIMEOUT.as_secs()
         );
