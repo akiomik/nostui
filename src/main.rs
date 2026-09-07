@@ -112,6 +112,11 @@ async fn tokio_main() -> Result<()> {
     // and nostr-sdk 0.45 exposes no way to wait for one. A relay whose task is not polled
     // before the tokio runtime is dropped still sees the socket close without a close
     // frame; this only makes sure the signal was issued.
+    //
+    // It also does not flush the worker's outbound queue, which it cannot reach: a note
+    // submitted just before quitting can still be in that queue, and terminating the
+    // relays here can fail its send. Dropping the tokio runtime a moment later would
+    // lose it anyway — the queue has no confirmation step at all. Tracked in #511.
     log::info!("Disconnecting from relays...");
     client.disconnect().await;
 
