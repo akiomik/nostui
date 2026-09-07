@@ -151,11 +151,12 @@ impl NostrEvents {
                     },
                     None => Err(String::from("cannot send events in read-only mode")),
                 };
-                if let Err(e) = result {
-                    let _ = msg_tx.send(Message::Error {
-                        error: CommandError::SendEventFailed { error: e },
-                    });
-                }
+                // Reported either way: the application shows a publish as pending until
+                // this arrives, so a success that says nothing would leave it pending
+                // forever.
+                let _ = msg_tx.send(Message::EventPublished {
+                    result: result.map_err(|error| CommandError::SendEventFailed { error }),
+                });
             }
             NostrCommand::AddRelay { url } => {
                 if let Err(e) = client.add_relay(&url).await {

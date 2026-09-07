@@ -62,6 +62,12 @@ pub enum Message {
     Notification(Box<ClientNotification>),
     /// An error occurred during command execution
     Error { error: CommandError },
+    /// The outcome of one `SendEventBuilder`.
+    ///
+    /// Reported exactly once per submitted event, in submission order: the worker
+    /// awaits each command inline, so it neither starts the next publish nor reports
+    /// out of order.
+    EventPublished { result: Result<(), CommandError> },
     /// A subscription was created for a specific tab
     SubscriptionCreated {
         feed: FeedKind,
