@@ -147,12 +147,16 @@ async fn tokio_main() -> Result<()> {
     if timeout(SHUTDOWN_TIMEOUT, client.shutdown()).await.is_err() {
         // On stderr, not only in the log. The user has been looking at a restored prompt
         // for `SHUTDOWN_TIMEOUT` with no way to interrupt, and the thing that most likely
-        // held it there is their own last post not being acknowledged — which they can act
-        // on, and cannot learn any other way.
+        // held it there is an unacknowledged publish — which they can act on, and cannot
+        // learn any other way.
+        //
+        // "An event", not "a post": every publish takes this path, so the one still in
+        // flight may equally be a reaction, a repost, or a NIP-38 status that a track
+        // change produced without the user publishing anything at all.
         log::warn!("Nostr client did not shut down within {SHUTDOWN_TIMEOUT:?}");
         eprintln!(
-            "{}: relays did not respond within {}s; a post made just before quitting may \
-             not have been published",
+            "{}: relays did not respond within {}s; an event published just before \
+             quitting may not have reached them",
             env!("CARGO_PKG_NAME"),
             SHUTDOWN_TIMEOUT.as_secs()
         );
