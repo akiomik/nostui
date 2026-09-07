@@ -72,6 +72,9 @@ pub struct AppState<'a> {
     pending_publishes: VecDeque<PendingPublish>,
 }
 
+/// Status-bar label shown while a publish is waiting for a relay's answer.
+const PENDING_LABEL: &str = "Sending";
+
 /// Who asked for a publish, which decides how loudly its outcome is reported.
 ///
 /// A note, reaction or repost is something the user did and is waiting on, so its
@@ -437,6 +440,9 @@ impl<'a> AppState<'a> {
             //
             // Record the loss rather than only reporting it, so the next publish says
             // "not connected" instead of rediscovering the dead worker every time.
+            // Yields a `Shutdown` command, which is deliberately dropped rather than
+            // dispatched: the worker it would be addressed to is the one that just went
+            // away. This is only here to stop the gateway believing it is still connected.
             let _ = self.nostr.update(NostrMessage::ConnectionClosed);
             self.command_sender = None;
             self.report_publish_failure(origin, settled_label, &message, "connection lost");
@@ -448,17 +454,9 @@ impl<'a> AppState<'a> {
             settled_label: settled_label.to_owned(),
             message: message.clone(),
         });
-        self.set_status("Sending", message);
+        self.set_status(PENDING_LABEL, message);
 
         true
-    }
-
-    /// The status line [`Self::begin_publish`] writes while a publish is pending.
-    ///
-    /// [`Self::resolve_publish`] compares against it to tell whether the user is still
-    /// looking at this publish when the answer finally arrives.
-    fn pending_status_line(message: &str) -> String {
-        format!("[Sending] {}", message.replace('\n', " "))
     }
 
     /// Report a publish that failed, as loudly as its origin deserves.
@@ -479,7 +477,10 @@ impl<'a> AppState<'a> {
             return;
         }
 
-        self.set_status_error(settled_label, format!("{message}: {reason}"));
+        // Reason first: the status bar is one line, and what a reaction or repost carries
+        // as its content is a bech32 id — long, and far less use to the reader than why
+        // it failed. Truncation should eat the id, not the cause.
+        self.set_status_error(settled_label, format!("{reason} ({message})"));
     }
 
     /// Settle the oldest unreported publish with the relay's answer.
@@ -509,8 +510,7 @@ impl<'a> AppState<'a> {
                 // answer can arrive a full ack timeout later, and announcing a track
                 // change over whatever the user turned to since is noise.
                 let announce = pending.origin == PublishOrigin::User
-                    || self.status_bar.message()
-                        == Some(Self::pending_status_line(&pending.message)).as_deref();
+                    || self.status_bar.shows(PENDING_LABEL, &pending.message);
 
                 if announce {
                     self.set_status(pending.settled_label, pending.message);
@@ -1403,7 +1403,7 @@ mod tests {
         // when more than one is outstanding.
         let message = state.status_bar.message().expect("a status message");
         assert!(
-            message.starts_with("[ERR: Posted] h:") && message.contains("blocked"),
+            message.starts_with("[ERR: Posted] no relay accepted") && message.contains("(h)"),
             "expected the failed publish to be identified, got: {message}"
         );
     }
@@ -1423,7 +1423,7 @@ mod tests {
 
         assert_eq!(
             state.status_bar.message(),
-            Some("[ERR: Posted] h: not connected")
+            Some("[ERR: Posted] not connected (h)")
         );
 
         // Nothing pending means a later stray outcome cannot settle this as posted.
@@ -1516,13 +1516,13 @@ mod tests {
         let _ = state.resolve_publish(Err(String::from("first")));
         assert_eq!(
             state.status_bar.message(),
-            Some(format!("[ERR: Reacted] {note1}: first").as_str())
+            Some(format!("[ERR: Reacted] first ({note1})").as_str())
         );
 
         let _ = state.resolve_publish(Err(String::from("second")));
         assert_eq!(
             state.status_bar.message(),
-            Some(format!("[ERR: Reposted] {note1}: second").as_str())
+            Some(format!("[ERR: Reposted] second ({note1})").as_str())
         );
 
         Ok(())
@@ -1565,7 +1565,7 @@ mod tests {
         // Unlike a success, this is something the user asked for that did not happen.
         assert_eq!(
             state.status_bar.message(),
-            Some(format!("[ERR: Reacted] {note1}: refused").as_str())
+            Some(format!("[ERR: Reacted] refused ({note1})").as_str())
         );
 
         Ok(())

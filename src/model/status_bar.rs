@@ -16,8 +16,21 @@ impl StatusBar {
     }
 
     fn set_message(&mut self, label: String, message: String) {
+        self.message = Some(Self::render(&label, &message));
+    }
+
+    fn render(label: &str, message: &str) -> String {
         let normalized_message = message.replace("\n", " ");
-        self.message = Some(format!("[{label}] {normalized_message}"));
+        format!("[{label}] {normalized_message}")
+    }
+
+    /// Whether the bar is still showing exactly this label and message.
+    ///
+    /// Asked rather than reconstructed on purpose: a caller that rebuilt the rendered
+    /// string itself would keep comparing against the old shape the day this rendering
+    /// changes, and would simply stop matching instead of failing.
+    pub fn shows(&self, label: &str, message: &str) -> bool {
+        self.message.as_deref() == Some(Self::render(label, message).as_str())
     }
 
     pub fn update(&mut self, message: Message) {
@@ -36,6 +49,35 @@ impl StatusBar {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shows_agrees_with_what_was_set() {
+        let mut status_bar = StatusBar::default();
+        status_bar.update(Message::MessageChanged {
+            label: "Sending".to_string(),
+            message: "line one\nline two".to_string(),
+        });
+
+        // Asked with the original message, newlines and all. This pairing is the whole
+        // point of `shows`: a caller that rebuilt the rendered string itself would have
+        // to normalise identically, and would quietly stop matching if this did not.
+        assert!(status_bar.shows("Sending", "line one\nline two"));
+        assert!(!status_bar.shows("Sending", "something else"));
+        assert!(!status_bar.shows("Posted", "line one\nline two"));
+    }
+
+    #[test]
+    fn shows_does_not_match_an_error_with_the_same_text() {
+        let mut status_bar = StatusBar::default();
+        status_bar.update(Message::ErrorMessageChanged {
+            label: "Sending".to_string(),
+            message: "hi".to_string(),
+        });
+
+        // Errors render as `ERR: label`, so this is a different line and must not read
+        // as the pending one still standing.
+        assert!(!status_bar.shows("Sending", "hi"));
+    }
 
     #[test]
     fn test_message_getter() {
