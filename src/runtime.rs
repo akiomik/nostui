@@ -208,10 +208,14 @@ impl<'a> TearsApp<'a> {
                 //
                 // Termination therefore has exactly one signal on this path, in `main`,
                 // and it is the one that takes the relay pool's write lock and so actually
-                // waits. The worker still ends: dropping the application drops the command
-                // sender, so once the worker has drained whatever is still queued — a
-                // reaction or note sent moments ago, which it should finish — its
-                // `cmd_rx.recv()` returns `None` and the loop breaks.
+                // waits.
+                //
+                // The worker still ends, though not tidily: its `select!` also breaks the
+                // moment a relay notification fails to send, and that receiver dies when
+                // `Runtime::run` settles — so a command still queued behind it may be
+                // abandoned rather than run. Not sending `Shutdown` removes a *certain*
+                // abort of the in-flight publish; it does not promise the queue drains.
+                // That promise needs the confirmation step tracked in #511.
                 //
                 // `NostrMsg::Disconnect` still goes through `close_connection`, because
                 // there the client has to stay usable and nothing else will disconnect it.
@@ -421,15 +425,23 @@ impl<'a> TearsApp<'a> {
 
     /// Handle NostrEvents subscription messages
     ///
-    /// Every arm here returns a redrawing command, so on tears 0.11 each inbound relay
-    /// notification that lands in its own pass costs one full render. With the frame rate
-    /// gone there is no ceiling above that, and on a busy feed redraw frequency tracks
-    /// relay throughput where 0.10.x clamped it to `--frame-rate`.
+    /// Every arm here returns a redrawing command — including the two that change nothing
+    /// — so on tears 0.11 each inbound relay notification that lands in its own pass costs
+    /// one full render. With the frame rate gone there is no ceiling above that, and on a
+    /// busy feed redraw frequency tracks relay throughput where 0.10.x clamped it to
+    /// `--frame-rate`.
     ///
     /// This is a known, accepted regression, not an oversight. `Command::without_redraw`
-    /// is not the fix: it declares that the update did not change the visible view, which
-    /// is false for an arm that appends to the timeline. Bounding it properly means
+    /// is not a general fix: it declares that the update did not change the visible view,
+    /// which is false for an arm that appends to the timeline. Bounding it properly means
     /// deciding per message whether the view actually changed — tracked in #510.
+    ///
+    /// Two arms are exempt from that reasoning and are worth noting for #510, because for
+    /// them the declaration would be true rather than convenient: `ClientNotification::Event`
+    /// only logs (nostui routes events from the `Message` stream instead, see the note
+    /// below), and a `Message` carrying anything other than `RelayMessage::Event` also only
+    /// logs. Since the pool emits both notifications for each newly-seen event, the ignored
+    /// `Event` doubles the redraw count per note for no visible change.
     fn handle_nostr_subscription_message(
         &mut self,
         msg: NostrSubscriptionMessage,

@@ -130,9 +130,10 @@ async fn tokio_main() -> Result<()> {
     // and so never waits for one. Waiting is the point: what it waits for is the user's
     // own post finishing.
     //
-    // Not for the worker loop's sake — that ends on its own. `Runtime::run` consumes the
-    // application, so the command sender it held is dropped by the time this runs, and the
-    // worker's `cmd_rx.recv()` returns `None` once it has drained anything still queued.
+    // Not for the worker loop's sake — that ends on its own, and not tidily: `Runtime::run`
+    // consumes the application, so both the command sender and the receiver for the
+    // worker's notifications are gone by the time this runs, and the loop breaks on
+    // whichever its `select!` reaches first. A command still queued may be abandoned.
     //
     // Bounded, because waiting on that lock unbounded is not free: by this point the
     // terminal is restored, so the delay reads as a hang at the shell prompt, with SIGINT
@@ -152,6 +153,14 @@ async fn tokio_main() -> Result<()> {
     log::info!("Shutting down the Nostr client...");
     let shutdown = client.shutdown();
     tokio::pin!(shutdown);
+
+    // Only worth waiting for on a clean exit. If the runtime failed, an error is about to
+    // be reported and there is no publish of the user's worth holding it behind — so tear
+    // the relays down without the wait or the announcements.
+    if result.is_err() {
+        let _ = timeout(SHUTDOWN_GRACE, shutdown).await;
+        return result;
+    }
 
     // Announced in two stages, so that the pause is never silent but a normal quit is
     // never noisy. Almost every shutdown finishes well inside `SHUTDOWN_GRACE` and prints
