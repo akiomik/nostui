@@ -1,12 +1,21 @@
 #![deny(warnings)]
 
 use std::num::NonZeroU64;
+use std::time::Duration;
 
 use clap::Parser;
 use color_eyre::eyre::{eyre, Result};
 use nostr_sdk::prelude::*;
 use secrecy::ExposeSecret;
 use tears::{subscription::time::Timer, Runtime};
+use tokio::time::timeout;
+
+/// How long to wait for the Nostr client to shut down before exiting without it.
+///
+/// Sized against nostr-sdk's own ten-second `wait_for_ok_timeout`: long enough for a
+/// publish to responsive relays to land, short enough that an unresponsive one does not
+/// make quitting look like a hang.
+const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 
 use nostui::{
     application::config::Config,
@@ -113,15 +122,24 @@ async fn tokio_main() -> Result<()> {
     // wake and exit on its own; `disconnect` sends nothing, so the loop stays parked until
     // the tokio runtime drops it.
     //
+    // Bounded, because `shutdown` takes the relay pool's write lock while an in-flight
+    // `send_event` holds the read lock for as long as it waits for `OK` — ten seconds per
+    // relay by default. Blocking on that lock is not wasted time: it is the user's own
+    // post finishing, and letting it land is what we want. Blocking on it unbounded is
+    // not, because by this point the terminal is restored and the delay reads as a hang
+    // at the shell prompt with SIGINT already taken over by the runtime's signal handler.
+    //
     // Two things it still does not do. It does not wait for a relay's connection task to
     // send the WebSocket close frame, and nostr-sdk 0.45 exposes no way to wait for one,
     // so a task not polled before the runtime is dropped still closes without one. And it
-    // cannot flush the worker's outbound queue, which it has no handle on: a note
-    // submitted just before quitting can still be queued there, and tearing the relays
-    // down can fail its send. Dropping the runtime a moment later would lose it anyway —
-    // that queue has no confirmation step at all. Tracked in #511.
+    // cannot flush the worker's outbound *queue*, only whatever send is already in flight:
+    // a note still queued when this runs is lost, as it was before. Tracked in #511.
     log::info!("Shutting down the Nostr client...");
-    client.shutdown().await;
+    if timeout(SHUTDOWN_TIMEOUT, client.shutdown()).await.is_err() {
+        log::warn!(
+            "Nostr client did not shut down within {SHUTDOWN_TIMEOUT:?}; exiting without it"
+        );
+    }
 
     result
 }
