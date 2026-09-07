@@ -195,31 +195,25 @@ impl<'a> TearsApp<'a> {
             SystemMsg::Quit => {
                 log::info!("Quit requested - initiating graceful shutdown");
 
-                // Deliberately does *not* ask the subscription worker to disconnect.
+                // Queues at most `NostrCommand::Shutdown` — never a per-subscription
+                // `CLOSE`, since disconnecting ends them at the relay anyway — and nothing
+                // at all if the gateway is already disconnected.
                 //
-                // `close_connection` would queue `NostrCommand::Shutdown`, and the worker
-                // handles that by calling `Client::disconnect`, which sets every relay to
-                // `RelayStatus::Terminated` and broadcasts it. A publish waiting for its
-                // `OK` gives up the moment it sees a disconnected status, returning
-                // `Err(not_connected)` (nostr-sdk relay/inner.rs:1488, status.rs:101).
+                // This cannot cut a publish short, even though the worker handles
+                // `Shutdown` by disconnecting and a disconnect does abort a pending `OK`
+                // wait. Every command shares one FIFO channel and the worker awaits each
+                // one inline, so while a `SendEventBuilder` is in flight the loop is inside
+                // `handle_command` rather than at its `select!`, and a `Shutdown` queued
+                // behind it is not dequeued until that send resolves.
                 //
-                // On 0.10.x the quit travelled a channel, so the worker was generally
-                // polled first and the send went out. The quit is synchronous now, so that
-                // request would land while the send is still in flight and abort it — the
-                // user's own note, discarded by their own client, after the status bar
-                // said "Posted". Not sending it lets the send race the process exit
-                // instead of being cancelled outright.
-                //
-                // This does not make the send safe. The worker is a detached task the
-                // runtime neither owns nor joins, its `select!` also breaks the moment a
-                // relay notification fails to send, and the tokio runtime is dropped
-                // shortly after. Removing a certain abort is not a delivery guarantee;
-                // that needs the confirmation step tracked in #511.
-                //
-                // Nothing else disconnects on this path, and nothing needs to: the process
-                // is exiting, and the WebSocket close frame was never guaranteed anyway.
-                // `NostrMsg::Disconnect` still goes through `close_connection`, because
-                // there the client has to stay usable afterwards.
+                // What the send is not safe from is the exit itself. The quit applies
+                // synchronously on tears 0.11, so `run` can return while the worker — a
+                // detached task the runtime neither owns nor joins — is still publishing,
+                // and the tokio runtime is dropped moments later. The status bar has
+                // already said "Posted" by then. #511 covers making that claim honest, and
+                // #512 covers giving the send a chance to land.
+                let _ = self.state.close_connection();
+
                 Command::quit()
             }
             SystemMsg::Resize(width, height) => {
@@ -503,8 +497,6 @@ mod tests {
     use std::num::NonZeroU64;
 
     use super::*;
-    use tokio::sync::mpsc;
-
     use crate::application::config::Config;
     use crate::domain::nostr::FeedKind;
     use crate::model::editor::Message as EditorMessage;
@@ -731,28 +723,6 @@ mod tests {
         // Selection should be at the last index
         let expected_index = app.state.timeline.len() - 1;
         assert_eq!(app.state.timeline.selected_index(), Some(expected_index));
-    }
-
-    #[test]
-    fn quit_does_not_ask_the_worker_to_disconnect() {
-        let mut app = create_test_app();
-
-        // Give the app a command channel, the way `Message::Ready` does in production.
-        let (tx, mut rx) = mpsc::unbounded_channel();
-        let _ = app.state.on_connection_ready(tx);
-        // `on_connection_ready` subscribes the active feed; drain that.
-        while rx.try_recv().is_ok() {}
-
-        let _ = app.update(AppMsg::System(SystemMsg::Quit));
-
-        // Nothing may be queued. A `NostrCommand::Shutdown` here would make the detached
-        // worker call `Client::disconnect`, which terminates every relay and aborts an
-        // in-flight publish waiting for its `OK` — the send that `main`'s bounded
-        // `Client::shutdown` exists to let finish.
-        assert!(
-            rx.try_recv().is_err(),
-            "quit must leave relay termination to `main`, which waits for in-flight sends"
-        );
     }
 
     #[test]
