@@ -194,14 +194,16 @@ impl<'a> TearsApp<'a> {
         match msg {
             SystemMsg::Quit => {
                 log::info!("Quit requested - initiating graceful shutdown");
-                // Drop the tracked subscriptions and ask the worker to disconnect. This
-                // sends `NostrCommand::Shutdown` and nothing else — no `CLOSE` is sent
-                // per subscription, because disconnecting ends them at the relay anyway.
+                // Drop the tracked subscriptions and ask the worker to disconnect. At most
+                // this sends `NostrCommand::Shutdown` — never a per-subscription `CLOSE`,
+                // because disconnecting ends them at the relay anyway — and it sends
+                // nothing at all if the gateway was already disconnected.
                 //
                 // The send itself is synchronous, but the quit below now terminates the
                 // runtime at this same dispatch, so the worker is not guaranteed to be
-                // polled before `run` returns. `main` signals relay termination again
-                // afterwards so it does not depend on this worker having run.
+                // polled before `run` returns. Between that and the nothing-sent case,
+                // `main` signals relay termination again after `run` rather than relying
+                // on this path.
                 let _ = self.state.close_connection();
 
                 // Trigger the quit action

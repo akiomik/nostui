@@ -34,8 +34,9 @@ fn tick_timer_from_rate(tick_rate: f64) -> Result<Timer> {
     Ok(Timer::new(interval_ms))
 }
 
-/// Draw the application on an initialized terminal, restoring the terminal on every
-/// path out — including a failure to clear it.
+/// Take over the terminal, run the application on it, and restore it on every path out —
+/// including a failure to clear it, which used to leave the caller on the alternate
+/// screen in raw mode.
 async fn run_on_terminal(init_flags: InitFlags) -> Result<()> {
     let mut terminal = ratatui::init();
 
