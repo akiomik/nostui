@@ -1,12 +1,12 @@
 #![deny(warnings)]
 
-use std::num::{NonZeroU32, NonZeroU64};
+use std::num::NonZeroU64;
 
 use clap::Parser;
 use color_eyre::eyre::{eyre, Result};
 use nostr_sdk::prelude::*;
 use secrecy::ExposeSecret;
-use tears::{subscription::time::Timer, FrameRate, Runtime};
+use tears::{subscription::time::Timer, Runtime};
 
 use nostui::{
     application::config::Config,
@@ -34,18 +34,24 @@ fn tick_timer_from_rate(tick_rate: f64) -> Result<Timer> {
     Ok(Timer::new(interval_ms))
 }
 
-fn frame_rate_from_value(frame_rate: f64) -> Result<FrameRate> {
-    if !frame_rate.is_finite() || frame_rate <= 0.0 {
-        return Err(eyre!("frame rate must be a positive finite number"));
-    }
-    if frame_rate > f64::from(u32::MAX) {
-        return Err(eyre!("frame rate is too high: {frame_rate}"));
-    }
+/// Take over the terminal, run the application on it, and restore it on every path out —
+/// including a failure to clear it, which used to leave the caller on the alternate
+/// screen in raw mode.
+async fn run_on_terminal(init_flags: InitFlags) -> Result<()> {
+    let mut terminal = ratatui::init();
 
-    let frames_per_second = NonZeroU32::new(frame_rate as u32)
-        .ok_or_else(|| eyre!("frame rate is too low to produce a non-zero FPS: {frame_rate}"))?;
+    let result = async {
+        terminal.clear()?;
+        log::info!("Starting Tears application");
+        Runtime::<TearsApp>::new(init_flags)
+            .run(&mut terminal)
+            .await
+    }
+    .await;
 
-    FrameRate::new(frames_per_second).map_err(|e| eyre!("invalid frame rate: {e}"))
+    ratatui::restore();
+
+    Ok(result?)
 }
 
 async fn tokio_main() -> Result<()> {
@@ -88,22 +94,7 @@ async fn tokio_main() -> Result<()> {
         tick_timer: tick_timer_from_rate(args.tick_rate)?,
     };
 
-    // Setup terminal
-    let mut terminal = ratatui::init();
-    terminal.clear()?;
-
-    // Run the Tears application
-    log::info!(
-        "Starting Tears application with frame_rate: {}",
-        args.frame_rate
-    );
-    let runtime = Runtime::<TearsApp>::new(init_flags, frame_rate_from_value(args.frame_rate)?);
-    let result = runtime.run(&mut terminal).await;
-
-    // Restore terminal
-    ratatui::restore();
-
-    Ok(result?)
+    run_on_terminal(init_flags).await
 }
 
 #[tokio::main]
@@ -139,5 +130,17 @@ mod tests {
         assert!(tick_timer_from_rate(f64::NAN).is_err());
         assert!(tick_timer_from_rate(f64::INFINITY).is_err());
         assert!(tick_timer_from_rate(1000.1).is_err());
+    }
+
+    #[test]
+    fn tick_timer_from_rate_rejects_a_rate_whose_interval_overflows_u64_millis() {
+        // Positive and finite, so it clears the first guard, but 1000 / 1e-20 is far past
+        // `u64::MAX` milliseconds. Pin the message so this asserts the overflow guard
+        // rather than passing on whichever guard happens to fire.
+        let error = tick_timer_from_rate(1e-20).expect_err("tick rate should be rejected");
+        assert!(
+            error.to_string().contains("too low to convert"),
+            "expected the interval-overflow guard, got: {error}"
+        );
     }
 }

@@ -99,6 +99,33 @@ This is primarily an internal change. If you were:
 **Note:**
 The "ticks per sec" value still provides useful performance information, representing how frequently the application processes events and updates state.
 
+---
+
+#### Removed: `--frame-rate` command line option
+
+**What changed:**
+- The `-f` / `--frame-rate` option has been removed. Passing it now fails argument parsing with `error: unexpected argument '-f' found`
+- There is no replacement option
+
+**Reason:**
+The Tears framework removed its frame rate in 0.11.0. Render cadence is now bounded by the update pass: the loop renders when a pass leaves the view dirty and parks when it has no work, so there is no period left to configure. Keeping the option would mean accepting a value and ignoring it.
+
+**Migration steps:**
+
+Drop the option wherever nostui is launched — a shell alias, a `.desktop` entry, a systemd unit, or a wrapper script:
+
+```diff
+- nostui --frame-rate 30 --tick-rate 16
++ nostui --tick-rate 16
+```
+
+`--tick-rate` is unaffected. It controls how often the application processes a tick, which is also what the FPS display measures.
+
+**Note:**
+There is no direct replacement, and redraw volume can move in either direction. Idle nostui redraws once per tick, so `--tick-rate` currently sets the idle floor and lowering it is the nearest thing to the old throttle — but that is a side effect of how the tick is handled today, not a rendering control, and [#510](https://github.com/akiomik/nostui/issues/510) plans to remove it. Under a busy feed there is no longer any ceiling: redraws follow inbound relay traffic rather than being clamped to 16 fps, so a heavy home feed can redraw more often than it used to.
+
+The same applies upward, and it is the direction most likely to surprise: a `--tick-rate` you raised on 0.1.x cost extra update passes but never more than 16 renders per second. It now costs a full render per tick even when nothing is happening, so `--tick-rate 200` means 200 renders per second on a completely idle screen. If you raised it, lower it back.
+
 ### Deprecations
 
 #### Deprecated: `privatekey` config field

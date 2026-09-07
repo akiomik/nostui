@@ -194,10 +194,26 @@ impl<'a> TearsApp<'a> {
         match msg {
             SystemMsg::Quit => {
                 log::info!("Quit requested - initiating graceful shutdown");
-                // Unsubscribe from all timeline subscriptions and disconnect from relays
+
+                // Queues at most `NostrCommand::Shutdown` — never a per-subscription
+                // `CLOSE`, since disconnecting ends them at the relay anyway — and nothing
+                // at all if the gateway is already disconnected.
+                //
+                // This cannot cut a publish short, even though the worker handles
+                // `Shutdown` by disconnecting and a disconnect does abort a pending `OK`
+                // wait. Every command shares one FIFO channel and the worker awaits each
+                // one inline, so while a `SendEventBuilder` is in flight the loop is inside
+                // `handle_command` rather than at its `select!`, and a `Shutdown` queued
+                // behind it is not dequeued until that send resolves.
+                //
+                // What the send is not safe from is the exit itself. The quit applies
+                // synchronously on tears 0.11, so `run` can return while the worker — a
+                // detached task the runtime neither owns nor joins — is still publishing,
+                // and the tokio runtime is dropped moments later. The status bar has
+                // already said "Posted" by then. #511 covers making that claim honest, and
+                // #512 covers giving the send a chance to land.
                 let _ = self.state.close_connection();
 
-                // Trigger the quit action
                 Command::quit()
             }
             SystemMsg::Resize(width, height) => {
@@ -205,7 +221,11 @@ impl<'a> TearsApp<'a> {
                 // Terminal resize is handled automatically by ratatui
                 Command::none()
             }
-            // Track app FPS based on tick events (approximately matches render FPS)
+            // Count ticks for the FPS display. This measures how often the application
+            // processes a tick, which is no longer the same as how often it renders: the
+            // runtime renders once per pass that leaves the view dirty. An idle nostui has
+            // only the tick to dirty it, so the two rates still coincide there, but every
+            // inbound relay event adds a pass the tick knows nothing about.
             SystemMsg::Tick => self.state.record_tick(),
             SystemMsg::ShowError(error) => self.state.show_error(error),
             SystemMsg::KeyInput(key) => self.handle_key_input(key),
@@ -236,7 +256,7 @@ impl<'a> TearsApp<'a> {
         // Fallback: handle special keys not in config
         match key.code {
             // Escape key - unselect/cancel (delegates to TimelineMsg::Deselect)
-            KeyCode::Esc => Command::message(AppMsg::Timeline(TimelineMsg::Deselect)),
+            KeyCode::Esc => Command::message(AppMsg::Timeline(TimelineMsg::Deselect)).into(),
             _ => Command::none(),
         }
     }
@@ -248,13 +268,15 @@ impl<'a> TearsApp<'a> {
         // not a quit command. Only hardcoded special keys are processed.
         match (key.code, key.modifiers) {
             // Escape: cancel composing
-            (KeyCode::Esc, _) => Command::message(AppMsg::Editor(EditorMsg::CancelComposing)),
+            (KeyCode::Esc, _) => {
+                Command::message(AppMsg::Editor(EditorMsg::CancelComposing)).into()
+            }
             // Ctrl+P: submit note (hardcoded for safety)
             (KeyCode::Char('p'), KeyModifiers::CONTROL) => {
-                Command::message(AppMsg::Editor(EditorMsg::SubmitNote))
+                Command::message(AppMsg::Editor(EditorMsg::SubmitNote)).into()
             }
             // All other keys are passed to textarea for input
-            _ => Command::message(AppMsg::Editor(EditorMsg::ProcessTextAreaInput(key))),
+            _ => Command::message(AppMsg::Editor(EditorMsg::ProcessTextAreaInput(key))).into(),
         }
     }
 
@@ -262,42 +284,52 @@ impl<'a> TearsApp<'a> {
     fn handle_action(&mut self, action: KeyAction) -> Command<AppMsg> {
         match action {
             // Navigation
-            KeyAction::ScrollUp => Command::message(AppMsg::Timeline(TimelineMsg::ScrollUp)),
-            KeyAction::ScrollDown => Command::message(AppMsg::Timeline(TimelineMsg::ScrollDown)),
+            KeyAction::ScrollUp => Command::message(AppMsg::Timeline(TimelineMsg::ScrollUp)).into(),
+            KeyAction::ScrollDown => {
+                Command::message(AppMsg::Timeline(TimelineMsg::ScrollDown)).into()
+            }
             KeyAction::ScrollToTop => {
                 // Delegate to TimelineMsg::SelectFirst
-                Command::message(AppMsg::Timeline(TimelineMsg::SelectFirst))
+                Command::message(AppMsg::Timeline(TimelineMsg::SelectFirst)).into()
             }
             KeyAction::ScrollToBottom => {
                 // Delegate to TimelineMsg::SelectLast
-                Command::message(AppMsg::Timeline(TimelineMsg::SelectLast))
+                Command::message(AppMsg::Timeline(TimelineMsg::SelectLast)).into()
             }
             KeyAction::Unselect => {
                 // Delegate to TimelineMsg::Deselect to keep logic centralized
-                Command::message(AppMsg::Timeline(TimelineMsg::Deselect))
+                Command::message(AppMsg::Timeline(TimelineMsg::Deselect)).into()
             }
 
             // Compose/interactions
-            KeyAction::NewTextNote => Command::message(AppMsg::Editor(EditorMsg::StartComposing)),
-            KeyAction::ReplyTextNote => Command::message(AppMsg::Editor(EditorMsg::StartReply)),
-            KeyAction::React => Command::message(AppMsg::Timeline(TimelineMsg::ReactToSelected)),
-            KeyAction::Repost => Command::message(AppMsg::Timeline(TimelineMsg::RepostSelected)),
+            KeyAction::NewTextNote => {
+                Command::message(AppMsg::Editor(EditorMsg::StartComposing)).into()
+            }
+            KeyAction::ReplyTextNote => {
+                Command::message(AppMsg::Editor(EditorMsg::StartReply)).into()
+            }
+            KeyAction::React => {
+                Command::message(AppMsg::Timeline(TimelineMsg::ReactToSelected)).into()
+            }
+            KeyAction::Repost => {
+                Command::message(AppMsg::Timeline(TimelineMsg::RepostSelected)).into()
+            }
 
             // Tab management
             KeyAction::OpenAuthorTimeline => {
-                Command::message(AppMsg::Timeline(TimelineMsg::OpenAuthorTimeline))
+                Command::message(AppMsg::Timeline(TimelineMsg::OpenAuthorTimeline)).into()
             }
             KeyAction::OpenMentionTab => {
-                Command::message(AppMsg::Timeline(TimelineMsg::OpenMentionTab))
+                Command::message(AppMsg::Timeline(TimelineMsg::OpenMentionTab)).into()
             }
             KeyAction::CloseCurrentTab => {
-                Command::message(AppMsg::Timeline(TimelineMsg::CloseCurrentTab))
+                Command::message(AppMsg::Timeline(TimelineMsg::CloseCurrentTab)).into()
             }
-            KeyAction::PrevTab => Command::message(AppMsg::Timeline(TimelineMsg::PrevTab)),
-            KeyAction::NextTab => Command::message(AppMsg::Timeline(TimelineMsg::NextTab)),
+            KeyAction::PrevTab => Command::message(AppMsg::Timeline(TimelineMsg::PrevTab)).into(),
+            KeyAction::NextTab => Command::message(AppMsg::Timeline(TimelineMsg::NextTab)).into(),
 
             // System
-            KeyAction::Quit => Command::message(AppMsg::System(SystemMsg::Quit)),
+            KeyAction::Quit => Command::message(AppMsg::System(SystemMsg::Quit)).into(),
             KeyAction::SubmitTextNote => {
                 // Only valid in composing mode, handled separately
                 Command::none()
@@ -387,6 +419,24 @@ impl<'a> TearsApp<'a> {
     }
 
     /// Handle NostrEvents subscription messages
+    ///
+    /// Every arm here returns a redrawing command — including the two that change nothing
+    /// — so on tears 0.11 each inbound relay notification that lands in its own pass costs
+    /// one full render. With the frame rate gone there is no ceiling above that, and on a
+    /// busy feed redraw frequency tracks relay throughput where 0.10.x clamped it to
+    /// `--frame-rate`.
+    ///
+    /// This is a known, accepted regression, not an oversight. `Command::without_redraw`
+    /// is not a general fix: it declares that the update did not change the visible view,
+    /// which is false for an arm that appends to the timeline. Bounding it properly means
+    /// deciding per message whether the view actually changed — tracked in #510.
+    ///
+    /// Two arms are exempt from that reasoning and are worth noting for #510, because for
+    /// them the declaration would be true rather than convenient: `ClientNotification::Event`
+    /// only logs (nostui routes events from the `Message` stream instead, see the note
+    /// below), and a `Message` carrying anything other than `RelayMessage::Event` also only
+    /// logs. Since the pool emits both notifications for each newly-seen event, the ignored
+    /// `Event` doubles the redraw count per note for no visible change.
     fn handle_nostr_subscription_message(
         &mut self,
         msg: NostrSubscriptionMessage,

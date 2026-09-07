@@ -13,13 +13,4 @@ pub struct Cli {
         default_value_t = 16.0
     )]
     pub tick_rate: f64,
-
-    #[arg(
-        short,
-        long,
-        value_name = "FLOAT",
-        help = "Frame rate, i.e. number of frames per second",
-        default_value_t = 16.0
-    )]
-    pub frame_rate: f64,
 }
