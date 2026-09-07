@@ -72,9 +72,22 @@ pub struct AppState<'a> {
     pending_publishes: VecDeque<PendingPublish>,
 }
 
+/// Who asked for a publish, which decides how loudly its outcome is reported.
+///
+/// A note, reaction or repost is something the user did and is waiting on, so its
+/// answer is worth interrupting whatever is on screen. A NIP-38 status event fires by
+/// itself on every track change; its answer is worth showing only while the user is
+/// still looking at it, and its failures are not actionable at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PublishOrigin {
+    User,
+    Automatic,
+}
+
 /// A publish that has been handed to the worker but not yet confirmed by a relay.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PendingPublish {
+    origin: PublishOrigin,
     /// Status-bar label to show once the relay accepts it — the word the status bar has
     /// always used for this kind of event, whether or not it reads as a verb
     /// ("Posted", "Reacted", "Reposted", but also "Music").
@@ -286,7 +299,7 @@ impl<'a> AppState<'a> {
         let outcome = self
             .nostr
             .update(NostrMessage::EventSubmitted { event_builder });
-        let _ = self.begin_publish(outcome, label, note_id);
+        let _ = self.begin_publish(outcome, PublishOrigin::User, label, note_id);
 
         Command::none()
     }
@@ -340,7 +353,7 @@ impl<'a> AppState<'a> {
         // This covers the failures known before sending. One the relays report later
         // still loses the text, because getting it back needs a way to put content into
         // the editor that `model::editor` does not have yet: #514.
-        if self.begin_publish(outcome, "Posted", content) {
+        if self.begin_publish(outcome, PublishOrigin::User, "Posted", content) {
             self.editor.update(EditorMessage::ComposingCanceled);
         }
 
@@ -361,7 +374,7 @@ impl<'a> AppState<'a> {
         let outcome = self
             .nostr
             .update(NostrMessage::EventSubmitted { event_builder });
-        let _ = self.begin_publish(outcome, "Music", content);
+        let _ = self.begin_publish(outcome, PublishOrigin::Automatic, "Music", content);
 
         Command::none()
     }
@@ -404,6 +417,7 @@ impl<'a> AppState<'a> {
     fn begin_publish(
         &mut self,
         outcome: Option<NostrOutcome>,
+        origin: PublishOrigin,
         settled_label: &str,
         message: impl Into<String>,
     ) -> bool {
@@ -411,7 +425,7 @@ impl<'a> AppState<'a> {
 
         // `model::nostr` declines a submission whenever it believes it is disconnected.
         if outcome.is_none() {
-            self.set_status_error(settled_label, format!("{message}: not connected"));
+            self.report_publish_failure(origin, settled_label, &message, "not connected");
             return false;
         }
 
@@ -420,11 +434,17 @@ impl<'a> AppState<'a> {
             // believes it is connected, and the sender is set and cleared in the same
             // calls that set and clear that belief — so the sender cannot be missing
             // here, only closed.
-            self.set_status_error(settled_label, format!("{message}: connection lost"));
+            //
+            // Record the loss rather than only reporting it, so the next publish says
+            // "not connected" instead of rediscovering the dead worker every time.
+            let _ = self.nostr.update(NostrMessage::ConnectionClosed);
+            self.command_sender = None;
+            self.report_publish_failure(origin, settled_label, &message, "connection lost");
             return false;
         }
 
         self.pending_publishes.push_back(PendingPublish {
+            origin,
             settled_label: settled_label.to_owned(),
             message: message.clone(),
         });
@@ -439,6 +459,27 @@ impl<'a> AppState<'a> {
     /// looking at this publish when the answer finally arrives.
     fn pending_status_line(message: &str) -> String {
         format!("[Sending] {}", message.replace('\n', " "))
+    }
+
+    /// Report a publish that failed, as loudly as its origin deserves.
+    fn report_publish_failure(
+        &mut self,
+        origin: PublishOrigin,
+        settled_label: &str,
+        message: &str,
+        reason: &str,
+    ) {
+        log::error!("Failed to publish {message}: {reason}");
+
+        // Nothing fires an automatic publish but nostui itself, and there is nothing the
+        // user can do about one failing — so it stays in the log rather than painting an
+        // error over whatever they are actually doing. A track change during startup
+        // would otherwise report a failure for something they never asked for.
+        if origin == PublishOrigin::Automatic {
+            return;
+        }
+
+        self.set_status_error(settled_label, format!("{message}: {reason}"));
     }
 
     /// Settle the oldest unreported publish with the relay's answer.
@@ -460,28 +501,32 @@ impl<'a> AppState<'a> {
 
         match result {
             Ok(()) => {
-                // An answer can arrive seconds later — a relay may take its full ack
-                // timeout — by which time the user has moved on and the status bar is
-                // showing something newer. Confirming a success over the top of that is
-                // noise, so it only lands if this publish is still what is on screen.
-                if self.status_bar.message()
-                    == Some(Self::pending_status_line(&pending.message)).as_deref()
-                {
+                // A user's publish always gets its confirmation: they are waiting on it,
+                // and it is what showing "Sending" promised. In particular a newer
+                // publish's pending line replacing theirs is not them moving on.
+                //
+                // An automatic one lands only while it is still what is on screen. Its
+                // answer can arrive a full ack timeout later, and announcing a track
+                // change over whatever the user turned to since is noise.
+                let announce = pending.origin == PublishOrigin::User
+                    || self.status_bar.message()
+                        == Some(Self::pending_status_line(&pending.message)).as_deref();
+
+                if announce {
                     self.set_status(pending.settled_label, pending.message);
                 } else {
                     log::info!("Published: {}", pending.message);
                 }
             }
             Err(reason) => {
-                log::error!("Failed to publish {}: {reason}", pending.message);
-                // Failures are shown whatever else is on screen: the user asked for this
-                // and it did not happen. Keeps the label and the content, because with
-                // more than one publish outstanding — a NIP-38 status from a track change
-                // alongside a note just written — an error attributed to neither says
-                // nothing useful.
-                self.set_status_error(
-                    pending.settled_label,
-                    format!("{}: {reason}", pending.message),
+                // Keeps the label and the content, because with more than one publish
+                // outstanding — a NIP-38 status from a track change alongside a note just
+                // written — an error attributed to neither says nothing useful.
+                self.report_publish_failure(
+                    pending.origin,
+                    &pending.settled_label,
+                    &pending.message,
+                    &reason,
                 );
             }
         }
@@ -1342,8 +1387,13 @@ mod tests {
     fn publish_failure_reports_an_error_instead_of_success() {
         let (mut state, _rx) = connected_state();
 
-        let _ = state.publish_music_status(create_track("Song"));
-        assert_eq!(state.status_bar.message(), Some("[Sending] Song - Artist"));
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+        assert_eq!(state.status_bar.message(), Some("[Sending] h"));
 
         let _ = state.resolve_publish(Err(String::from(
             "no relay accepted the event: wss://relay.example: blocked",
@@ -1353,7 +1403,7 @@ mod tests {
         // when more than one is outstanding.
         let message = state.status_bar.message().expect("a status message");
         assert!(
-            message.starts_with("[ERR: Music] Song - Artist:") && message.contains("blocked"),
+            message.starts_with("[ERR: Posted] h:") && message.contains("blocked"),
             "expected the failed publish to be identified, got: {message}"
         );
     }
@@ -1364,14 +1414,32 @@ mod tests {
         // and no outcome will ever arrive to settle it.
         let mut state = AppState::new(Keys::generate().public_key());
 
-        let _ = state.publish_music_status(create_track("Song"));
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
 
         assert_eq!(
             state.status_bar.message(),
-            Some("[ERR: Music] Song - Artist: not connected")
+            Some("[ERR: Posted] h: not connected")
         );
 
         // Nothing pending means a later stray outcome cannot settle this as posted.
+        assert!(state.pending_publishes.is_empty());
+    }
+
+    #[test]
+    fn an_automatic_publish_fails_quietly() {
+        // A track change fires this, not the user — and during startup it can land before
+        // the worker is ready. An error for something they never asked for, painted over
+        // the startup status, is noise they cannot act on.
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        let _ = state.publish_music_status(create_track("Song"));
+
+        assert_eq!(state.status_bar.message(), None);
         assert!(state.pending_publishes.is_empty());
     }
 
@@ -1438,13 +1506,13 @@ mod tests {
         let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
         let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
 
-        // Two publishes outstanding at once, reaction first.
+        // Two publishes outstanding at once, the reaction first. Both user-initiated, so
+        // both report; failures rather than successes, so each names what it belongs to
+        // regardless of which pending line happens to be on screen.
         let _ = state.react_to_selected();
-        let _ = state.publish_music_status(create_track("Song"));
+        let _ = state.repost_selected();
         assert_eq!(state.pending_publishes.len(), 2);
 
-        // Failures rather than successes, so the assertions do not depend on which
-        // pending line happens to be on screen — each error names what it belongs to.
         let _ = state.resolve_publish(Err(String::from("first")));
         assert_eq!(
             state.status_bar.message(),
@@ -1454,7 +1522,7 @@ mod tests {
         let _ = state.resolve_publish(Err(String::from("second")));
         assert_eq!(
             state.status_bar.message(),
-            Some("[ERR: Music] Song - Artist: second")
+            Some(format!("[ERR: Reposted] {note1}: second").as_str())
         );
 
         Ok(())
@@ -1480,10 +1548,16 @@ mod tests {
     }
 
     #[test]
-    fn a_late_failure_is_shown_even_over_a_newer_status() {
+    fn a_late_failure_is_shown_even_over_a_newer_status() -> Result<()> {
         let (mut state, _rx) = connected_state();
+        let keys = Keys::generate();
 
-        let _ = state.publish_music_status(create_track("Song"));
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let Ok(note1) = event.id.to_bech32();
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+
+        let _ = state.react_to_selected();
         let _ = state.open_mention_tab();
 
         let _ = state.resolve_publish(Err(String::from("refused")));
@@ -1491,8 +1565,37 @@ mod tests {
         // Unlike a success, this is something the user asked for that did not happen.
         assert_eq!(
             state.status_bar.message(),
-            Some("[ERR: Music] Song - Artist: refused")
+            Some(format!("[ERR: Reacted] {note1}: refused").as_str())
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn a_users_publish_is_confirmed_even_after_a_newer_pending_line() -> Result<()> {
+        let (mut state, _rx) = connected_state();
+        let keys = Keys::generate();
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let Ok(note1) = event.id.to_bech32();
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+
+        let _ = state.react_to_selected();
+
+        // A track change replaces the reaction's pending line while it is still in
+        // flight. That is not the user moving on, and their reaction still deserves its
+        // answer.
+        let _ = state.publish_music_status(create_track("Song"));
+
+        let _ = state.resolve_publish(Ok(()));
+
+        assert_eq!(
+            state.status_bar.message(),
+            Some(format!("[Reacted] {note1}").as_str())
+        );
+
+        Ok(())
     }
 
     #[test]
