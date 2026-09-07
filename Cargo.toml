@@ -40,7 +40,7 @@ serde_json = "1"
 signal-hook = "0.4"
 sorted-vec = "0.8"
 strip-ansi-escapes = "0.2"
-tears = "0.10.2"
+tears = "0.11.0"
 thousands = "0.2"
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
