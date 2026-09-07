@@ -70,10 +70,27 @@ pub struct AppState<'a> {
     /// exactly once, so its reports arrive in the order the entries were pushed and
     /// can be matched positionally rather than by an id.
     pending_publishes: VecDeque<PendingPublish>,
+    /// The publish whose pending line the status bar is currently showing.
+    ///
+    /// Cleared by every other write to the bar, so it answers "is this still mine?"
+    /// exactly, where comparing the rendered text could not tell two publishes of the
+    /// same content apart.
+    status_owner: Option<PublishId>,
+    /// Source of [`PublishId`]s, monotonic for the life of the application.
+    next_publish_id: u64,
 }
 
 /// Status-bar label shown while a publish is waiting for a relay's answer.
 const PENDING_LABEL: &str = "Sending";
+
+/// Identifies one submitted publish, so its own status line can be recognised without
+/// comparing rendered text.
+///
+/// Two publishes can carry the same content — the same track queued twice inside one
+/// ack window — and their pending lines are then identical. Matching on text would let
+/// one settle against the other's line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PublishId(u64);
 
 /// Who asked for a publish, which decides how loudly its outcome is reported.
 ///
@@ -90,6 +107,7 @@ enum PublishOrigin {
 /// A publish that has been handed to the worker but not yet confirmed by a relay.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PendingPublish {
+    id: PublishId,
     origin: PublishOrigin,
     /// Status-bar label to show once the relay accepts it — the word the status bar has
     /// always used for this kind of event, whether or not it reads as a verb
@@ -390,6 +408,7 @@ impl<'a> AppState<'a> {
 
     /// Show a status message in the status bar.
     fn set_status(&mut self, label: impl Into<String>, message: impl Into<String>) {
+        self.status_owner = None;
         self.status_bar.update(Message::MessageChanged {
             label: label.into(),
             message: message.into(),
@@ -398,6 +417,7 @@ impl<'a> AppState<'a> {
 
     /// Show an error message in the status bar.
     fn set_status_error(&mut self, label: impl Into<String>, message: impl Into<String>) {
+        self.status_owner = None;
         self.status_bar.update(Message::ErrorMessageChanged {
             label: label.into(),
             message: message.into(),
@@ -427,9 +447,15 @@ impl<'a> AppState<'a> {
     ) -> bool {
         let message = message.into();
 
+        // Allocated before the failure paths so every submission can be named, queued or
+        // not. One that never reached the worker owns no status line, so the ownership
+        // check simply does not match for it.
+        let id = PublishId(self.next_publish_id);
+        self.next_publish_id = self.next_publish_id.wrapping_add(1);
+
         // `model::nostr` declines a submission whenever it believes it is disconnected.
         if outcome.is_none() {
-            self.report_publish_failure(origin, settled_label, &message, "not connected");
+            self.report_publish_failure(id, origin, settled_label, &message, "not connected");
             return false;
         }
 
@@ -454,16 +480,19 @@ impl<'a> AppState<'a> {
             // unattributable. One that died without draining leaves them behind instead,
             // but a finished subscription restarts at the next re-evaluation, and the
             // `Ready` that follows clears the queue.
-            self.report_publish_failure(origin, settled_label, &message, "connection lost");
+            self.report_publish_failure(id, origin, settled_label, &message, "connection lost");
             return false;
         }
 
         self.pending_publishes.push_back(PendingPublish {
+            id,
             origin,
             settled_label: settled_label.to_owned(),
             message: message.clone(),
         });
+
         self.set_status(PENDING_LABEL, message);
+        self.status_owner = Some(id);
 
         true
     }
@@ -478,6 +507,7 @@ impl<'a> AppState<'a> {
 
         for pending in abandoned {
             self.report_publish_failure(
+                pending.id,
                 pending.origin,
                 &pending.settled_label,
                 &pending.message,
@@ -489,6 +519,7 @@ impl<'a> AppState<'a> {
     /// Report a publish that failed, as loudly as its origin deserves.
     fn report_publish_failure(
         &mut self,
+        id: PublishId,
         origin: PublishOrigin,
         settled_label: &str,
         message: &str,
@@ -506,7 +537,7 @@ impl<'a> AppState<'a> {
         // it would go on claiming a publish is in flight that has definitively failed —
         // the same dishonest status this whole change exists to remove, inverted.
         if origin == PublishOrigin::Automatic {
-            if self.status_bar.shows(PENDING_LABEL, message) {
+            if self.status_owner == Some(id) {
                 let _ = self.clear_status_message();
             }
             return;
@@ -549,7 +580,7 @@ impl<'a> AppState<'a> {
                 // cleared bar as "moved on" would stop `Music` ever appearing for anyone
                 // who touches the timeline while an ack is outstanding.
                 let announce = pending.origin == PublishOrigin::User
-                    || self.status_bar.shows(PENDING_LABEL, &pending.message)
+                    || self.status_owner == Some(pending.id)
                     || self.status_bar.message().is_none();
 
                 if announce {
@@ -563,6 +594,7 @@ impl<'a> AppState<'a> {
                 // outstanding — a NIP-38 status from a track change alongside a note just
                 // written — an error attributed to neither says nothing useful.
                 self.report_publish_failure(
+                    pending.id,
                     pending.origin,
                     &pending.settled_label,
                     &pending.message,
@@ -620,10 +652,11 @@ impl<'a> AppState<'a> {
         // from here on — but the report of what was lost is worth more than the loading
         // notice, and doing this first would have it overwritten a line later.
         //
-        // Unreachable today: `NostrEvents::key` is the `Arc<Client>` pointer, so a second
-        // worker only appears if the first one's stream ended. The queue is only
-        // positionally matched, and this is the one place that assumption could break
-        // silently.
+        // Reachable, not theoretical: the worker's stream ends on every normal exit, and
+        // tears restarts a finished subscription that is still declared. A worker that
+        // exited cleanly drained first and its reports arrive before its stream ends, so
+        // the queue is normally already empty by now and this does nothing. It is here
+        // for the one that did not.
         self.fail_pending_publishes("the connection was re-established");
 
         Command::none()
@@ -691,6 +724,7 @@ impl<'a> AppState<'a> {
 
     /// Clear the current status message.
     pub fn clear_status_message(&mut self) -> Command<AppMsg> {
+        self.status_owner = None;
         self.status_bar.update(Message::MessageCleared);
         Command::none()
     }
@@ -1673,6 +1707,32 @@ mod tests {
         // Quiet, but not leaving the screen claiming a publish is still in flight —
         // nothing else clears the status bar on its own.
         assert_eq!(state.status_bar.message(), None);
+    }
+
+    #[test]
+    fn two_publishes_of_the_same_content_do_not_settle_each_other() {
+        let (mut state, _rx) = connected_state();
+
+        // The same track twice inside one ack window — repeat-one playback, or skipping
+        // back into it. Both pending lines render identically.
+        let _ = state.publish_music_status(create_track("Song"));
+        let _ = state.publish_music_status(create_track("Song"));
+        assert_eq!(state.pending_publishes.len(), 2);
+        assert_eq!(state.status_bar.message(), Some("[Sending] Song - Artist"));
+
+        // The first one fails. Its line is not the one on screen — the second replaced
+        // it — so it must leave that alone rather than clearing a send still in flight.
+        let _ = state.resolve_publish(Err(String::from("refused")));
+
+        assert_eq!(
+            state.status_bar.message(),
+            Some("[Sending] Song - Artist"),
+            "the second publish is still in flight and still owns the line"
+        );
+
+        // And the second one, which does own it, settles normally.
+        let _ = state.resolve_publish(Ok(()));
+        assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
     }
 
     #[test]

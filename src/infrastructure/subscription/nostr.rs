@@ -375,6 +375,13 @@ impl NostrEvents {
                             client.disconnect().await;
                             break;
                         }
+                        // Awaited inline on purpose, and load-bearing: the application
+                        // matches `EventPublished` reports to submissions by position,
+                        // which only holds because this never starts a second publish
+                        // before the first has reported. Spawning this to stop a slow ack
+                        // blocking the loop would silently settle outcomes against the
+                        // wrong publish — that needs a correlation id first. The blocking
+                        // itself is #515.
                         Some(cmd) => {
                             Self::handle_command(cmd, &client, pubkey, keys.as_ref(), Arc::clone(&contact_list_cache), &msg_tx).await;
                         }
