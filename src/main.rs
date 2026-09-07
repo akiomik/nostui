@@ -34,11 +34,34 @@ fn tick_timer_from_rate(tick_rate: f64) -> Result<Timer> {
     Ok(Timer::new(interval_ms))
 }
 
+/// Draw the application on an initialized terminal, restoring the terminal on every
+/// path out — including a failure to clear it.
+async fn run_on_terminal(init_flags: InitFlags) -> Result<()> {
+    let mut terminal = ratatui::init();
+
+    let result = async {
+        terminal.clear()?;
+        log::info!("Starting Tears application");
+        Runtime::<TearsApp>::new(init_flags)
+            .run(&mut terminal)
+            .await
+    }
+    .await;
+
+    ratatui::restore();
+
+    Ok(result?)
+}
+
 async fn tokio_main() -> Result<()> {
     initialize_logging()?;
     initialize_panic_handler()?;
 
     let args = <Cli as Parser>::parse();
+
+    // Validate the tick rate before anything is opened, so a bad value fails without
+    // leaving relay connections behind.
+    let tick_timer = tick_timer_from_rate(args.tick_rate)?;
 
     // Load configuration
     let config = Config::new()?;
@@ -73,30 +96,25 @@ async fn tokio_main() -> Result<()> {
         keys,
         config,
         nostr_client: client.clone(),
-        tick_timer: tick_timer_from_rate(args.tick_rate)?,
+        tick_timer,
     };
 
-    // Setup terminal
-    let mut terminal = ratatui::init();
-    terminal.clear()?;
+    let result = run_on_terminal(init_flags).await;
 
-    // Run the Tears application
-    log::info!("Starting Tears application");
-    let runtime = Runtime::<TearsApp>::new(init_flags);
-    let result = runtime.run(&mut terminal).await;
-
-    // Restore terminal
-    ratatui::restore();
-
-    // Close the relay connections. Quitting asks the subscription worker to disconnect,
-    // but a quit returned from `update` now terminates the runtime at that same dispatch,
-    // so the worker may never be polled before `run` returns. Disconnecting here makes
-    // the WebSocket close frame independent of that race; it is a no-op if the worker
-    // already got there.
+    // Signal relay termination. Quitting asks the subscription worker to disconnect, but
+    // a quit returned from `update` now terminates the runtime at that same dispatch, so
+    // the worker may never be polled before `run` returns. Issuing the signal here does
+    // not depend on it.
+    //
+    // Best effort: `Client::disconnect` marks each relay terminated and notifies its
+    // connection task, but does not wait for that task to send the WebSocket close frame,
+    // and nostr-sdk 0.45 exposes no way to wait for one. A relay whose task is not polled
+    // before the tokio runtime is dropped still sees the socket close without a close
+    // frame; this only makes sure the signal was issued.
     log::info!("Disconnecting from relays...");
     client.disconnect().await;
 
-    Ok(result?)
+    result
 }
 
 #[tokio::main]

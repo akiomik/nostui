@@ -197,7 +197,8 @@ impl<'a> TearsApp<'a> {
                 // Ask the subscription worker to unsubscribe and disconnect. The send is
                 // synchronous, but the quit below now terminates the runtime at this same
                 // dispatch, so the worker is not guaranteed to be polled before `run`
-                // returns. `main` disconnects again after `run` for that reason.
+                // returns. `main` signals relay termination again afterwards so it does
+                // not depend on this worker having run.
                 let _ = self.state.close_connection();
 
                 // Trigger the quit action
