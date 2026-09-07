@@ -119,10 +119,10 @@ async fn tokio_main() -> Result<()> {
 
     let result = run_on_terminal(init_flags).await;
 
-    // Tear the client down. Quitting asks the subscription worker to disconnect, but a
-    // quit returned from `update` now terminates the runtime at that same dispatch, so the
-    // worker may never be polled before `run` returns. Doing it here does not depend on
-    // that.
+    // Tear the client down. This is the *only* thing that terminates the relays on the
+    // quit path: `SystemMsg::Quit` deliberately does not ask the subscription worker to
+    // disconnect, because the worker's `disconnect` would abort an in-flight publish and
+    // race this call for the outcome. See the comment there.
     //
     // `shutdown` rather than `disconnect`, for the lock it takes. `shutdown` acquires the
     // relay pool's write lock, which an in-flight `send_event` holds for reading until it
@@ -130,9 +130,9 @@ async fn tokio_main() -> Result<()> {
     // and so never waits for one. Waiting is the point: what it waits for is the user's
     // own post finishing.
     //
-    // Not for the worker loop's sake — that exits either way. `Runtime::run` consumes the
-    // application, so by the time this line runs the command sender it held is dropped and
-    // the loop's `cmd_rx.recv()` has already returned `None`.
+    // Not for the worker loop's sake — that ends on its own. `Runtime::run` consumes the
+    // application, so the command sender it held is dropped by the time this runs, and the
+    // worker's `cmd_rx.recv()` returns `None` once it has drained anything still queued.
     //
     // Bounded, because waiting on that lock unbounded is not free: by this point the
     // terminal is restored, so the delay reads as a hang at the shell prompt, with SIGINT

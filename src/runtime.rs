@@ -194,19 +194,27 @@ impl<'a> TearsApp<'a> {
         match msg {
             SystemMsg::Quit => {
                 log::info!("Quit requested - initiating graceful shutdown");
-                // Drop the tracked subscriptions and ask the worker to disconnect. At most
-                // this sends `NostrCommand::Shutdown` — never a per-subscription `CLOSE`,
-                // because disconnecting ends them at the relay anyway — and it sends
-                // nothing at all if the gateway was already disconnected.
-                //
-                // The send itself is synchronous, but the quit below now terminates the
-                // runtime at this same dispatch, so the worker is not guaranteed to be
-                // polled before `run` returns. Between that and the nothing-sent case,
-                // `main` signals relay termination again after `run` rather than relying
-                // on this path.
-                let _ = self.state.close_connection();
 
-                // Trigger the quit action
+                // Deliberately does *not* ask the subscription worker to disconnect.
+                //
+                // `close_connection` would queue `NostrCommand::Shutdown`, and the worker
+                // handles that by calling `Client::disconnect`, which sets every relay to
+                // `RelayStatus::Terminated` and broadcasts it. A publish waiting for its
+                // `OK` gives up the moment it sees a disconnected status, returning
+                // `Err(not_connected)` — so that path would destroy the very in-flight
+                // send `main`'s bounded `Client::shutdown` exists to let finish, and would
+                // race it for the outcome, since the worker is a detached task the runtime
+                // neither owns nor joins.
+                //
+                // Termination therefore has exactly one signal on this path, in `main`,
+                // and it is the one that takes the relay pool's write lock and so actually
+                // waits. The worker still ends: dropping the application drops the command
+                // sender, so once the worker has drained whatever is still queued — a
+                // reaction or note sent moments ago, which it should finish — its
+                // `cmd_rx.recv()` returns `None` and the loop breaks.
+                //
+                // `NostrMsg::Disconnect` still goes through `close_connection`, because
+                // there the client has to stay usable and nothing else will disconnect it.
                 Command::quit()
             }
             SystemMsg::Resize(width, height) => {
@@ -482,6 +490,8 @@ mod tests {
     use std::num::NonZeroU64;
 
     use super::*;
+    use tokio::sync::mpsc;
+
     use crate::application::config::Config;
     use crate::domain::nostr::FeedKind;
     use crate::model::editor::Message as EditorMessage;
@@ -708,6 +718,28 @@ mod tests {
         // Selection should be at the last index
         let expected_index = app.state.timeline.len() - 1;
         assert_eq!(app.state.timeline.selected_index(), Some(expected_index));
+    }
+
+    #[test]
+    fn quit_does_not_ask_the_worker_to_disconnect() {
+        let mut app = create_test_app();
+
+        // Give the app a command channel, the way `Message::Ready` does in production.
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let _ = app.state.on_connection_ready(tx);
+        // `on_connection_ready` subscribes the active feed; drain that.
+        while rx.try_recv().is_ok() {}
+
+        let _ = app.update(AppMsg::System(SystemMsg::Quit));
+
+        // Nothing may be queued. A `NostrCommand::Shutdown` here would make the detached
+        // worker call `Client::disconnect`, which terminates every relay and aborts an
+        // in-flight publish waiting for its `OK` — the send that `main`'s bounded
+        // `Client::shutdown` exists to let finish.
+        assert!(
+            rx.try_recv().is_err(),
+            "quit must leave relay termination to `main`, which waits for in-flight sends"
+        );
     }
 
     #[test]
