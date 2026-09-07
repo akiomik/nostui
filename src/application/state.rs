@@ -286,7 +286,7 @@ impl<'a> AppState<'a> {
         let outcome = self
             .nostr
             .update(NostrMessage::EventSubmitted { event_builder });
-        self.begin_publish(outcome, label, note_id);
+        let _ = self.begin_publish(outcome, label, note_id);
 
         Command::none()
     }
@@ -333,10 +333,12 @@ impl<'a> AppState<'a> {
         let outcome = self
             .nostr
             .update(NostrMessage::EventSubmitted { event_builder });
-        self.begin_publish(outcome, "Posted", content);
-
-        // Clear UI state.
-        self.editor.update(EditorMessage::ComposingCanceled);
+        // Only discard the draft once the publish is actually on its way. Closing the
+        // editor loses the text for good — the next `ComposingStarted` clears the buffer
+        // — so a submission that has already failed keeps it for another attempt.
+        if self.begin_publish(outcome, "Posted", content) {
+            self.editor.update(EditorMessage::ComposingCanceled);
+        }
 
         Command::none()
     }
@@ -355,7 +357,7 @@ impl<'a> AppState<'a> {
         let outcome = self
             .nostr
             .update(NostrMessage::EventSubmitted { event_builder });
-        self.begin_publish(outcome, "Music", content);
+        let _ = self.begin_publish(outcome, "Music", content);
 
         Command::none()
     }
@@ -389,34 +391,33 @@ impl<'a> AppState<'a> {
     ///
     /// When the event never reaches the worker at all there is nothing to wait for and no
     /// report will arrive, so this settles immediately as an error instead of leaving a
-    /// pending entry that can never be popped — and would shift every later outcome onto
-    /// the wrong submission. The three ways that happens are distinguished, because they
-    /// tell the user different things: the connection was never up, it is not up *yet*,
-    /// or it has gone away.
+    /// pending entry that can never be popped — which would also shift every later
+    /// outcome onto the wrong submission.
+    ///
+    /// Returns whether the publish is now pending. `false` means it already failed, and
+    /// callers that were about to discard what they published — the editor's buffer —
+    /// should keep it instead.
     fn begin_publish(
         &mut self,
         outcome: Option<NostrOutcome>,
         settled_label: &str,
         message: impl Into<String>,
-    ) {
+    ) -> bool {
         let message = message.into();
 
+        // `model::nostr` declines a submission whenever it believes it is disconnected.
         if outcome.is_none() {
-            // `model::nostr` declines a submission while it believes it is disconnected.
-            self.set_status_error(settled_label, "not connected");
-            return;
+            self.set_status_error(settled_label, format!("{message}: not connected"));
+            return false;
         }
 
-        let worker_was_ready = self.command_sender.is_some();
-
         if !self.dispatch_nostr(outcome) {
-            let reason = if worker_was_ready {
-                "connection lost"
-            } else {
-                "not connected yet"
-            };
-            self.set_status_error(settled_label, reason);
-            return;
+            // Reachable only as a lost worker. An outcome exists, so `model::nostr`
+            // believes it is connected, and the sender is set and cleared in the same
+            // calls that set and clear that belief — so the sender cannot be missing
+            // here, only closed.
+            self.set_status_error(settled_label, format!("{message}: connection lost"));
+            return false;
         }
 
         self.pending_publishes.push_back(PendingPublish {
@@ -424,6 +425,8 @@ impl<'a> AppState<'a> {
             message: message.clone(),
         });
         self.set_status("Sending", message);
+
+        true
     }
 
     /// Settle the oldest unreported publish with the relay's answer.
@@ -667,7 +670,31 @@ impl<'a> AppState<'a> {
         let outcome = self.nostr.update(NostrMessage::ConnectionClosed);
         let _ = self.dispatch_nostr(outcome);
         self.command_sender = None;
+        self.fail_pending_publishes("the connection closed");
         Command::none()
+    }
+
+    /// Fail every publish still waiting for an answer.
+    ///
+    /// The worker that would have reported them is going away, so nothing will settle
+    /// them. Clearing here keeps the positional matching a property of the code that
+    /// owns the queue: a leftover entry would otherwise settle the *next* connection's
+    /// first outcome against this connection's label and content.
+    fn fail_pending_publishes(&mut self, reason: &str) {
+        let abandoned: Vec<PendingPublish> = self.pending_publishes.drain(..).collect();
+
+        for pending in &abandoned {
+            log::error!("Publish abandoned, {reason}: {}", pending.message);
+        }
+
+        // One line of status for however many were lost — the most recent, since that is
+        // the one the user was most likely watching.
+        if let Some(last) = abandoned.last() {
+            self.set_status_error(
+                last.settled_label.clone(),
+                format!("{}: {reason}", last.message),
+            );
+        }
     }
 
     /// Track a subscription that the relay layer created for a tab.
@@ -1327,11 +1354,62 @@ mod tests {
 
         assert_eq!(
             state.status_bar.message(),
-            Some("[ERR: Music] not connected")
+            Some("[ERR: Music] Song - Artist: not connected")
         );
 
         // Nothing pending means a later stray outcome cannot settle this as posted.
         assert!(state.pending_publishes.is_empty());
+    }
+
+    #[test]
+    fn a_failed_submission_keeps_the_composed_note() {
+        // Not connected, so the submission fails before it is queued.
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+
+        // Closing the editor would lose the text for good: the next `ComposingStarted`
+        // clears the buffer, so there is no way back to it.
+        assert!(state.editor.is_active());
+        assert_eq!(state.editor.get_content(), "h");
+    }
+
+    #[test]
+    fn a_successful_submission_closes_the_editor() {
+        let (mut state, _rx) = connected_state();
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+
+        assert!(!state.editor.is_active());
+    }
+
+    #[test]
+    fn closing_the_connection_fails_whatever_was_still_pending() {
+        let (mut state, _rx) = connected_state();
+
+        let _ = state.publish_music_status(create_track("Song"));
+        assert_eq!(state.pending_publishes.len(), 1);
+
+        let _ = state.close_connection();
+
+        // Nothing will report these now, and a leftover entry would settle the next
+        // connection's first outcome against this submission.
+        assert!(state.pending_publishes.is_empty());
+        let message = state.status_bar.message().expect("a status message");
+        assert!(
+            message.starts_with("[ERR: Music] Song - Artist:"),
+            "expected the abandoned publish to be reported, got: {message}"
+        );
     }
 
     #[test]
@@ -1532,7 +1610,8 @@ mod tests {
     fn test_notify_subscription_error_sets_error_status() {
         let mut state = AppState::new(Keys::generate().public_key());
 
-        let _ = state.notify_subscription_error(CommandError::SendEventFailed {
+        let _ = state.notify_subscription_error(CommandError::AddRelayFailed {
+            url: String::from("wss://relay.example"),
             error: "x".to_owned(),
         });
 

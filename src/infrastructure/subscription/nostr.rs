@@ -133,7 +133,6 @@ impl NostrEvents {
         }
     }
 
-    /// Handle a single command and send error messages if needed
     /// Decide whether a completed `send_event` actually reached a relay.
     ///
     /// `Ok` from nostr-sdk does not mean the event was accepted: the pool returns
@@ -177,6 +176,7 @@ impl NostrEvents {
         reasons.join(", ")
     }
 
+    /// Run a single command and report its outcome to the application.
     async fn handle_command(
         cmd: NostrCommand,
         client: &Client,
@@ -384,6 +384,20 @@ impl NostrEvents {
                         }
                     }
                 }
+            }
+        }
+
+        // Whatever is still queued will never run now. The application holds a pending
+        // entry per submitted event and settles them in report order, so a publish that
+        // simply vanishes here would sit as "Sending" forever and shift every later
+        // outcome onto the wrong submission.
+        while let Ok(cmd) = cmd_rx.try_recv() {
+            if matches!(cmd, NostrCommand::SendEventBuilder { .. }) {
+                let _ = msg_tx.send(Message::EventPublished {
+                    result: Err(String::from(
+                        "the connection closed before the event was sent",
+                    )),
+                });
             }
         }
     }
