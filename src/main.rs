@@ -60,8 +60,8 @@ async fn tokio_main() -> Result<()> {
 
     let args = <Cli as Parser>::parse();
 
-    // Validate the tick rate before anything is opened, so a bad value fails without
-    // leaving relay connections behind.
+    // Validate the tick rate before the client exists, so a bad value fails without
+    // having connected to any relay.
     let tick_timer = tick_timer_from_rate(args.tick_rate)?;
 
     // Load configuration
@@ -89,9 +89,9 @@ async fn tokio_main() -> Result<()> {
     log::info!("Connecting to relays...");
     client.connect().await;
 
-    // Create initialization flags for TearsApp. The client is cheap to clone (it is
-    // reference-counted internally), and the clone kept here is what closes the relay
-    // connections after the runtime has stopped.
+    // Create initialization flags for TearsApp. `Client` is reference-counted internally,
+    // so the clone handed to the application shares one connection pool with the binding
+    // kept here — which is what stays reachable to signal termination once `run` returns.
     let init_flags = InitFlags {
         pubkey,
         keys,

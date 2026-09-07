@@ -215,8 +215,10 @@ impl<'a> TearsApp<'a> {
                 Command::none()
             }
             // Count ticks for the FPS display. This measures how often the application
-            // processes a tick, not how often it renders: the runtime renders when a pass
-            // leaves the view dirty, which no longer tracks the tick interval.
+            // processes a tick, which is no longer the same as how often it renders: the
+            // runtime renders once per pass that leaves the view dirty. An idle nostui has
+            // only the tick to dirty it, so the two rates still coincide there, but every
+            // inbound relay event adds a pass the tick knows nothing about.
             SystemMsg::Tick => self.state.record_tick(),
             SystemMsg::ShowError(error) => self.state.show_error(error),
             SystemMsg::KeyInput(key) => self.handle_key_input(key),
