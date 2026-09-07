@@ -201,24 +201,25 @@ impl<'a> TearsApp<'a> {
                 // handles that by calling `Client::disconnect`, which sets every relay to
                 // `RelayStatus::Terminated` and broadcasts it. A publish waiting for its
                 // `OK` gives up the moment it sees a disconnected status, returning
-                // `Err(not_connected)` — so that path would destroy the very in-flight
-                // send `main`'s bounded `Client::shutdown` exists to let finish, and would
-                // race it for the outcome, since the worker is a detached task the runtime
-                // neither owns nor joins.
+                // `Err(not_connected)` (nostr-sdk relay/inner.rs:1488, status.rs:101).
                 //
-                // Termination therefore has exactly one signal on this path, in `main`,
-                // and it is the one that takes the relay pool's write lock and so actually
-                // waits.
+                // On 0.10.x the quit travelled a channel, so the worker was generally
+                // polled first and the send went out. The quit is synchronous now, so that
+                // request would land while the send is still in flight and abort it — the
+                // user's own note, discarded by their own client, after the status bar
+                // said "Posted". Not sending it lets the send race the process exit
+                // instead of being cancelled outright.
                 //
-                // The worker still ends, though not tidily: its `select!` also breaks the
-                // moment a relay notification fails to send, and that receiver dies when
-                // `Runtime::run` settles — so a command still queued behind it may be
-                // abandoned rather than run. Not sending `Shutdown` removes a *certain*
-                // abort of the in-flight publish; it does not promise the queue drains.
-                // That promise needs the confirmation step tracked in #511.
+                // This does not make the send safe. The worker is a detached task the
+                // runtime neither owns nor joins, its `select!` also breaks the moment a
+                // relay notification fails to send, and the tokio runtime is dropped
+                // shortly after. Removing a certain abort is not a delivery guarantee;
+                // that needs the confirmation step tracked in #511.
                 //
+                // Nothing else disconnects on this path, and nothing needs to: the process
+                // is exiting, and the WebSocket close frame was never guaranteed anyway.
                 // `NostrMsg::Disconnect` still goes through `close_connection`, because
-                // there the client has to stay usable and nothing else will disconnect it.
+                // there the client has to stay usable afterwards.
                 Command::quit()
             }
             SystemMsg::Resize(width, height) => {
