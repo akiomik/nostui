@@ -12,9 +12,11 @@ use tokio::time::timeout;
 
 /// How long to wait for the Nostr client to shut down before exiting without it.
 ///
-/// Sized against nostr-sdk's own ten-second `wait_for_ok_timeout`: long enough for a
-/// publish to responsive relays to land, short enough that an unresponsive one does not
-/// make quitting look like a hang.
+/// The wait exists so an in-flight publish can finish; the bound exists so a relay that
+/// never answers cannot turn quitting into an apparent hang. This is deliberately shorter
+/// than nostr-sdk's own ten-second `wait_for_ok_timeout`, which means it is a compromise
+/// rather than a guarantee: a relay that acks promptly keeps its publish, and one slower
+/// than this loses it exactly as it did before the wait existed.
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 
 use nostui::{
@@ -124,10 +126,15 @@ async fn tokio_main() -> Result<()> {
     //
     // Bounded, because `shutdown` takes the relay pool's write lock while an in-flight
     // `send_event` holds the read lock for as long as it waits for `OK` — ten seconds per
-    // relay by default. Blocking on that lock is not wasted time: it is the user's own
-    // post finishing, and letting it land is what we want. Blocking on it unbounded is
-    // not, because by this point the terminal is restored and the delay reads as a hang
-    // at the shell prompt with SIGINT already taken over by the runtime's signal handler.
+    // relay by default. Waiting on that lock is not wasted time: it is the user's own post
+    // finishing. Waiting on it unbounded is, because by this point the terminal is
+    // restored and the delay reads as a hang at the shell prompt, with SIGINT already
+    // taken over by the runtime's signal handler for the rest of the process lifetime.
+    //
+    // `SHUTDOWN_TIMEOUT` buys the publish a grace period rather than a guarantee: it is
+    // shorter than that ten-second wait, so a relay slow to ack still loses the post here.
+    // Bounding the exit is worth that; not bounding it would mean a quit that can sit
+    // silent for twenty seconds with no way to interrupt it.
     //
     // Two things it still does not do. It does not wait for a relay's connection task to
     // send the WebSocket close frame, and nostr-sdk 0.45 exposes no way to wait for one,
