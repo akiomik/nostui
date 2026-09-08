@@ -183,24 +183,29 @@ impl NostrEvents {
     /// gets all of them.
     const REPORTED_FAILURES: usize = 2;
 
-    /// Render per-relay failures as `url: reason`, in a stable order so the same outcome
-    /// always reads the same way — `failed` is a `HashMap`.
-    fn describe_failures(failed: &HashMap<RelayUrl, String>) -> String {
+    /// Per-relay failures as `url: reason`, in a stable order so the same outcome always
+    /// reads the same way — `failed` is a `HashMap`.
+    ///
+    /// The one place this rendering exists. The log line and the status line describe the
+    /// same failure and must not be able to describe it differently, so the short form
+    /// below shortens this rather than rebuilding it.
+    fn sorted_failures(failed: &HashMap<RelayUrl, String>) -> Vec<String> {
         let mut reasons: Vec<String> = failed
             .iter()
             .map(|(url, reason)| format!("{url}: {reason}"))
             .collect();
         reasons.sort();
-        reasons.join(", ")
+        reasons
+    }
+
+    /// Every reason, for the log.
+    fn describe_failures(failed: &HashMap<RelayUrl, String>) -> String {
+        Self::sorted_failures(failed).join(", ")
     }
 
     /// The same list, shortened for a status bar that can show one line of it.
     fn summarise_failures(failed: &HashMap<RelayUrl, String>) -> String {
-        let mut reasons: Vec<String> = failed
-            .iter()
-            .map(|(url, reason)| format!("{url}: {reason}"))
-            .collect();
-        reasons.sort();
+        let mut reasons = Self::sorted_failures(failed);
 
         let hidden = reasons.len().saturating_sub(Self::REPORTED_FAILURES);
         reasons.truncate(Self::REPORTED_FAILURES);
@@ -558,6 +563,28 @@ mod tests {
         assert!(
             error.find("a.example").expect("a") < error.find("b.example").expect("b"),
             "expected a stable order, got: {error}"
+        );
+    }
+
+    #[test]
+    fn the_short_failure_list_is_a_prefix_of_the_full_one() {
+        // The log line and the status line describe the same failure. They may differ in
+        // length; they must not differ in what they say about the relays they both name.
+        let failed: Vec<(String, String)> = (0..5)
+            .map(|i| (format!("wss://relay{i}.example"), format!("reason {i}")))
+            .collect();
+        let map: HashMap<RelayUrl, String> = failed
+            .iter()
+            .map(|(url, reason)| (relay_url(url), reason.clone()))
+            .collect();
+
+        let full = NostrEvents::describe_failures(&map);
+        let short = NostrEvents::summarise_failures(&map);
+        let named = short.split(" (and ").next().expect("the named part");
+
+        assert!(
+            full.starts_with(named),
+            "the short form must name the same relays in the same order\n full:  {full}\n short: {short}"
         );
     }
 

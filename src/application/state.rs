@@ -490,7 +490,8 @@ impl<'a> AppState<'a> {
         result: Result<(), String>,
     ) -> Command<AppMsg> {
         let Some(pending) = self.pending_publishes.remove(&id) else {
-            log::warn!("Publish outcome for an unknown submission: {result:?}");
+            // The id is the only thing that says which submission this was meant for.
+            log::warn!("Publish outcome for an unknown submission {id:?}: {result:?}");
             return Command::none();
         };
 
