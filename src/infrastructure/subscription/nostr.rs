@@ -401,11 +401,19 @@ impl NostrEvents {
         // immediately. Items already buffered are still receivable.
         cmd_rx.close();
 
+        // Drained with `recv`, not `try_recv`. `send` bumps the message count before it
+        // pushes the value, and `try_recv` reports an empty queue as `Empty` rather than
+        // `Disconnected` while that count is non-zero — so a send caught mid-flight by
+        // the `close` above would end the loop and be left in the channel unread. `recv`
+        // waits it out and returns `None` only once the channel is closed and genuinely
+        // drained; it cannot wait forever, because `close` stops any further send from
+        // starting.
+        //
         // Whatever is still queued will never run now. The application holds a pending
         // entry per submitted event and settles them in report order, so a publish that
-        // simply vanishes here would sit as "Sending" forever and shift every later
+        // simply vanished here would sit as "Sending" forever and shift every later
         // outcome onto the wrong submission.
-        while let Ok(cmd) = cmd_rx.try_recv() {
+        while let Some(cmd) = cmd_rx.recv().await {
             if matches!(cmd, NostrCommand::SendEventBuilder { .. }) {
                 let _ = msg_tx.send(Message::EventPublished {
                     result: Err(String::from(
