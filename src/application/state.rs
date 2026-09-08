@@ -465,9 +465,11 @@ impl<'a> AppState<'a> {
         let message = message.into();
 
         // Nothing expires this. A worker that dies without reaching its exit drain — a
-        // panic, an abort — never reports, so the entry stays and the bar reads "Sending"
-        // for the life of the process. Recovering needs the application to notice the
-        // worker died, which it cannot do today: #519.
+        // panic, an abort — never reports whatever was in flight, so that one entry stays
+        // and the bar reads "Sending" until something else writes it. It is one entry,
+        // not a leak: every later publish finds the channel closed, so `abandon_publish`
+        // settles it. Clearing the stranded one needs the application to notice the worker
+        // died, which it cannot do today: #519.
         self.pending_publishes.insert(
             id,
             PendingPublish {
@@ -1423,6 +1425,24 @@ mod tests {
             Some("[ERR: Music] not sent (Song - Artist)")
         );
         assert!(state.pending_publishes.is_empty());
+    }
+
+    #[test]
+    fn the_dispatched_command_carries_the_id_the_publish_is_tracked_under() {
+        let (mut state, mut rx) = connected_state();
+        while rx.try_recv().is_ok() {}
+
+        let _ = state.publish_music_status(create_track("Song"));
+        let tracked = only_pending(&state);
+
+        let Ok(NostrCommand::SendEventBuilder { id: sent, .. }) = rx.try_recv() else {
+            panic!("a publish should have been dispatched");
+        };
+
+        // The two halves of the correlation. If they ever disagree, no report can find
+        // its submission and every publish strands on "Sending" — silently, since each
+        // half is individually plausible.
+        assert_eq!(sent, tracked);
     }
 
     #[test]
