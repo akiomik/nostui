@@ -122,9 +122,11 @@ Drop the option wherever nostui is launched — a shell alias, a `.desktop` entr
 `--tick-rate` is unaffected. It controls how often the application processes a tick, which is also what the FPS display measures.
 
 **Note:**
-There is no direct replacement, and redraw volume can move in either direction. Idle nostui redraws once per tick, so `--tick-rate` currently sets the idle floor and lowering it is the nearest thing to the old throttle — but that is a side effect of how the tick is handled today, not a rendering control, and [#510](https://github.com/akiomik/nostui/issues/510) plans to remove it. Under a busy feed there is no longer any ceiling: redraws follow inbound relay traffic rather than being clamped to 16 fps, so a heavy home feed can redraw more often than it used to.
+There is no direct replacement, and no remaining option that behaves like the old throttle.
 
-The same applies upward, and it is the direction most likely to surprise: a `--tick-rate` you raised on 0.1.x cost extra update passes but never more than 16 renders per second. It now costs a full render per tick even when nothing is happening, so `--tick-rate 200` means 200 renders per second on a completely idle screen. If you raised it, lower it back.
+`--tick-rate` is not one, despite the way it reads. An idle nostui repaints at most about once a second: the tick refreshes the "ticks per sec" counter on that cadence and declines the redraw on every tick in between, so the tick rate sets how often the application wakes up, not how often it draws. Raising it costs update passes rather than frames. (Below one tick per second there are no ticks in between, so each one redraws — but that is fewer repaints, not more.)
+
+What has no ceiling any more is relay traffic. Redraws follow inbound events instead of being clamped to 16 fps, so a busy home feed can redraw more often than it used to.
 
 ### Deprecations
 

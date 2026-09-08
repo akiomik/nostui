@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::sync::Arc;
+use std::time::Instant;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
@@ -139,7 +140,9 @@ impl<'a> Application for TearsApp<'a> {
                         Event::Resize(width, height) => {
                             AppMsg::System(SystemMsg::Resize(width, height))
                         }
-                        _ => AppMsg::System(SystemMsg::Tick), // Ignore other events for now
+                        // Ignore other events for now. The FPS display counts them as
+                        // ticks all the same — noted in #525.
+                        _ => AppMsg::System(SystemMsg::Tick),
                     }
                 }
                 Err(e) => AppMsg::System(SystemMsg::ShowError(e.to_string())),
@@ -224,12 +227,20 @@ impl<'a> TearsApp<'a> {
                 // Terminal resize is handled automatically by ratatui
                 Command::none()
             }
-            // Count ticks for the FPS display. This measures how often the application
-            // processes a tick, which is no longer the same as how often it renders: the
-            // runtime renders once per pass that leaves the view dirty. An idle nostui has
-            // only the tick to dirty it, so the two rates still coincide there, but every
-            // inbound relay event adds a pass the tick knows nothing about.
-            SystemMsg::Tick => self.state.record_tick(),
+            // Count ticks for the FPS display. The instant is read here, as the tick is
+            // handled, rather than travelling on the message from the subscription task
+            // that produced it: the counter is meant to fall behind when the update loop
+            // does, and a production stamp would keep reading `--tick-rate` no matter how
+            // long a tick waited in the queue.
+            //
+            // What it measures is therefore how often the application processes a tick,
+            // which is not how often it renders: the runtime renders once per pass that
+            // leaves the view dirty, and a tick only dirties it on the pass that recomputes
+            // the displayed rate. So an idle nostui repaints at most once a second while
+            // ticking at `--tick-rate` — a rate below 1/s has no ticks in between to
+            // decline, and every one of them redraws — and under relay traffic the renders
+            // the events add are ones the counter knows nothing about.
+            SystemMsg::Tick => self.state.record_tick(Instant::now()),
             SystemMsg::ShowError(error) => self.state.show_error(error),
             SystemMsg::KeyInput(key) => self.handle_key_input(key),
         }
@@ -892,6 +903,32 @@ mod tests {
 
         assert_eq!(store.state().state.timeline.len(), 1);
         assert!(store.redraw_requested());
+        store.finish();
+    }
+
+    /// #510(b): an idle nostui ticks at `--tick-rate` but the rate it displays is
+    /// only recomputed once a second, so a tick that recomputed nothing must not
+    /// repaint the whole timeline to refresh a counter that did not change.
+    ///
+    /// One tick, because the first is the only one whose outcome does not depend on
+    /// the clock: it opens the measurement interval and returns before any interval
+    /// is measured, so no amount of scheduling delay can turn it into a recompute.
+    /// Later ticks reach `record_tick` through the same `None` arm, and which of
+    /// `Fps::update`'s two `None` paths produced it is pinned in `model::fps`.
+    ///
+    /// The tick that does recompute cannot be driven from here at all: it is stamped
+    /// as it is handled, so reaching it would mean waiting a real second. That
+    /// direction is likewise covered where the decision is made — `Fps::update`
+    /// reporting `DisplayUpdated`. An inverted mapping in `record_tick` fails this
+    /// test.
+    #[test]
+    fn test_tick_that_changes_no_displayed_value_does_not_redraw() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(AppMsg::System(SystemMsg::Tick));
+
+        assert!(!store.redraw_requested());
+        assert_eq!(store.state().state.fps.app_fps(), None);
         store.finish();
     }
 }
