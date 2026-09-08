@@ -435,6 +435,11 @@ impl<'a> AppState<'a> {
     /// to send; the application owns the sender and performs the actual I/O.
     fn dispatch_nostr(&self, outcome: Option<NostrOutcome>) -> bool {
         let Some(NostrOutcome::Send(command)) = outcome else {
+            // The gateway declined it, which it does whenever it believes it is not
+            // connected. Logged because this is the likeliest of the three ways a
+            // dispatch fails, and the status bar deliberately does not name a cause it
+            // cannot establish — leaving this silent would put the reason nowhere.
+            log::warn!("Nostr command declined: not connected");
             return false;
         };
 

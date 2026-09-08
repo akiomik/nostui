@@ -143,6 +143,11 @@ impl NostrEvents {
     ///
     /// One relay accepting is enough — the event exists on the network — so a partial
     /// failure is logged rather than reported.
+    ///
+    /// "Accepting" means an entry in `success`, which the caller's `AckPolicy::all`
+    /// makes equivalent to an `OK true`. That policy is set explicitly at the send for
+    /// this reason: under `AckPolicy::none` the same field would hold events merely
+    /// written to a socket.
     fn relay_verdict(output: &SendEventOutput) -> Result<(), String> {
         if !output.success.is_empty() {
             if !output.failed.is_empty() {
@@ -230,10 +235,17 @@ impl NostrEvents {
             NostrCommand::SendEventBuilder { id, event_builder } => {
                 let result: Result<(), String> = match keys {
                     Some(keys) => match event_builder.finalize(keys) {
-                        Ok(event) => match client.send_event(&event).await {
-                            Ok(output) => Self::relay_verdict(&output),
-                            Err(e) => Err(e.to_string()),
-                        },
+                        // `AckPolicy::all` is nostr-sdk's default, and stating it here
+                        // rather than inheriting it is what makes `relay_verdict` sound:
+                        // under any other policy a relay lands in `output.success` as
+                        // `Sent` — dispatched, not acknowledged — and reporting that as
+                        // published is the claim this whole change removes.
+                        Ok(event) => {
+                            match client.send_event(&event).ack_policy(AckPolicy::all()).await {
+                                Ok(output) => Self::relay_verdict(&output),
+                                Err(e) => Err(e.to_string()),
+                            }
+                        }
                         Err(e) => Err(e.to_string()),
                     },
                     None => Err(String::from("cannot send events in read-only mode")),
