@@ -384,10 +384,14 @@ impl<'a> AppState<'a> {
         // editor loses the text for good — the next `ComposingStarted` clears the buffer
         // — so a submission that has already failed keeps it for another attempt.
         //
-        // This covers the failures this layer can see before sending. Ones reported back
-        // later still lose the text — including read-only mode, which only the worker
-        // knows about — because getting it back needs a way to put content into the
-        // editor that `model::editor` does not have yet: #514.
+        // This covers only the failures this layer can see before sending. Anything the
+        // worker reports back still loses the text, because getting it back needs a way
+        // to put content into the editor that `model::editor` does not have: #514.
+        //
+        // That is not a rare tail. Nothing gates composing in read-only mode, and the
+        // signing check lives in the worker, so a user configured with an `npub` gets
+        // `true` here and loses every note they write, on every submit. An all-relays-
+        // refused send is the other instance.
         if self.begin_publish(outcome, PublishOrigin::User, "Posted", content) {
             self.editor.update(EditorMessage::ComposingCanceled);
         }
@@ -1571,8 +1575,10 @@ mod tests {
     }
 
     #[test]
-    fn a_failed_submission_keeps_the_composed_note() {
-        // Not connected, so the submission fails before it is queued.
+    fn a_submission_that_fails_before_it_is_queued_keeps_the_composed_note() {
+        // Named for what it covers: this is the pre-send case, the only one where the
+        // draft survives. A failure the worker reports back still loses it — see #514,
+        // and the comment in `submit_note`.
         let mut state = AppState::new(Keys::generate().public_key());
 
         state.editor.update(EditorMessage::ComposingStarted);
