@@ -2,11 +2,12 @@ use nostr_sdk::prelude::*;
 use std::collections::HashMap;
 
 use crate::domain::nostr::FeedKind;
-use crate::model::nostr_gateway::NostrCommand;
+use crate::model::nostr_gateway::{NostrCommand, PublishId};
 
 pub enum Message {
     ConnectionReady,
     EventSubmitted {
+        id: PublishId,
         event_builder: EventBuilder,
     },
     SubscriptionRequested {
@@ -80,9 +81,10 @@ impl Nostr {
                 self.connected = true;
                 None
             }
-            Message::EventSubmitted { event_builder } => {
+            Message::EventSubmitted { id, event_builder } => {
                 if self.connected {
                     Some(NostrOutcome::Send(NostrCommand::SendEventBuilder {
+                        id,
                         event_builder,
                     }))
                 } else {
@@ -251,12 +253,14 @@ mod tests {
         let _ = nostr.update(Message::ConnectionReady);
 
         let outcome = nostr.update(Message::EventSubmitted {
+            id: PublishId(1),
             event_builder: event_builder.clone(),
         });
 
         assert_eq!(
             outcome,
             Some(NostrOutcome::Send(NostrCommand::SendEventBuilder {
+                id: PublishId(1),
                 event_builder
             }))
         );
@@ -267,7 +271,10 @@ mod tests {
         let mut nostr = Nostr::new();
         let event_builder = EventBuilder::new(Kind::TextNote, "test");
 
-        let outcome = nostr.update(Message::EventSubmitted { event_builder });
+        let outcome = nostr.update(Message::EventSubmitted {
+            id: PublishId(1),
+            event_builder,
+        });
 
         assert_eq!(outcome, None);
     }

@@ -1,4 +1,8 @@
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+    time::Duration,
+};
 
 use futures::{
     stream::{self, BoxStream},
@@ -130,6 +134,50 @@ impl NostrEvents {
     }
 
     /// Handle a single command and send error messages if needed
+    /// Decide whether a completed `send_event` actually reached a relay.
+    ///
+    /// `Ok` from nostr-sdk does not mean the event was accepted: the pool returns
+    /// `Ok(output)` once it has tried every relay, recording per-relay rejections and
+    /// ack timeouts in `output.failed` and reserving `Err` for setup problems. An event
+    /// every relay refused therefore arrives as `Ok` with an empty `success` set, and
+    /// reporting that as published would be the very claim this is here to stop.
+    ///
+    /// One relay accepting is enough — the event exists on the network — so a partial
+    /// failure is logged rather than reported.
+    fn relay_verdict(output: &SendEventOutput) -> Result<(), String> {
+        if !output.success.is_empty() {
+            if !output.failed.is_empty() {
+                log::warn!(
+                    "Event {} accepted by {} relay(s), refused by {}",
+                    output.value,
+                    output.success.len(),
+                    Self::describe_failures(&output.failed)
+                );
+            }
+            return Ok(());
+        }
+
+        Err(if output.failed.is_empty() {
+            String::from("no relay accepted the event")
+        } else {
+            format!(
+                "no relay accepted the event: {}",
+                Self::describe_failures(&output.failed)
+            )
+        })
+    }
+
+    /// Render per-relay failures as `url: reason`, in a stable order so the same outcome
+    /// always reads the same way — `failed` is a `HashMap`.
+    fn describe_failures(failed: &HashMap<RelayUrl, String>) -> String {
+        let mut reasons: Vec<String> = failed
+            .iter()
+            .map(|(url, reason)| format!("{url}: {reason}"))
+            .collect();
+        reasons.sort();
+        reasons.join(", ")
+    }
+
     async fn handle_command(
         cmd: NostrCommand,
         client: &Client,
@@ -139,23 +187,22 @@ impl NostrEvents {
         msg_tx: &mpsc::UnboundedSender<Message>,
     ) {
         match cmd {
-            NostrCommand::SendEventBuilder { event_builder } => {
+            NostrCommand::SendEventBuilder { id, event_builder } => {
                 let result: Result<(), String> = match keys {
                     Some(keys) => match event_builder.finalize(keys) {
-                        Ok(event) => client
-                            .send_event(&event)
-                            .await
-                            .map(|_| ())
-                            .map_err(|e| e.to_string()),
+                        Ok(event) => match client.send_event(&event).await {
+                            Ok(output) => Self::relay_verdict(&output),
+                            Err(e) => Err(e.to_string()),
+                        },
                         Err(e) => Err(e.to_string()),
                     },
                     None => Err(String::from("cannot send events in read-only mode")),
                 };
-                if let Err(e) = result {
-                    let _ = msg_tx.send(Message::Error {
-                        error: CommandError::SendEventFailed { error: e },
-                    });
-                }
+
+                // Reported either way. The application shows a publish as pending until
+                // this arrives, so a success that says nothing would leave it pending for
+                // good.
+                let _ = msg_tx.send(Message::EventPublished { id, result });
             }
             NostrCommand::AddRelay { url } => {
                 if let Err(e) = client.add_relay(&url).await {
@@ -339,6 +386,26 @@ impl NostrEvents {
                         }
                     }
                 }
+            }
+        }
+
+        // Close first, then drain. `cmd_rx` would otherwise stay open until this task
+        // returns, and a publish sent in that window would be accepted by the sender and
+        // dequeued by nobody. Drained with `recv` rather than `try_recv` because `send`
+        // bumps the message count before it pushes the value, so `try_recv` reports an
+        // empty queue as `Empty` while a send is mid-flight and would end the loop early;
+        // `recv` waits it out and returns `None` only once the channel is closed and
+        // genuinely drained.
+        cmd_rx.close();
+
+        while let Some(cmd) = cmd_rx.recv().await {
+            if let NostrCommand::SendEventBuilder { id, .. } = cmd {
+                let _ = msg_tx.send(Message::EventPublished {
+                    id,
+                    result: Err(String::from(
+                        "the connection closed before the event was sent",
+                    )),
+                });
             }
         }
     }

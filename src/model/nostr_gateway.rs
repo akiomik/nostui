@@ -17,11 +17,22 @@ use tokio::sync::mpsc;
 
 use crate::domain::nostr::FeedKind;
 
+/// Identifies one submitted event, so its outcome can be matched back to it.
+///
+/// Correlated rather than matched by order: an outcome that never arrives — a worker
+/// that died, a command dropped on the way — then leaves one stale entry behind instead
+/// of shifting every later outcome onto the wrong submission.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PublishId(pub u64);
+
 /// Commands that can be sent to the Nostr subscription
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NostrCommand {
     /// Send an event to relays
-    SendEventBuilder { event_builder: EventBuilder },
+    SendEventBuilder {
+        id: PublishId,
+        event_builder: EventBuilder,
+    },
     /// Add a new relay
     AddRelay { url: String },
     /// Remove a relay
@@ -62,6 +73,14 @@ pub enum Message {
     Notification(Box<ClientNotification>),
     /// An error occurred during command execution
     Error { error: CommandError },
+    /// The outcome of one `SendEventBuilder`, reported whether it succeeded or not.
+    ///
+    /// Sent exactly once per submitted event. A publish the application never hears
+    /// about stays pending; it cannot be mistaken for another one's answer.
+    EventPublished {
+        id: PublishId,
+        result: Result<(), String>,
+    },
     /// A subscription was created for a specific tab
     SubscriptionCreated {
         feed: FeedKind,

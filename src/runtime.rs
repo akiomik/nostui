@@ -447,6 +447,9 @@ impl<'a> TearsApp<'a> {
                 feed,
                 subscription_id,
             } => self.state.track_subscription_created(feed, subscription_id),
+            NostrSubscriptionMessage::EventPublished { id, result } => {
+                self.state.resolve_publish(id, result)
+            }
             NostrSubscriptionMessage::Notification(notif) => match *notif {
                 // NOTE: We use `RelayPoolNotification::Message` instead of `RelayPoolNotification::Event`
                 // because:

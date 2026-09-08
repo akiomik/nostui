@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crossterm::event::KeyEvent;
 use nostr_sdk::prelude::*;
 use nowhear::Track;
@@ -12,7 +14,7 @@ use crate::{
         editor::{Editor, Message as EditorMessage},
         fps::{Fps, Message as FpsMessage},
         nostr::{Message as NostrMessage, Nostr, NostrOutcome},
-        nostr_gateway::{CommandError, NostrCommand},
+        nostr_gateway::{CommandError, NostrCommand, PublishId},
         status_bar::{Message, StatusBar},
         timeline::{
             tab::TimelineOutcome, text_note::TextNote, Message as TimelineMessage, Timeline,
@@ -62,7 +64,28 @@ pub struct AppState<'a> {
     /// Owned here (not in `model::nostr`) so the application layer performs the
     /// I/O while `model` stays side-effect free; set once the worker is ready.
     command_sender: Option<mpsc::UnboundedSender<NostrCommand>>,
+    /// Publishes handed to the worker and not yet answered, by the id they were sent
+    /// under.
+    ///
+    /// Keyed rather than ordered: an outcome that never arrives leaves one stale entry
+    /// instead of shifting every later answer onto the wrong submission.
+    pending_publishes: HashMap<PublishId, PendingPublish>,
+    /// Source of [`PublishId`]s, monotonic for the life of the application.
+    next_publish_id: u64,
 }
+
+/// A publish handed to the worker and waiting for a relay's answer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PendingPublish {
+    /// Status-bar label to show once a relay accepts it — the word the bar has always
+    /// used for this kind of event ("Posted", "Reacted", "Reposted", "Music").
+    settled_label: String,
+    /// What was published, shown while pending and again once settled.
+    message: String,
+}
+
+/// Status-bar label shown while a publish is waiting for a relay's answer.
+const PENDING_LABEL: &str = "Sending";
 
 /// Configuration state - holds all user-configurable settings
 #[derive(Debug, Clone, Default)]
@@ -168,7 +191,7 @@ impl<'a> AppState<'a> {
             let outcome = self
                 .nostr
                 .update(NostrMessage::SubscriptionRequested { feed });
-            self.dispatch_nostr(outcome);
+            let _ = self.dispatch_nostr(outcome);
 
             self.set_status("Mention", "loading...");
         } else {
@@ -206,7 +229,7 @@ impl<'a> AppState<'a> {
             let outcome = self
                 .nostr
                 .update(NostrMessage::SubscriptionRequested { feed });
-            self.dispatch_nostr(outcome);
+            let _ = self.dispatch_nostr(outcome);
 
             self.set_status(author_npub, "loading...");
         } else {
@@ -234,7 +257,7 @@ impl<'a> AppState<'a> {
 
         // Unsubscribe the subscriptions associated with the closed tab.
         let outcome = self.nostr.update(NostrMessage::SubscriptionClosed { feed });
-        self.dispatch_nostr(outcome);
+        let _ = self.dispatch_nostr(outcome);
 
         Command::none()
     }
@@ -264,12 +287,13 @@ impl<'a> AppState<'a> {
         let event_builder = build(note);
         log::info!("{label} event: {note_id}");
 
+        let id = self.begin_publish(label, note_id);
         let outcome = self
             .nostr
-            .update(NostrMessage::EventSubmitted { event_builder });
-        self.dispatch_nostr(outcome);
-
-        self.set_status(label, note_id);
+            .update(NostrMessage::EventSubmitted { id, event_builder });
+        if !self.dispatch_nostr(outcome) {
+            self.abandon_publish(id, "not connected");
+        }
 
         Command::none()
     }
@@ -313,12 +337,13 @@ impl<'a> AppState<'a> {
             EventBuilder::new(Kind::TextNote, &content)
         };
 
+        let id = self.begin_publish("Posted", &content);
         let outcome = self
             .nostr
-            .update(NostrMessage::EventSubmitted { event_builder });
-        self.dispatch_nostr(outcome);
-
-        self.set_status("Posted", content);
+            .update(NostrMessage::EventSubmitted { id, event_builder });
+        if !self.dispatch_nostr(outcome) {
+            self.abandon_publish(id, "not connected");
+        }
 
         // Clear UI state.
         self.editor.update(EditorMessage::ComposingCanceled);
@@ -337,12 +362,13 @@ impl<'a> AppState<'a> {
         let content = status.content();
         let event_builder = status.live_status_builder();
 
+        let id = self.begin_publish("Music", &content);
         let outcome = self
             .nostr
-            .update(NostrMessage::EventSubmitted { event_builder });
-        self.dispatch_nostr(outcome);
-
-        self.set_status("Music", content);
+            .update(NostrMessage::EventSubmitted { id, event_builder });
+        if !self.dispatch_nostr(outcome) {
+            self.abandon_publish(id, "not connected");
+        }
 
         Command::none()
     }
@@ -372,19 +398,90 @@ impl<'a> AppState<'a> {
     ///
     /// `model::nostr::update` is side-effect free and only reports the command
     /// to send; the application owns the sender and performs the actual I/O.
-    fn dispatch_nostr(&self, outcome: Option<NostrOutcome>) {
+    fn dispatch_nostr(&self, outcome: Option<NostrOutcome>) -> bool {
         let Some(NostrOutcome::Send(command)) = outcome else {
-            return;
+            return false;
         };
 
         let Some(sender) = self.command_sender.as_ref() else {
             log::warn!("Dropping Nostr command, worker not ready: {command:?}");
-            return;
+            return false;
         };
 
         if sender.send(command).is_err() {
             log::error!("Failed to send Nostr command: subscription worker is gone");
+            return false;
         }
+
+        true
+    }
+
+    /// Hand a submitted event to the worker and show it as pending.
+    ///
+    /// The bar says "Sending" rather than `settled_label` until a relay has answered,
+    /// because until then nothing has been published — the command only sits on the
+    /// worker's queue. [`Self::resolve_publish`] supplies the ending.
+    ///
+    /// A submission that never reaches the worker settles here instead, since no report
+    /// will ever arrive for it.
+    fn begin_publish(&mut self, settled_label: &str, message: impl Into<String>) -> PublishId {
+        let id = PublishId(self.next_publish_id);
+        self.next_publish_id = self.next_publish_id.wrapping_add(1);
+        let message = message.into();
+
+        self.pending_publishes.insert(
+            id,
+            PendingPublish {
+                settled_label: settled_label.to_owned(),
+                message: message.clone(),
+            },
+        );
+        self.set_status(PENDING_LABEL, message);
+
+        id
+    }
+
+    /// Settle the publish this outcome belongs to.
+    ///
+    /// An id with no entry is ignored: it can only mean the entry was already settled,
+    /// and guessing which submission it meant is how a wrong note gets reported.
+    pub fn resolve_publish(
+        &mut self,
+        id: PublishId,
+        result: Result<(), String>,
+    ) -> Command<AppMsg> {
+        let Some(pending) = self.pending_publishes.remove(&id) else {
+            log::warn!("Publish outcome for an unknown submission: {result:?}");
+            return Command::none();
+        };
+
+        match result {
+            Ok(()) => self.set_status(pending.settled_label, pending.message),
+            Err(reason) => {
+                log::error!("Failed to publish {}: {reason}", pending.message);
+                // Reason first: the bar is one line, and what a reaction or repost carries
+                // as content is a bech32 id — long, and far less use than why it failed.
+                self.set_status_error(
+                    pending.settled_label,
+                    format!("{reason} ({})", pending.message),
+                );
+            }
+        }
+
+        Command::none()
+    }
+
+    /// Give up on a publish that was never handed over, so it does not sit as "Sending".
+    fn abandon_publish(&mut self, id: PublishId, reason: &str) {
+        let Some(pending) = self.pending_publishes.remove(&id) else {
+            return;
+        };
+
+        log::error!("Publish not sent, {reason}: {}", pending.message);
+        self.set_status_error(
+            pending.settled_label,
+            format!("{reason} ({})", pending.message),
+        );
     }
 
     /// Record that the Nostr subscription is ready and store its command sender,
@@ -398,7 +495,7 @@ impl<'a> AppState<'a> {
         let tab_title = self.active_tab_title();
         self.command_sender = Some(command_sender);
         let outcome = self.nostr.update(NostrMessage::ConnectionReady);
-        self.dispatch_nostr(outcome);
+        let _ = self.dispatch_nostr(outcome);
         self.set_status(tab_title, "loading...");
 
         Command::none()
@@ -451,7 +548,7 @@ impl<'a> AppState<'a> {
         let outcome = self
             .nostr
             .update(NostrMessage::HistoryRequested { feed, since });
-        self.dispatch_nostr(outcome);
+        let _ = self.dispatch_nostr(outcome);
 
         self.set_status(tab_title, "loading more...");
 
@@ -572,7 +669,7 @@ impl<'a> AppState<'a> {
     /// Close the Nostr connection: unsubscribe and disconnect from relays.
     pub fn close_connection(&mut self) -> Command<AppMsg> {
         let outcome = self.nostr.update(NostrMessage::ConnectionClosed);
-        self.dispatch_nostr(outcome);
+        let _ = self.dispatch_nostr(outcome);
         self.command_sender = None;
         Command::none()
     }
@@ -588,7 +685,7 @@ impl<'a> AppState<'a> {
             feed,
             sub_id: subscription_id,
         });
-        self.dispatch_nostr(outcome);
+        let _ = self.dispatch_nostr(outcome);
         Command::none()
     }
 
@@ -955,8 +1052,8 @@ mod tests {
 
     #[test]
     fn test_react_to_selected_sets_status() -> Result<()> {
+        let (mut state, _rx) = connected_state();
         let keys = Keys::generate();
-        let mut state = AppState::new(keys.public_key());
 
         let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
         let Ok(note1) = event.id.to_bech32();
@@ -964,6 +1061,15 @@ mod tests {
         let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
 
         let _ = state.react_to_selected();
+        let id = only_pending(&state);
+
+        // Handed to the worker; no relay has answered yet.
+        assert_eq!(
+            state.status_bar.message(),
+            Some(format!("[Sending] {note1}").as_str())
+        );
+
+        let _ = state.resolve_publish(id, Ok(()));
 
         assert_eq!(
             state.status_bar.message(),
@@ -975,8 +1081,8 @@ mod tests {
 
     #[test]
     fn test_repost_selected_sets_status() -> Result<()> {
+        let (mut state, _rx) = connected_state();
         let keys = Keys::generate();
-        let mut state = AppState::new(keys.public_key());
 
         let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
         let Ok(note1) = event.id.to_bech32();
@@ -984,6 +1090,15 @@ mod tests {
         let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
 
         let _ = state.repost_selected();
+        let id = only_pending(&state);
+
+        // Handed to the worker; no relay has answered yet.
+        assert_eq!(
+            state.status_bar.message(),
+            Some(format!("[Sending] {note1}").as_str())
+        );
+
+        let _ = state.resolve_publish(id, Ok(()));
 
         assert_eq!(
             state.status_bar.message(),
@@ -1022,7 +1137,7 @@ mod tests {
 
     #[test]
     fn test_submit_note_posts_content_and_resets_editor() {
-        let mut state = AppState::new(Keys::generate().public_key());
+        let (mut state, _rx) = connected_state();
 
         // Compose "hi" in the editor.
         state.editor.update(EditorMessage::ComposingStarted);
@@ -1036,15 +1151,21 @@ mod tests {
         }
 
         let _ = state.submit_note();
+        let id = only_pending(&state);
+
+        // The editor closes, but nothing is posted until a relay says so.
+        assert_eq!(state.status_bar.message(), Some("[Sending] hi"));
+        assert!(!state.editor.is_active());
+
+        let _ = state.resolve_publish(id, Ok(()));
 
         assert_eq!(state.status_bar.message(), Some("[Posted] hi"));
-        assert!(!state.editor.is_active());
     }
 
     #[test]
     fn test_submit_note_as_reply_posts_and_resets_editor() -> Result<()> {
+        let (mut state, _rx) = connected_state();
         let keys = Keys::generate();
-        let mut state = AppState::new(keys.public_key());
 
         // Select a note and start replying to it.
         let event = create_text_note(&keys, "original", Timestamp::from(1000))?;
@@ -1058,18 +1179,28 @@ mod tests {
         });
 
         let _ = state.submit_note();
+        let id = only_pending(&state);
+
+        assert_eq!(state.status_bar.message(), Some("[Sending] y"));
+        assert!(!state.editor.is_active());
+
+        let _ = state.resolve_publish(id, Ok(()));
 
         assert_eq!(state.status_bar.message(), Some("[Posted] y"));
-        assert!(!state.editor.is_active());
 
         Ok(())
     }
 
     #[test]
     fn test_publish_music_status_sets_status() {
-        let mut state = AppState::new(Keys::generate().public_key());
+        let (mut state, _rx) = connected_state();
 
         let _ = state.publish_music_status(create_track("Song"));
+        let id = only_pending(&state);
+
+        assert_eq!(state.status_bar.message(), Some("[Sending] Song - Artist"));
+
+        let _ = state.resolve_publish(id, Ok(()));
 
         assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
     }
@@ -1168,11 +1299,116 @@ mod tests {
     // the #458 regression where `load_more_timeline` set the status but never
     // dispatched `LoadMore`.
 
+    /// The id of the one outstanding publish, for tests that settle it by hand.
+    fn only_pending(state: &AppState<'_>) -> PublishId {
+        let mut ids = state.pending_publishes.keys();
+        let id = *ids.next().expect("a publish should be pending");
+        assert!(ids.next().is_none(), "expected exactly one pending publish");
+        id
+    }
+
     fn connected_state() -> (AppState<'static>, mpsc::UnboundedReceiver<NostrCommand>) {
         let mut state = AppState::new(Keys::generate().public_key());
         let (tx, rx) = mpsc::unbounded_channel();
         let _ = state.on_connection_ready(tx);
         (state, rx)
+    }
+
+    #[test]
+    fn publish_failure_reports_an_error_instead_of_success() {
+        let (mut state, _rx) = connected_state();
+
+        let _ = state.publish_music_status(create_track("Song"));
+        let id = only_pending(&state);
+
+        let _ = state.resolve_publish(
+            id,
+            Err(String::from(
+                "no relay accepted the event: wss://relay.example: blocked",
+            )),
+        );
+
+        let message = state.status_bar.message().expect("a status message");
+        assert!(
+            message.starts_with("[ERR: Music] no relay accepted")
+                && message.contains("(Song - Artist)"),
+            "expected the reason and the content, got: {message}"
+        );
+    }
+
+    #[test]
+    fn publishing_while_disconnected_does_not_claim_success() {
+        // Not connected: `model::nostr` declines the submission, so nothing is queued and
+        // no outcome will ever arrive to settle it.
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        let _ = state.publish_music_status(create_track("Song"));
+
+        assert_eq!(
+            state.status_bar.message(),
+            Some("[ERR: Music] not connected (Song - Artist)")
+        );
+        assert!(state.pending_publishes.is_empty());
+    }
+
+    #[test]
+    fn outcomes_settle_the_submission_they_belong_to() -> Result<()> {
+        let (mut state, _rx) = connected_state();
+        let keys = Keys::generate();
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let Ok(note1) = event.id.to_bech32();
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+
+        // Two outstanding at once.
+        let _ = state.react_to_selected();
+        let reaction = only_pending(&state);
+        let _ = state.publish_music_status(create_track("Song"));
+
+        // Answered out of order — which is the point of correlating rather than queueing.
+        let music = *state
+            .pending_publishes
+            .keys()
+            .find(|id| **id != reaction)
+            .expect("two pending publishes");
+        let _ = state.resolve_publish(music, Ok(()));
+        assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
+
+        let _ = state.resolve_publish(reaction, Ok(()));
+        assert_eq!(
+            state.status_bar.message(),
+            Some(format!("[Reacted] {note1}").as_str())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn an_outcome_for_an_unknown_submission_is_ignored() {
+        let (mut state, _rx) = connected_state();
+        let before = state.status_bar.message().map(ToOwned::to_owned);
+
+        // Nothing is pending under this id, so there is nothing it could honestly settle.
+        let _ = state.resolve_publish(PublishId(99), Ok(()));
+
+        assert_eq!(state.status_bar.message(), before.as_deref());
+    }
+
+    #[test]
+    fn a_publish_settles_only_once() {
+        let (mut state, _rx) = connected_state();
+
+        let _ = state.publish_music_status(create_track("Song"));
+        let id = only_pending(&state);
+
+        let _ = state.resolve_publish(id, Ok(()));
+        assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
+
+        // A duplicate report must not re-settle it over whatever is on screen by then.
+        let _ = state.clear_status_message();
+        let _ = state.resolve_publish(id, Ok(()));
+        assert_eq!(state.status_bar.message(), None);
     }
 
     #[test]
