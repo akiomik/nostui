@@ -124,7 +124,7 @@ Drop the option wherever nostui is launched — a shell alias, a `.desktop` entr
 **Note:**
 There is no direct replacement, and no remaining option that behaves like the old throttle.
 
-`--tick-rate` is not one, despite the way it reads. An idle nostui repaints about once a second: the tick refreshes the "ticks per sec" counter on that cadence and declines the redraw on every tick in between, so the tick rate sets how often the application wakes up, not how often it draws. Raising it costs update passes rather than frames.
+`--tick-rate` is not one, despite the way it reads. An idle nostui repaints at most about once a second: the tick refreshes the "ticks per sec" counter on that cadence and declines the redraw on every tick in between, so the tick rate sets how often the application wakes up, not how often it draws. Raising it costs update passes rather than frames. (Below one tick per second there are no ticks in between, so each one redraws — but that is fewer repaints, not more.)
 
 What has no ceiling any more is relay traffic. Redraws follow inbound events instead of being clamped to 16 fps, so a busy home feed can redraw more often than it used to.
 

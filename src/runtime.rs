@@ -235,10 +235,11 @@ impl<'a> TearsApp<'a> {
             //
             // What it measures is therefore how often the application processes a tick,
             // which is not how often it renders: the runtime renders once per pass that
-            // leaves the view dirty, and a tick only dirties it on the one pass per second
-            // that recomputes the displayed rate. So an idle nostui repaints once a second
-            // while ticking at `--tick-rate`, and under relay traffic the renders the
-            // events add are ones the counter knows nothing about.
+            // leaves the view dirty, and a tick only dirties it on the pass that recomputes
+            // the displayed rate. So an idle nostui repaints at most once a second while
+            // ticking at `--tick-rate` — a rate below 1/s has no ticks in between to
+            // decline, and every one of them redraws — and under relay traffic the renders
+            // the events add are ones the counter knows nothing about.
             SystemMsg::Tick => self.state.record_tick(Instant::now()),
             SystemMsg::ShowError(error) => self.state.show_error(error),
             SystemMsg::KeyInput(key) => self.handle_key_input(key),
@@ -914,12 +915,16 @@ mod tests {
     /// second. That the recomputing tick redraws is covered where the decision is
     /// made — `Fps::update` reporting `DisplayUpdated` (see `model::fps`) — and an
     /// inverted mapping in `record_tick` fails this test.
+    ///
+    /// The same stamping leaves this test reading the real clock: it holds while the
+    /// sends below all land inside one second, which sixteen synchronous `update`
+    /// calls have many orders of magnitude of room for, but is not a property the
+    /// test can assert.
     #[test]
     fn test_tick_that_changes_no_displayed_value_does_not_redraw() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
-        // The first tick opens the measurement interval and the rest fall inside
-        // it: a test runs far quicker than the second it takes to close.
+        // The first tick opens the measurement interval and the rest fall inside it.
         for _ in 0..16 {
             store.send(AppMsg::System(SystemMsg::Tick));
 
