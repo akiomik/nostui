@@ -263,8 +263,19 @@ impl NostrEvents {
                 // Reported either way, when anybody is waiting. The application shows a
                 // publish as pending until this arrives, so a success that says nothing
                 // would leave it pending for good.
-                if let Some(id) = id {
-                    let _ = msg_tx.send(Message::EventPublished { id, result });
+                match id {
+                    Some(id) => {
+                        let _ = msg_tx.send(Message::EventPublished { id, result });
+                    }
+                    // Nobody is waiting on it, but a failure still has to land somewhere:
+                    // #521 keeps it off the status bar, not out of the log. Read-only
+                    // mode fails every one of these, and without this there would be no
+                    // trace of it anywhere.
+                    None => {
+                        if let Err(reason) = result {
+                            log::error!("Untracked publish failed: {reason}");
+                        }
+                    }
                 }
             }
             NostrCommand::AddRelay { url } => {

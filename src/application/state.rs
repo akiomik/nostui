@@ -395,9 +395,15 @@ impl<'a> AppState<'a> {
             id: None,
             event_builder,
         });
-        let _ = self.dispatch_nostr(outcome);
 
-        self.set_status(PublishKind::MusicStatus.settled_label(), content);
+        // Only once it is on its way. #521 keeps a relay refusing this quiet, but "never
+        // handed over at all" is a different thing — a track change before the worker is
+        // ready, or after it has gone — and announcing it then would be the same false
+        // claim this change removes everywhere else. The line still means "attempted",
+        // not "accepted"; that is what #521 is for.
+        if self.dispatch_nostr(outcome) {
+            self.set_status(PublishKind::MusicStatus.settled_label(), content);
+        }
 
         Command::none()
     }
@@ -1283,6 +1289,18 @@ mod tests {
         // line reports what nostui attempted, as it always has (#521).
         assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
         assert!(state.pending_publishes.is_empty());
+    }
+
+    #[test]
+    fn an_undispatched_music_status_is_not_announced() {
+        // Not connected, so the command is declined before it reaches the worker.
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        let _ = state.publish_music_status(create_track("Song"));
+
+        // #521 keeps a relay refusing this quiet, but "never handed over" is a different
+        // thing — announcing it would be the same false claim removed everywhere else.
+        assert_eq!(state.status_bar.message(), None);
     }
 
     #[test]
