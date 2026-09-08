@@ -292,7 +292,7 @@ impl<'a> AppState<'a> {
             .nostr
             .update(NostrMessage::EventSubmitted { id, event_builder });
         if !self.dispatch_nostr(outcome) {
-            self.abandon_publish(id, "not connected");
+            self.abandon_publish(id, "not sent");
         }
 
         Command::none()
@@ -342,7 +342,7 @@ impl<'a> AppState<'a> {
             .nostr
             .update(NostrMessage::EventSubmitted { id, event_builder });
         if !self.dispatch_nostr(outcome) {
-            self.abandon_publish(id, "not connected");
+            self.abandon_publish(id, "not sent");
         }
 
         // Clear UI state.
@@ -367,7 +367,7 @@ impl<'a> AppState<'a> {
             .nostr
             .update(NostrMessage::EventSubmitted { id, event_builder });
         if !self.dispatch_nostr(outcome) {
-            self.abandon_publish(id, "not connected");
+            self.abandon_publish(id, "not sent");
         }
 
         Command::none()
@@ -429,6 +429,10 @@ impl<'a> AppState<'a> {
         self.next_publish_id = self.next_publish_id.wrapping_add(1);
         let message = message.into();
 
+        // Nothing expires this. A worker that dies without reaching its exit drain — a
+        // panic, an abort — never reports, so the entry stays and the bar reads "Sending"
+        // for the life of the process. Recovering needs the application to notice the
+        // worker died, which it cannot do today: #519.
         self.pending_publishes.insert(
             id,
             PendingPublish {
@@ -455,6 +459,11 @@ impl<'a> AppState<'a> {
             return Command::none();
         };
 
+        // Both arms write the bar whatever is on it. An answer can arrive a full ack
+        // timeout after the submit, so this can land over a status the user has caused
+        // since — a tab they opened while waiting. Deciding who may write over whom is
+        // #516; doing it here would be the arbitration policy growing a case at a time,
+        // which is what that issue exists to stop.
         match result {
             Ok(()) => self.set_status(pending.settled_label, pending.message),
             Err(reason) => {
@@ -472,6 +481,11 @@ impl<'a> AppState<'a> {
     }
 
     /// Give up on a publish that was never handed over, so it does not sit as "Sending".
+    ///
+    /// The reason stays vague on purpose. A dispatch fails because the gateway declined
+    /// it, because no worker is listening yet, or because the worker died — and this
+    /// layer cannot tell those apart, so naming one would sometimes hide a dead worker
+    /// behind "not connected" (#519). The distinction is in the log.
     fn abandon_publish(&mut self, id: PublishId, reason: &str) {
         let Some(pending) = self.pending_publishes.remove(&id) else {
             return;
@@ -1346,7 +1360,7 @@ mod tests {
 
         assert_eq!(
             state.status_bar.message(),
-            Some("[ERR: Music] not connected (Song - Artist)")
+            Some("[ERR: Music] not sent (Song - Artist)")
         );
         assert!(state.pending_publishes.is_empty());
     }
@@ -1569,7 +1583,8 @@ mod tests {
     fn test_notify_subscription_error_sets_error_status() {
         let mut state = AppState::new(Keys::generate().public_key());
 
-        let _ = state.notify_subscription_error(CommandError::SendEventFailed {
+        let _ = state.notify_subscription_error(CommandError::AddRelayFailed {
+            url: String::from("wss://relay.example"),
             error: "x".to_owned(),
         });
 

@@ -209,9 +209,9 @@ impl<'a> TearsApp<'a> {
                 // What the send is not safe from is the exit itself. The quit applies
                 // synchronously on tears 0.11, so `run` can return while the worker — a
                 // detached task the runtime neither owns nor joins — is still publishing,
-                // and the tokio runtime is dropped moments later. The status bar has
-                // already said "Posted" by then. #511 covers making that claim honest, and
-                // #512 covers giving the send a chance to land.
+                // and the tokio runtime is dropped moments later. The status bar says
+                // "Sending" at that point rather than claiming success, so the user is at
+                // least not told it worked; #512 covers giving the send a chance to land.
                 let _ = self.state.close_connection();
 
                 Command::quit()

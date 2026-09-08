@@ -133,7 +133,6 @@ impl NostrEvents {
         }
     }
 
-    /// Handle a single command and send error messages if needed
     /// Decide whether a completed `send_event` actually reached a relay.
     ///
     /// `Ok` from nostr-sdk does not mean the event was accepted: the pool returns
@@ -167,6 +166,12 @@ impl NostrEvents {
         })
     }
 
+    /// How many relays' reasons a failure message names before summarising the rest.
+    ///
+    /// The status bar is one non-wrapping line, and this string competes with the content
+    /// that follows it. Every relay's reason would push that off the end.
+    const REPORTED_FAILURES: usize = 2;
+
     /// Render per-relay failures as `url: reason`, in a stable order so the same outcome
     /// always reads the same way — `failed` is a `HashMap`.
     fn describe_failures(failed: &HashMap<RelayUrl, String>) -> String {
@@ -175,9 +180,18 @@ impl NostrEvents {
             .map(|(url, reason)| format!("{url}: {reason}"))
             .collect();
         reasons.sort();
-        reasons.join(", ")
+
+        let hidden = reasons.len().saturating_sub(Self::REPORTED_FAILURES);
+        reasons.truncate(Self::REPORTED_FAILURES);
+
+        if hidden == 0 {
+            reasons.join(", ")
+        } else {
+            format!("{} (and {hidden} more)", reasons.join(", "))
+        }
     }
 
+    /// Run a single command and report its outcome to the application.
     async fn handle_command(
         cmd: NostrCommand,
         client: &Client,
@@ -463,6 +477,87 @@ impl SubscriptionSource for NostrEvents {
 mod tests {
     use super::*;
     use futures::StreamExt;
+
+    fn relay_url(url: &str) -> RelayUrl {
+        RelayUrl::parse(url).expect("valid relay url")
+    }
+
+    fn send_output(success: &[&str], failed: &[(&str, &str)]) -> SendEventOutput {
+        let mut output: SendEventOutput = Output::new(EventId::from_byte_array([0u8; 32]));
+        for url in success {
+            output.success.insert(relay_url(url), EventSendStatus::Sent);
+        }
+        for (url, reason) in failed {
+            output.failed.insert(relay_url(url), (*reason).to_owned());
+        }
+        output
+    }
+
+    #[test]
+    fn a_send_every_relay_refused_is_a_failure() {
+        // The premise of this whole change: nostr-sdk returns `Ok` once it has tried
+        // every relay, so an all-refused send arrives as `Ok` with nothing in `success`.
+        // Reporting that as published would put "Posted" on screen for a note no relay
+        // stored — which is the bug this exists to remove.
+        let output = send_output(&[], &[("wss://a.example", "blocked")]);
+
+        let error = NostrEvents::relay_verdict(&output).expect_err("should be a failure");
+        assert!(
+            error.contains("no relay accepted") && error.contains("blocked"),
+            "expected the relay's reason to survive, got: {error}"
+        );
+    }
+
+    #[test]
+    fn a_send_no_relay_answered_is_a_failure() {
+        assert!(NostrEvents::relay_verdict(&send_output(&[], &[])).is_err());
+    }
+
+    #[test]
+    fn one_relay_accepting_is_enough() {
+        // The event exists on the network, so a partial failure is logged, not reported.
+        let output = send_output(&["wss://a.example"], &[("wss://b.example", "rate-limited")]);
+
+        assert_eq!(NostrEvents::relay_verdict(&output), Ok(()));
+    }
+
+    #[test]
+    fn failure_reasons_read_the_same_way_every_time() {
+        // `failed` is a `HashMap`, so without sorting the same outcome would render
+        // differently from run to run.
+        let output = send_output(
+            &[],
+            &[
+                ("wss://b.example", "blocked"),
+                ("wss://a.example", "bad sig"),
+            ],
+        );
+
+        let error = NostrEvents::relay_verdict(&output).expect_err("should be a failure");
+        assert!(
+            error.find("a.example").expect("a") < error.find("b.example").expect("b"),
+            "expected a stable order, got: {error}"
+        );
+    }
+
+    #[test]
+    fn a_failure_message_does_not_grow_with_the_relay_count() {
+        // The status bar is one non-wrapping line and the published content follows this
+        // string, so naming every relay would push the content off the end.
+        let failed: Vec<(String, String)> = (0..6)
+            .map(|i| (format!("wss://relay{i}.example"), format!("reason {i}")))
+            .collect();
+        let borrowed: Vec<(&str, &str)> = failed
+            .iter()
+            .map(|(url, reason)| (url.as_str(), reason.as_str()))
+            .collect();
+
+        let error = NostrEvents::relay_verdict(&send_output(&[], &borrowed))
+            .expect_err("should be a failure");
+
+        assert!(error.contains("(and 4 more)"), "got: {error}");
+        assert!(!error.contains("relay5.example"), "got: {error}");
+    }
 
     #[test]
     fn followings_use_only_the_latest_contact_list() {

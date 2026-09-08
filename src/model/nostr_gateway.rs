@@ -52,8 +52,6 @@ pub enum NostrCommand {
 /// Errors that can occur during command execution
 #[derive(Debug, Clone)]
 pub enum CommandError {
-    /// Failed to send event to relays
-    SendEventFailed { error: String },
     /// Failed to add relay
     AddRelayFailed { url: String, error: String },
     /// Failed to connect to relay
