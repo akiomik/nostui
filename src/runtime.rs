@@ -61,7 +61,10 @@ impl<'a> Application for TearsApp<'a> {
         let config = flags.config.clone();
 
         // Initialize global state
-        let state = AppState::new_with_config(flags.pubkey, flags.config);
+        // Without signing keys the application can only read, and it needs to know that
+        // before it attempts a publish nothing could ever complete.
+        let read_only = flags.keys.is_none();
+        let state = AppState::new_with_config(flags.pubkey, flags.config, read_only);
 
         // Initialize components
         let components = Components::new();
@@ -209,9 +212,9 @@ impl<'a> TearsApp<'a> {
                 // What the send is not safe from is the exit itself. The quit applies
                 // synchronously on tears 0.11, so `run` can return while the worker — a
                 // detached task the runtime neither owns nor joins — is still publishing,
-                // and the tokio runtime is dropped moments later. The status bar has
-                // already said "Posted" by then. #511 covers making that claim honest, and
-                // #512 covers giving the send a chance to land.
+                // and the tokio runtime is dropped moments later. The status bar says
+                // "Sending" at that point rather than claiming success, so the user is at
+                // least not told it worked; #512 covers giving the send a chance to land.
                 let _ = self.state.close_connection();
 
                 Command::quit()
@@ -447,6 +450,9 @@ impl<'a> TearsApp<'a> {
                 feed,
                 subscription_id,
             } => self.state.track_subscription_created(feed, subscription_id),
+            NostrSubscriptionMessage::EventPublished { id, result } => {
+                self.state.resolve_publish(id, result)
+            }
             NostrSubscriptionMessage::Notification(notif) => match *notif {
                 // NOTE: We use `RelayPoolNotification::Message` instead of `RelayPoolNotification::Event`
                 // because:

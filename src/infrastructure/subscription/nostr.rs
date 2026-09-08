@@ -1,4 +1,8 @@
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+    time::Duration,
+};
 
 use futures::{
     stream::{self, BoxStream},
@@ -129,7 +133,115 @@ impl NostrEvents {
         }
     }
 
-    /// Handle a single command and send error messages if needed
+    /// Decide whether a completed `send_event` actually reached a relay.
+    ///
+    /// `Ok` from nostr-sdk does not mean the event was accepted: the pool returns
+    /// `Ok(output)` once it has tried every relay, recording per-relay rejections and
+    /// ack timeouts in `output.failed` and reserving `Err` for setup problems. An event
+    /// every relay refused therefore arrives as `Ok` with an empty `success` set, and
+    /// reporting that as published would be the very claim this is here to stop.
+    ///
+    /// One relay accepting is enough — the event exists on the network — so a partial
+    /// failure is logged rather than reported.
+    ///
+    /// "Confirmed", not "accepted", in what it reports. `failed` collects ack timeouts
+    /// and dropped sockets alongside outright `OK false` rejections, and those are not
+    /// the same thing: a relay can store the event and answer too late to be heard. The
+    /// user would then be told it was refused for a note that is on the relay, and would
+    /// write it again. Saying only that nothing confirmed it is what is actually known.
+    ///
+    /// "Accepting" means an `OK true`, checked rather than assumed. `success` also holds
+    /// `EventSendStatus::Sent` — written to a socket, never acknowledged — under any
+    /// policy but `AckPolicy::all`, so counting the set's size would make this correct
+    /// only for as long as nobody changes the policy at the send. Checking the status
+    /// makes a change there report failure loudly instead of reinstating the claim this
+    /// exists to remove.
+    fn relay_verdict(output: &SendEventOutput) -> Result<(), String> {
+        if output.success.values().any(EventSendStatus::is_ack) {
+            if !output.failed.is_empty() {
+                log::warn!(
+                    "Event {} accepted by {} relay(s), refused by {}",
+                    output.value,
+                    output
+                        .success
+                        .values()
+                        .filter(|status| status.is_ack())
+                        .count(),
+                    Self::describe_failures(&output.failed)
+                );
+            }
+            return Ok(());
+        }
+
+        // Everything to the log, a summary to the caller: this string ends up on one
+        // line of the status bar, and losing reasons from the log too would leave the
+        // failure undiagnosable anywhere.
+        if output.failed.is_empty() {
+            log::error!(
+                "No relay confirmed event {}, and none reported why",
+                output.value
+            );
+        } else {
+            log::error!(
+                "No relay confirmed event {}: {}",
+                output.value,
+                Self::describe_failures(&output.failed)
+            );
+        }
+
+        Err(if output.failed.is_empty() {
+            String::from("no relay confirmed the event")
+        } else {
+            format!(
+                "no relay confirmed the event: {}",
+                Self::summarise_failures(&output.failed)
+            )
+        })
+    }
+
+    /// How many relays' reasons a *reported* failure names before summarising the rest.
+    ///
+    /// The status bar is one non-wrapping line and the published content follows this
+    /// string, so naming every relay would push the content off the end. The log is not
+    /// so constrained, and is the only place the reasons can be read at leisure — so it
+    /// gets all of them.
+    const REPORTED_FAILURES: usize = 2;
+
+    /// Per-relay failures as `url: reason`, in a stable order so the same outcome always
+    /// reads the same way — `failed` is a `HashMap`.
+    ///
+    /// The one place this rendering exists. The log line and the status line describe the
+    /// same failure and must not be able to describe it differently, so the short form
+    /// below shortens this rather than rebuilding it.
+    fn sorted_failures(failed: &HashMap<RelayUrl, String>) -> Vec<String> {
+        let mut reasons: Vec<String> = failed
+            .iter()
+            .map(|(url, reason)| format!("{url}: {reason}"))
+            .collect();
+        reasons.sort();
+        reasons
+    }
+
+    /// Every reason, for the log.
+    fn describe_failures(failed: &HashMap<RelayUrl, String>) -> String {
+        Self::sorted_failures(failed).join(", ")
+    }
+
+    /// The same list, shortened for a status bar that can show one line of it.
+    fn summarise_failures(failed: &HashMap<RelayUrl, String>) -> String {
+        let mut reasons = Self::sorted_failures(failed);
+
+        let hidden = reasons.len().saturating_sub(Self::REPORTED_FAILURES);
+        reasons.truncate(Self::REPORTED_FAILURES);
+
+        if hidden == 0 {
+            reasons.join(", ")
+        } else {
+            format!("{} (and {hidden} more)", reasons.join(", "))
+        }
+    }
+
+    /// Run a single command and report its outcome to the application.
     async fn handle_command(
         cmd: NostrCommand,
         client: &Client,
@@ -139,22 +251,46 @@ impl NostrEvents {
         msg_tx: &mpsc::UnboundedSender<Message>,
     ) {
         match cmd {
-            NostrCommand::SendEventBuilder { event_builder } => {
+            NostrCommand::SendEventBuilder { id, event_builder } => {
                 let result: Result<(), String> = match keys {
                     Some(keys) => match event_builder.finalize(keys) {
-                        Ok(event) => client
-                            .send_event(&event)
-                            .await
-                            .map(|_| ())
-                            .map_err(|e| e.to_string()),
+                        // `AckPolicy::all` is nostr-sdk's default, and stating it here
+                        // rather than inheriting it is what makes `relay_verdict` sound:
+                        // under any other policy a relay lands in `output.success` as
+                        // `Sent` — dispatched, not acknowledged — and reporting that as
+                        // published is the claim this whole change removes.
+                        Ok(event) => {
+                            match client.send_event(&event).ack_policy(AckPolicy::all()).await {
+                                Ok(output) => Self::relay_verdict(&output),
+                                Err(e) => Err(e.to_string()),
+                            }
+                        }
                         Err(e) => Err(e.to_string()),
                     },
+                    // Unreachable as things stand: the application refuses a publish
+                    // before queueing it when there is no signing key, and the NIP-38
+                    // status short-circuits for the same reason. Kept anyway — this is
+                    // the layer that actually holds the keys, and a future publish path
+                    // that forgot the check would otherwise sign nothing and say nothing.
                     None => Err(String::from("cannot send events in read-only mode")),
                 };
-                if let Err(e) = result {
-                    let _ = msg_tx.send(Message::Error {
-                        error: CommandError::SendEventFailed { error: e },
-                    });
+
+                // Reported either way, when anybody is waiting. The application shows a
+                // publish as pending until this arrives, so a success that says nothing
+                // would leave it pending for good.
+                match id {
+                    Some(id) => {
+                        let _ = msg_tx.send(Message::EventPublished { id, result });
+                    }
+                    // Nobody is waiting on it, but a failure still has to land somewhere:
+                    // #521 keeps it off the status bar, not out of the log. Read-only
+                    // mode fails every one of these, and without this there would be no
+                    // trace of it anywhere.
+                    None => {
+                        if let Err(reason) = result {
+                            log::error!("Untracked publish failed: {reason}");
+                        }
+                    }
                 }
             }
             NostrCommand::AddRelay { url } => {
@@ -341,6 +477,35 @@ impl NostrEvents {
                 }
             }
         }
+
+        Self::report_unsent(&mut cmd_rx, &msg_tx).await;
+    }
+
+    /// Fail every publish still queued when the worker stops.
+    ///
+    /// Close first, then drain. `cmd_rx` would otherwise stay open until the task
+    /// returns, and a publish sent in that window would be accepted by the sender and
+    /// dequeued by nobody — leaving the application tracking one that can never be
+    /// reported. Drained with `recv` rather than `try_recv` because `send` bumps the
+    /// message count before it pushes the value, so `try_recv` reports an empty queue as
+    /// `Empty` while a send is mid-flight and would end the loop early; `recv` waits it
+    /// out and returns `None` only once the channel is closed and genuinely drained.
+    async fn report_unsent(
+        cmd_rx: &mut mpsc::UnboundedReceiver<NostrCommand>,
+        msg_tx: &mpsc::UnboundedSender<Message>,
+    ) {
+        cmd_rx.close();
+
+        while let Some(cmd) = cmd_rx.recv().await {
+            if let NostrCommand::SendEventBuilder { id: Some(id), .. } = cmd {
+                let _ = msg_tx.send(Message::EventPublished {
+                    id,
+                    result: Err(String::from(
+                        "the connection closed before the event was sent",
+                    )),
+                });
+            }
+        }
     }
 }
 
@@ -395,7 +560,166 @@ impl SubscriptionSource for NostrEvents {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::nostr_gateway::PublishId;
     use futures::StreamExt;
+
+    fn relay_url(url: &str) -> RelayUrl {
+        RelayUrl::parse(url).expect("valid relay url")
+    }
+
+    fn send_output(success: &[&str], failed: &[(&str, &str)]) -> SendEventOutput {
+        let mut output: SendEventOutput = Output::new(EventId::from_byte_array([0u8; 32]));
+        for url in success {
+            output.success.insert(relay_url(url), EventSendStatus::Sent);
+        }
+        for (url, reason) in failed {
+            output.failed.insert(relay_url(url), (*reason).to_owned());
+        }
+        output
+    }
+
+    #[test]
+    fn a_send_no_relay_confirmed_is_a_failure() {
+        // The premise of this whole change: nostr-sdk returns `Ok` once it has tried
+        // every relay, so a send nothing confirmed arrives as `Ok` with nothing in
+        // `success`. Reporting that as published would put "Posted" on screen for a note
+        // no relay is known to hold — which is the bug this exists to remove.
+        let output = send_output(&[], &[("wss://a.example", "blocked")]);
+
+        let error = NostrEvents::relay_verdict(&output).expect_err("should be a failure");
+        assert!(
+            error.contains("no relay confirmed") && error.contains("blocked"),
+            "expected the relay's reason to survive, got: {error}"
+        );
+    }
+
+    #[test]
+    fn a_send_no_relay_answered_is_a_failure() {
+        assert!(NostrEvents::relay_verdict(&send_output(&[], &[])).is_err());
+    }
+
+    #[test]
+    fn a_send_nobody_acknowledged_is_not_a_publish() {
+        // `Sent` means written to a socket without waiting for an `OK`. It appears under
+        // any policy but `AckPolicy::all`, so if that setting is ever dropped from the
+        // send this must report failure rather than quietly calling it published.
+        //
+        // The accepting direction is not covered by a unit test: `EventSendStatus::Ack`
+        // wraps an `EventSendAcknowledgement` with no public constructor, so it cannot be
+        // built here. It is reachable end to end — nostr-sdk ships a `local-relay`
+        // feature — which is #523.
+        let output = send_output(&["wss://a.example"], &[("wss://b.example", "rate-limited")]);
+
+        assert!(NostrEvents::relay_verdict(&output).is_err());
+    }
+
+    #[test]
+    fn failure_reasons_read_the_same_way_every_time() {
+        // `failed` is a `HashMap`, so without sorting the same outcome would render
+        // differently from run to run.
+        let output = send_output(
+            &[],
+            &[
+                ("wss://b.example", "blocked"),
+                ("wss://a.example", "bad sig"),
+            ],
+        );
+
+        let error = NostrEvents::relay_verdict(&output).expect_err("should be a failure");
+        assert!(
+            error.find("a.example").expect("a") < error.find("b.example").expect("b"),
+            "expected a stable order, got: {error}"
+        );
+    }
+
+    #[test]
+    fn the_short_failure_list_is_a_prefix_of_the_full_one() {
+        // The log line and the status line describe the same failure. They may differ in
+        // length; they must not differ in what they say about the relays they both name.
+        let failed: Vec<(String, String)> = (0..5)
+            .map(|i| (format!("wss://relay{i}.example"), format!("reason {i}")))
+            .collect();
+        let map: HashMap<RelayUrl, String> = failed
+            .iter()
+            .map(|(url, reason)| (relay_url(url), reason.clone()))
+            .collect();
+
+        let full = NostrEvents::describe_failures(&map);
+        let short = NostrEvents::summarise_failures(&map);
+        let named = short.split(" (and ").next().expect("the named part");
+
+        assert!(
+            full.starts_with(named),
+            "the short form must name the same relays in the same order\n full:  {full}\n short: {short}"
+        );
+    }
+
+    #[test]
+    fn a_failure_message_does_not_grow_with_the_relay_count() {
+        // The status bar is one non-wrapping line and the published content follows this
+        // string, so naming every relay would push the content off the end.
+        let failed: Vec<(String, String)> = (0..6)
+            .map(|i| (format!("wss://relay{i}.example"), format!("reason {i}")))
+            .collect();
+        let borrowed: Vec<(&str, &str)> = failed
+            .iter()
+            .map(|(url, reason)| (url.as_str(), reason.as_str()))
+            .collect();
+
+        let error = NostrEvents::relay_verdict(&send_output(&[], &borrowed))
+            .expect_err("should be a failure");
+
+        assert!(error.contains("(and 4 more)"), "got: {error}");
+        assert!(!error.contains("relay5.example"), "got: {error}");
+    }
+
+    #[tokio::test]
+    async fn a_queued_publish_is_failed_when_the_worker_stops() {
+        let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
+        let (msg_tx, mut msg_rx) = mpsc::unbounded_channel();
+
+        for cmd in [
+            NostrCommand::SendEventBuilder {
+                id: Some(PublishId(7)),
+                event_builder: EventBuilder::new(Kind::TextNote, "hi"),
+            },
+            // Nobody waiting on this one, and this one is not a publish at all.
+            NostrCommand::SendEventBuilder {
+                id: None,
+                event_builder: EventBuilder::new(Kind::TextNote, "background"),
+            },
+            NostrCommand::Subscribe {
+                feed: FeedKind::Home,
+            },
+        ] {
+            cmd_tx.send(cmd).expect("the receiver is alive");
+        }
+
+        NostrEvents::report_unsent(&mut cmd_rx, &msg_tx).await;
+
+        // The tracked one is reported, so the application does not leave it on "Sending".
+        let Some(Message::EventPublished { id, result }) = msg_rx.recv().await else {
+            panic!("the queued publish should have been reported");
+        };
+        assert_eq!(id, PublishId(7));
+        assert!(result.is_err());
+
+        // Nothing else is: no one is waiting on the other two.
+        assert!(msg_rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn draining_shuts_the_channel_so_nothing_is_accepted_and_lost() {
+        let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
+        let (msg_tx, _msg_rx) = mpsc::unbounded_channel();
+
+        NostrEvents::report_unsent(&mut cmd_rx, &msg_tx).await;
+
+        // A send after this point must fail rather than land in a channel no one reads —
+        // that is what `close` before the drain buys, and what tells the application to
+        // settle the publish itself.
+        assert!(cmd_tx.send(NostrCommand::Shutdown).is_err());
+    }
 
     #[test]
     fn followings_use_only_the_latest_contact_list() {
