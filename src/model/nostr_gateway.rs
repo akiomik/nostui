@@ -30,7 +30,8 @@ pub struct PublishId(pub u64);
 pub enum NostrCommand {
     /// Send an event to relays
     SendEventBuilder {
-        id: PublishId,
+        /// Where to report the outcome, or `None` for a send nobody is waiting on.
+        id: Option<PublishId>,
         event_builder: EventBuilder,
     },
     /// Add a new relay

@@ -385,7 +385,19 @@ impl<'a> AppState<'a> {
         let content = status.content();
         let event_builder = status.live_status_builder();
 
-        self.publish(PublishKind::MusicStatus, &content, event_builder);
+        // Deliberately not tracked as a publish. Confirmation exists so the user is not
+        // told their own action succeeded when it did not; a NIP-38 status is fired by a
+        // track change, not by them, and there is nothing for them to do about a relay
+        // refusing it. Routing it through the pending path would put an error on the bar
+        // on every track change — many relays reject kind 30315 — for something they
+        // never asked for. The line stays what it was: what nostui attempted. #521.
+        let outcome = self.nostr.update(NostrMessage::EventSubmitted {
+            id: None,
+            event_builder,
+        });
+        let _ = self.dispatch_nostr(outcome);
+
+        self.set_status(PublishKind::MusicStatus.settled_label(), content);
 
         Command::none()
     }
@@ -415,6 +427,8 @@ impl<'a> AppState<'a> {
     ///
     /// `model::nostr::update` is side-effect free and only reports the command
     /// to send; the application owns the sender and performs the actual I/O.
+    #[must_use = "a command that never reached the worker will never be reported, and a \
+                  publish left tracking it sits on \"Sending\" for good"]
     fn dispatch_nostr(&self, outcome: Option<NostrOutcome>) -> bool {
         let Some(NostrOutcome::Send(command)) = outcome else {
             // Not logged. Most `None`s are ordinary — `ConnectionReady` and
@@ -451,9 +465,10 @@ impl<'a> AppState<'a> {
         event_builder: EventBuilder,
     ) {
         let id = self.begin_publish(kind, message);
-        let outcome = self
-            .nostr
-            .update(NostrMessage::EventSubmitted { id, event_builder });
+        let outcome = self.nostr.update(NostrMessage::EventSubmitted {
+            id: Some(id),
+            event_builder,
+        });
 
         if !self.dispatch_nostr(outcome) {
             self.abandon_publish(id);
@@ -1263,13 +1278,11 @@ mod tests {
         let (mut state, _rx) = connected_state();
 
         let _ = state.publish_music_status(create_track("Song"));
-        let id = only_pending(&state);
 
-        assert_eq!(state.status_bar.message(), Some("[Sending] Song - Artist"));
-
-        let _ = state.resolve_publish(id, Ok(()));
-
+        // Not tracked as a publish: a track change is not something the user did, so the
+        // line reports what nostui attempted, as it always has (#521).
         assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
+        assert!(state.pending_publishes.is_empty());
     }
 
     #[test]
@@ -1374,6 +1387,31 @@ mod tests {
         id
     }
 
+    /// A connected state with a note selected and a reaction to it in flight.
+    ///
+    /// A reaction stands in for "something the user did". Those are the publishes this
+    /// change confirms; a NIP-38 status is not one of them.
+    fn state_with_a_pending_reaction() -> (
+        AppState<'static>,
+        mpsc::UnboundedReceiver<NostrCommand>,
+        PublishId,
+        String,
+    ) {
+        let (mut state, mut rx) = connected_state();
+        let keys = Keys::generate();
+
+        let event =
+            create_text_note(&keys, "hello", Timestamp::from(1000)).expect("a valid text note");
+        let Ok(note_id) = event.id.to_bech32();
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+        while rx.try_recv().is_ok() {}
+
+        let _ = state.react_to_selected();
+        let id = only_pending(&state);
+        (state, rx, id, note_id)
+    }
+
     fn connected_state() -> (AppState<'static>, mpsc::UnboundedReceiver<NostrCommand>) {
         let mut state = AppState::new(Keys::generate().public_key());
         let (tx, rx) = mpsc::unbounded_channel();
@@ -1383,10 +1421,7 @@ mod tests {
 
     #[test]
     fn publish_failure_reports_an_error_instead_of_success() {
-        let (mut state, _rx) = connected_state();
-
-        let _ = state.publish_music_status(create_track("Song"));
-        let id = only_pending(&state);
+        let (mut state, _rx, id, note_id) = state_with_a_pending_reaction();
 
         let _ = state.resolve_publish(
             id,
@@ -1397,8 +1432,7 @@ mod tests {
 
         let message = state.status_bar.message().expect("a status message");
         assert!(
-            message.starts_with("[ERR: Music] no relay accepted")
-                && message.contains("(Song - Artist)"),
+            message.starts_with("[ERR: Reaction] no relay accepted") && message.contains(&note_id),
             "expected the reason and the content, got: {message}"
         );
     }
@@ -1435,13 +1469,17 @@ mod tests {
         // fails, and the one the disconnected test cannot reach.
         drop(rx);
 
-        let _ = state.publish_music_status(create_track("Song"));
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+        let _ = state.submit_note();
 
         // The gateway still believed it was connected, so this is a lost connection
         // rather than never having had one — the two are worth telling apart.
         assert_eq!(
             state.status_bar.message(),
-            Some("[ERR: Music] connection lost (Song - Artist)")
+            Some("[ERR: Note] connection lost (h)")
         );
 
         // Nothing is left tracking it. An entry here would sit on "Sending" for good,
@@ -1455,22 +1493,22 @@ mod tests {
         // no outcome will ever arrive to settle it.
         let mut state = AppState::new(Keys::generate().public_key());
 
-        let _ = state.publish_music_status(create_track("Song"));
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+        let _ = state.submit_note();
 
         assert_eq!(
             state.status_bar.message(),
-            Some("[ERR: Music] not connected (Song - Artist)")
+            Some("[ERR: Note] not connected (h)")
         );
         assert!(state.pending_publishes.is_empty());
     }
 
     #[test]
     fn the_dispatched_command_carries_the_id_the_publish_is_tracked_under() {
-        let (mut state, mut rx) = connected_state();
-        while rx.try_recv().is_ok() {}
-
-        let _ = state.publish_music_status(create_track("Song"));
-        let tracked = only_pending(&state);
+        let (_state, mut rx, tracked, _note_id) = state_with_a_pending_reaction();
 
         let Ok(NostrCommand::SendEventBuilder { id: sent, .. }) = rx.try_recv() else {
             panic!("a publish should have been dispatched");
@@ -1479,7 +1517,7 @@ mod tests {
         // The two halves of the correlation. If they ever disagree, no report can find
         // its submission and every publish strands on "Sending" — silently, since each
         // half is individually plausible.
-        assert_eq!(sent, tracked);
+        assert_eq!(sent, Some(tracked));
     }
 
     #[test]
@@ -1495,16 +1533,19 @@ mod tests {
         // Two outstanding at once.
         let _ = state.react_to_selected();
         let reaction = only_pending(&state);
-        let _ = state.publish_music_status(create_track("Song"));
+        let _ = state.repost_selected();
 
         // Answered out of order — which is the point of correlating rather than queueing.
-        let music = *state
+        let repost = *state
             .pending_publishes
             .keys()
             .find(|id| **id != reaction)
             .expect("two pending publishes");
-        let _ = state.resolve_publish(music, Ok(()));
-        assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
+        let _ = state.resolve_publish(repost, Ok(()));
+        assert_eq!(
+            state.status_bar.message(),
+            Some(format!("[Reposted] {note1}").as_str())
+        );
 
         let _ = state.resolve_publish(reaction, Ok(()));
         assert_eq!(
@@ -1528,13 +1569,13 @@ mod tests {
 
     #[test]
     fn a_publish_settles_only_once() {
-        let (mut state, _rx) = connected_state();
-
-        let _ = state.publish_music_status(create_track("Song"));
-        let id = only_pending(&state);
+        let (mut state, _rx, id, note_id) = state_with_a_pending_reaction();
 
         let _ = state.resolve_publish(id, Ok(()));
-        assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
+        assert_eq!(
+            state.status_bar.message(),
+            Some(format!("[Reacted] {note_id}").as_str())
+        );
 
         // A duplicate report must not re-settle it over whatever is on screen by then.
         let _ = state.clear_status_message();

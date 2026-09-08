@@ -166,11 +166,18 @@ impl NostrEvents {
         // Everything to the log, a summary to the caller: this string ends up on one
         // line of the status bar, and losing reasons from the log too would leave the
         // failure undiagnosable anywhere.
-        log::error!(
-            "No relay accepted event {}: {}",
-            output.value,
-            Self::describe_failures(&output.failed)
-        );
+        if output.failed.is_empty() {
+            log::error!(
+                "No relay accepted event {}, and none reported why",
+                output.value
+            );
+        } else {
+            log::error!(
+                "No relay accepted event {}: {}",
+                output.value,
+                Self::describe_failures(&output.failed)
+            );
+        }
 
         Err(if output.failed.is_empty() {
             String::from("no relay accepted the event")
@@ -253,10 +260,12 @@ impl NostrEvents {
                     None => Err(String::from("cannot send events in read-only mode")),
                 };
 
-                // Reported either way. The application shows a publish as pending until
-                // this arrives, so a success that says nothing would leave it pending for
-                // good.
-                let _ = msg_tx.send(Message::EventPublished { id, result });
+                // Reported either way, when anybody is waiting. The application shows a
+                // publish as pending until this arrives, so a success that says nothing
+                // would leave it pending for good.
+                if let Some(id) = id {
+                    let _ = msg_tx.send(Message::EventPublished { id, result });
+                }
             }
             NostrCommand::AddRelay { url } => {
                 if let Err(e) = client.add_relay(&url).await {
@@ -443,17 +452,26 @@ impl NostrEvents {
             }
         }
 
-        // Close first, then drain. `cmd_rx` would otherwise stay open until this task
-        // returns, and a publish sent in that window would be accepted by the sender and
-        // dequeued by nobody. Drained with `recv` rather than `try_recv` because `send`
-        // bumps the message count before it pushes the value, so `try_recv` reports an
-        // empty queue as `Empty` while a send is mid-flight and would end the loop early;
-        // `recv` waits it out and returns `None` only once the channel is closed and
-        // genuinely drained.
+        Self::report_unsent(&mut cmd_rx, &msg_tx).await;
+    }
+
+    /// Fail every publish still queued when the worker stops.
+    ///
+    /// Close first, then drain. `cmd_rx` would otherwise stay open until the task
+    /// returns, and a publish sent in that window would be accepted by the sender and
+    /// dequeued by nobody — leaving the application tracking one that can never be
+    /// reported. Drained with `recv` rather than `try_recv` because `send` bumps the
+    /// message count before it pushes the value, so `try_recv` reports an empty queue as
+    /// `Empty` while a send is mid-flight and would end the loop early; `recv` waits it
+    /// out and returns `None` only once the channel is closed and genuinely drained.
+    async fn report_unsent(
+        cmd_rx: &mut mpsc::UnboundedReceiver<NostrCommand>,
+        msg_tx: &mpsc::UnboundedSender<Message>,
+    ) {
         cmd_rx.close();
 
         while let Some(cmd) = cmd_rx.recv().await {
-            if let NostrCommand::SendEventBuilder { id, .. } = cmd {
+            if let NostrCommand::SendEventBuilder { id: Some(id), .. } = cmd {
                 let _ = msg_tx.send(Message::EventPublished {
                     id,
                     result: Err(String::from(
@@ -516,6 +534,7 @@ impl SubscriptionSource for NostrEvents {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::nostr_gateway::PublishId;
     use futures::StreamExt;
 
     fn relay_url(url: &str) -> RelayUrl {
@@ -624,6 +643,54 @@ mod tests {
 
         assert!(error.contains("(and 4 more)"), "got: {error}");
         assert!(!error.contains("relay5.example"), "got: {error}");
+    }
+
+    #[tokio::test]
+    async fn a_queued_publish_is_failed_when_the_worker_stops() {
+        let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
+        let (msg_tx, mut msg_rx) = mpsc::unbounded_channel();
+
+        for cmd in [
+            NostrCommand::SendEventBuilder {
+                id: Some(PublishId(7)),
+                event_builder: EventBuilder::new(Kind::TextNote, "hi"),
+            },
+            // Nobody waiting on this one, and this one is not a publish at all.
+            NostrCommand::SendEventBuilder {
+                id: None,
+                event_builder: EventBuilder::new(Kind::TextNote, "background"),
+            },
+            NostrCommand::Subscribe {
+                feed: FeedKind::Home,
+            },
+        ] {
+            cmd_tx.send(cmd).expect("the receiver is alive");
+        }
+
+        NostrEvents::report_unsent(&mut cmd_rx, &msg_tx).await;
+
+        // The tracked one is reported, so the application does not leave it on "Sending".
+        let Some(Message::EventPublished { id, result }) = msg_rx.recv().await else {
+            panic!("the queued publish should have been reported");
+        };
+        assert_eq!(id, PublishId(7));
+        assert!(result.is_err());
+
+        // Nothing else is: no one is waiting on the other two.
+        assert!(msg_rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn draining_shuts_the_channel_so_nothing_is_accepted_and_lost() {
+        let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
+        let (msg_tx, _msg_rx) = mpsc::unbounded_channel();
+
+        NostrEvents::report_unsent(&mut cmd_rx, &msg_tx).await;
+
+        // A send after this point must fail rather than land in a channel no one reads —
+        // that is what `close` before the drain buys, and what tells the application to
+        // settle the publish itself.
+        assert!(cmd_tx.send(NostrCommand::Shutdown).is_err());
     }
 
     #[test]

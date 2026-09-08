@@ -7,7 +7,8 @@ use crate::model::nostr_gateway::{NostrCommand, PublishId};
 pub enum Message {
     ConnectionReady,
     EventSubmitted {
-        id: PublishId,
+        /// Where to report the outcome, or `None` for a send nobody is waiting on.
+        id: Option<PublishId>,
         event_builder: EventBuilder,
     },
     SubscriptionRequested {
@@ -253,14 +254,14 @@ mod tests {
         let _ = nostr.update(Message::ConnectionReady);
 
         let outcome = nostr.update(Message::EventSubmitted {
-            id: PublishId(1),
+            id: Some(PublishId(1)),
             event_builder: event_builder.clone(),
         });
 
         assert_eq!(
             outcome,
             Some(NostrOutcome::Send(NostrCommand::SendEventBuilder {
-                id: PublishId(1),
+                id: Some(PublishId(1)),
                 event_builder
             }))
         );
@@ -272,7 +273,7 @@ mod tests {
         let event_builder = EventBuilder::new(Kind::TextNote, "test");
 
         let outcome = nostr.update(Message::EventSubmitted {
-            id: PublishId(1),
+            id: Some(PublishId(1)),
             event_builder,
         });
 
