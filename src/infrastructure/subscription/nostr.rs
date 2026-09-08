@@ -156,7 +156,11 @@ impl NostrEvents {
                 log::warn!(
                     "Event {} accepted by {} relay(s), refused by {}",
                     output.value,
-                    output.success.len(),
+                    output
+                        .success
+                        .values()
+                        .filter(|status| status.is_ack())
+                        .count(),
                     Self::describe_failures(&output.failed)
                 );
             }

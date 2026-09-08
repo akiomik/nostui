@@ -61,7 +61,10 @@ impl<'a> Application for TearsApp<'a> {
         let config = flags.config.clone();
 
         // Initialize global state
-        let state = AppState::new_with_config(flags.pubkey, flags.config);
+        // Without signing keys the application can only read, and it needs to know that
+        // before it attempts a publish nothing could ever complete.
+        let read_only = flags.keys.is_none();
+        let state = AppState::new_with_config(flags.pubkey, flags.config, read_only);
 
         // Initialize components
         let components = Components::new();

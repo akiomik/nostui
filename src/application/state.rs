@@ -72,6 +72,8 @@ pub struct AppState<'a> {
     pending_publishes: HashMap<PublishId, PendingPublish>,
     /// Source of [`PublishId`]s, monotonic for the life of the application.
     next_publish_id: u64,
+    /// Whether the configured key can only read — an `npub` rather than a signing key.
+    read_only: bool,
 }
 
 /// What is being published, which decides how the status bar names it.
@@ -139,10 +141,15 @@ impl<'a> AppState<'a> {
     }
 
     /// Initialize AppState with the specified public key and config
-    pub fn new_with_config(current_user_pubkey: PublicKey, config: Config) -> Self {
+    pub fn new_with_config(
+        current_user_pubkey: PublicKey,
+        config: Config,
+        read_only: bool,
+    ) -> Self {
         Self {
             user: UserState::new_with_pubkey(current_user_pubkey),
             config: ConfigState { config },
+            read_only,
             ..Default::default()
         }
     }
@@ -382,6 +389,14 @@ impl<'a> AppState<'a> {
             return Command::none();
         };
 
+        // Nothing to broadcast a status with. Every send would fail in the worker, and
+        // #521 keeps that off the bar — so attempting it would mean a guaranteed failure,
+        // on every track change, that the user is never told about. The feature needs a
+        // signing key; without one it simply does not run.
+        if self.read_only {
+            return Command::none();
+        }
+
         let content = status.content();
         let event_builder = status.live_status_builder();
 
@@ -487,18 +502,20 @@ impl<'a> AppState<'a> {
     /// because until then nothing has been published — the command only sits on the
     /// worker's queue. [`Self::resolve_publish`] supplies the ending.
     ///
-    /// A submission that never reaches the worker settles here instead, since no report
-    /// will ever arrive for it.
+    /// A submission that never reaches the worker has to be settled instead, since no
+    /// report will arrive for it — [`Self::publish`] does that, which is why the two are
+    /// not called separately.
     fn begin_publish(&mut self, kind: PublishKind, message: impl Into<String>) -> PublishId {
         let id = PublishId(self.next_publish_id);
         self.next_publish_id = self.next_publish_id.wrapping_add(1);
         let message = message.into();
 
         // Nothing expires this. A worker that dies without reaching its exit drain — a
-        // panic, an abort — never reports whatever was in flight, so that one entry stays
-        // and the bar reads "Sending" until something else writes it. It is one entry,
-        // not a leak: every later publish finds the channel closed, so `abandon_publish`
-        // settles it. Clearing the stranded one needs the application to notice the worker
+        // panic, an abort at quit — reports none of what it was holding, so every entry
+        // outstanding at that moment stays and reads "Sending" until something else
+        // writes the bar. Publishes issued *after* the death do settle themselves, since
+        // they find the channel closed; it is the ones already tracked that strand, and
+        // there can be several. Clearing them needs the application to notice the worker
         // died, which it cannot do today: #519.
         self.pending_publishes.insert(
             id,
@@ -1289,6 +1306,24 @@ mod tests {
         // line reports what nostui attempted, as it always has (#521).
         assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
         assert!(state.pending_publishes.is_empty());
+    }
+
+    #[test]
+    fn read_only_mode_does_not_broadcast_a_music_status() {
+        // An `npub` configuration: connected, but with no key to sign with.
+        let mut state =
+            AppState::new_with_config(Keys::generate().public_key(), Config::default(), true);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let _ = state.on_connection_ready(tx);
+        while rx.try_recv().is_ok() {}
+
+        let _ = state.publish_music_status(create_track("Song"));
+
+        // Every send would fail in the worker, and #521 keeps that off the bar — so
+        // attempting it would be a guaranteed failure, on every track change, that the
+        // user is never told about.
+        assert!(rx.try_recv().is_err());
+        assert_eq!(state.status_bar.message(), Some("[Home] loading..."));
     }
 
     #[test]
