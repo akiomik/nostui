@@ -392,44 +392,38 @@ impl<'a> AppState<'a> {
         Command::none()
     }
 
-    /// Publish a NIP-38 live status event for the currently playing track and
-    /// show it in the status bar. No-op when the track is missing the fields
-    /// required to build a status.
+    /// Show the currently playing track, and broadcast it as a NIP-38 live status.
+    /// No-op when the track is missing the fields required to build a status.
+    ///
+    /// The two halves are independent on purpose. The line says what is playing, which
+    /// is true whether or not a relay ever hears about it; tying it to the broadcast
+    /// would take the indicator away from anyone in read-only mode, and from anyone
+    /// whose track changes before the worker is ready.
     pub fn publish_music_status(&mut self, track: Track) -> Command<AppMsg> {
         let Some(status) = MusicStatus::new(track) else {
             return Command::none();
         };
 
-        // Nothing to broadcast a status with, and unlike the publishes above there is
-        // nobody to tell: #521 keeps a music failure off the bar, so attempting it would
-        // mean a guaranteed failure on every track change that the user never sees. The
-        // feature needs a signing key; without one it simply does not run.
+        self.set_status(NOW_PLAYING_LABEL, status.content());
+
+        // Broadcasting needs a key to sign with. Without one every send fails in the
+        // worker, and #521 keeps that off the bar — so it would be a guaranteed failure,
+        // on every track change, that the user is never told about.
         if self.read_only {
             return Command::none();
         }
-
-        let content = status.content();
-        let event_builder = status.live_status_builder();
 
         // Deliberately not tracked as a publish. Confirmation exists so the user is not
         // told their own action succeeded when it did not; a NIP-38 status is fired by a
         // track change, not by them, and there is nothing for them to do about a relay
         // refusing it. Routing it through the pending path would put an error on the bar
         // on every track change — many relays reject kind 30315 — for something they
-        // never asked for. The line stays what it was: what nostui attempted. #521.
+        // never asked for. Whether the line should say more than "playing" is #521.
         let outcome = self.nostr.update(NostrMessage::EventSubmitted {
             id: None,
-            event_builder,
+            event_builder: status.live_status_builder(),
         });
-
-        // Only once it is on its way. #521 keeps a relay refusing this quiet, but "never
-        // handed over at all" is a different thing — a track change before the worker is
-        // ready, or after it has gone — and announcing it then would be the same false
-        // claim this change removes everywhere else. The line still means "attempted",
-        // not "accepted"; that is what #521 is for.
-        if self.dispatch_nostr(outcome) {
-            self.set_status(NOW_PLAYING_LABEL, content);
-        }
+        let _ = self.dispatch_nostr(outcome);
 
         Command::none()
     }
@@ -1377,23 +1371,27 @@ mod tests {
 
         let _ = state.publish_music_status(create_track("Song"));
 
-        // Every send would fail in the worker, and #521 keeps that off the bar — so
-        // attempting it would be a guaranteed failure, on every track change, that the
-        // user is never told about.
+        // Nothing is sent: every send would fail in the worker, and #521 keeps that off
+        // the bar, so it would be a guaranteed failure the user never sees.
         assert!(rx.try_recv().is_err());
-        assert_eq!(state.status_bar.message(), Some("[Home] loading..."));
+
+        // The indicator is not a casualty of that. It says what is playing, which is as
+        // true without a signing key as with one.
+        assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
     }
 
     #[test]
-    fn an_undispatched_music_status_is_not_announced() {
-        // Not connected, so the command is declined before it reaches the worker.
+    fn the_now_playing_line_does_not_depend_on_reaching_a_relay() {
+        // Not connected, so the broadcast is declined before it reaches the worker.
         let mut state = AppState::new(Keys::generate().public_key());
 
         let _ = state.publish_music_status(create_track("Song"));
 
-        // #521 keeps a relay refusing this quiet, but "never handed over" is a different
-        // thing — announcing it would be the same false claim removed everywhere else.
-        assert_eq!(state.status_bar.message(), None);
+        // The line says what is playing, which is true either way. Tying it to the
+        // broadcast would take the indicator away whenever a track changes before the
+        // worker is ready — likely at startup, since the two come up independently.
+        assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
+        assert!(state.pending_publishes.is_empty());
     }
 
     #[test]
