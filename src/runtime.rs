@@ -867,6 +867,10 @@ mod tests {
     /// The other half of #510(a): declining the redraw is specific to the two arms
     /// that only log. An `EVENT` routed to a tab appends to the timeline, so it must
     /// still redraw.
+    ///
+    /// The timeline assertion is what makes this the routed case: an `EVENT` whose
+    /// subscription matches no tab is dropped by `route_relay_event` and today redraws
+    /// anyway, so asserting the directive alone would hold either way.
     #[test]
     fn test_routed_event_message_still_redraws() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
@@ -886,6 +890,7 @@ mod tests {
             }),
         }));
 
+        assert_eq!(store.state().state.timeline.len(), 1);
         assert!(store.redraw_requested());
         store.finish();
     }
