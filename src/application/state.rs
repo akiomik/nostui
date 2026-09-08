@@ -74,12 +74,47 @@ pub struct AppState<'a> {
     next_publish_id: u64,
 }
 
+/// What is being published, which decides how the status bar names it.
+///
+/// One value rather than a pair of labels: a publish that failed must not be described
+/// with the word for one that succeeded, and passing "Posted" and "Note" separately
+/// would let them drift apart at a call site.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PublishKind {
+    Note,
+    Reaction,
+    Repost,
+    MusicStatus,
+}
+
+impl PublishKind {
+    /// How the bar names it once a relay has accepted it — past tense, and the wording
+    /// the bar has always used.
+    const fn settled_label(self) -> &'static str {
+        match self {
+            Self::Note => "Posted",
+            Self::Reaction => "Reacted",
+            Self::Repost => "Reposted",
+            Self::MusicStatus => "Music",
+        }
+    }
+
+    /// How the bar names it when it did not happen. Never the past tense: an error line
+    /// reading "Posted" would claim exactly what this whole change exists to stop.
+    const fn subject(self) -> &'static str {
+        match self {
+            Self::Note => "Note",
+            Self::Reaction => "Reaction",
+            Self::Repost => "Repost",
+            Self::MusicStatus => "Music",
+        }
+    }
+}
+
 /// A publish handed to the worker and waiting for a relay's answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PendingPublish {
-    /// Status-bar label to show once a relay accepts it — the word the bar has always
-    /// used for this kind of event ("Posted", "Reacted", "Reposted", "Music").
-    settled_label: String,
+    kind: PublishKind,
     /// What was published, shown while pending and again once settled.
     message: String,
 }
@@ -264,19 +299,19 @@ impl<'a> AppState<'a> {
 
     /// Submit a NIP-25 reaction for the currently selected note.
     pub fn react_to_selected(&mut self) -> Command<AppMsg> {
-        self.submit_engagement_for_selected("Reacted", TextNote::reaction_builder)
+        self.submit_engagement_for_selected(PublishKind::Reaction, TextNote::reaction_builder)
     }
 
     /// Submit a NIP-18 repost for the currently selected note.
     pub fn repost_selected(&mut self) -> Command<AppMsg> {
-        self.submit_engagement_for_selected("Reposted", TextNote::repost_builder)
+        self.submit_engagement_for_selected(PublishKind::Repost, TextNote::repost_builder)
     }
 
-    /// Build an engagement event for the selected note with `build`, submit it,
-    /// and show `label` in the status bar. No-op when nothing is selected.
+    /// Build an engagement event for the selected note with `build` and submit it.
+    /// No-op when nothing is selected.
     fn submit_engagement_for_selected(
         &mut self,
-        label: &str,
+        kind: PublishKind,
         build: fn(&TextNote) -> EventBuilder,
     ) -> Command<AppMsg> {
         let Some(note) = self.timeline.selected_note() else {
@@ -285,9 +320,9 @@ impl<'a> AppState<'a> {
 
         let note_id = note.bech32_id();
         let event_builder = build(note);
-        log::info!("{label} event: {note_id}");
+        log::info!("{} event: {note_id}", kind.subject());
 
-        let id = self.begin_publish(label, note_id);
+        let id = self.begin_publish(kind, note_id);
         let outcome = self
             .nostr
             .update(NostrMessage::EventSubmitted { id, event_builder });
@@ -337,7 +372,7 @@ impl<'a> AppState<'a> {
             EventBuilder::new(Kind::TextNote, &content)
         };
 
-        let id = self.begin_publish("Posted", &content);
+        let id = self.begin_publish(PublishKind::Note, &content);
         let outcome = self
             .nostr
             .update(NostrMessage::EventSubmitted { id, event_builder });
@@ -362,7 +397,7 @@ impl<'a> AppState<'a> {
         let content = status.content();
         let event_builder = status.live_status_builder();
 
-        let id = self.begin_publish("Music", &content);
+        let id = self.begin_publish(PublishKind::MusicStatus, &content);
         let outcome = self
             .nostr
             .update(NostrMessage::EventSubmitted { id, event_builder });
@@ -424,7 +459,7 @@ impl<'a> AppState<'a> {
     ///
     /// A submission that never reaches the worker settles here instead, since no report
     /// will ever arrive for it.
-    fn begin_publish(&mut self, settled_label: &str, message: impl Into<String>) -> PublishId {
+    fn begin_publish(&mut self, kind: PublishKind, message: impl Into<String>) -> PublishId {
         let id = PublishId(self.next_publish_id);
         self.next_publish_id = self.next_publish_id.wrapping_add(1);
         let message = message.into();
@@ -436,7 +471,7 @@ impl<'a> AppState<'a> {
         self.pending_publishes.insert(
             id,
             PendingPublish {
-                settled_label: settled_label.to_owned(),
+                kind,
                 message: message.clone(),
             },
         );
@@ -465,13 +500,13 @@ impl<'a> AppState<'a> {
         // #516; doing it here would be the arbitration policy growing a case at a time,
         // which is what that issue exists to stop.
         match result {
-            Ok(()) => self.set_status(pending.settled_label, pending.message),
+            Ok(()) => self.set_status(pending.kind.settled_label(), pending.message),
             Err(reason) => {
                 log::error!("Failed to publish {}: {reason}", pending.message);
                 // Reason first: the bar is one line, and what a reaction or repost carries
                 // as content is a bech32 id — long, and far less use than why it failed.
                 self.set_status_error(
-                    pending.settled_label,
+                    pending.kind.subject(),
                     format!("{reason} ({})", pending.message),
                 );
             }
@@ -493,7 +528,7 @@ impl<'a> AppState<'a> {
 
         log::error!("Publish not sent, {reason}: {}", pending.message);
         self.set_status_error(
-            pending.settled_label,
+            pending.kind.subject(),
             format!("{reason} ({})", pending.message),
         );
     }
@@ -1348,6 +1383,30 @@ mod tests {
                 && message.contains("(Song - Artist)"),
             "expected the reason and the content, got: {message}"
         );
+    }
+
+    #[test]
+    fn a_failed_note_is_not_called_posted() {
+        let (mut state, _rx) = connected_state();
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+        let id = only_pending(&state);
+
+        let _ = state.resolve_publish(id, Err(String::from("refused")));
+
+        // `[ERR: Posted]` for a note no relay took would be the same false claim this
+        // whole change removes, just in a different tense.
+        let message = state.status_bar.message().expect("a status message");
+        assert!(
+            message.starts_with("[ERR: Note]"),
+            "a failure must not be named with the word for a success, got: {message}"
+        );
+        assert!(!message.contains("Posted"), "got: {message}");
     }
 
     #[test]

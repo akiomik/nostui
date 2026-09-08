@@ -156,25 +156,46 @@ impl NostrEvents {
             return Ok(());
         }
 
+        // Everything to the log, a summary to the caller: this string ends up on one
+        // line of the status bar, and losing reasons from the log too would leave the
+        // failure undiagnosable anywhere.
+        log::error!(
+            "No relay accepted event {}: {}",
+            output.value,
+            Self::describe_failures(&output.failed)
+        );
+
         Err(if output.failed.is_empty() {
             String::from("no relay accepted the event")
         } else {
             format!(
                 "no relay accepted the event: {}",
-                Self::describe_failures(&output.failed)
+                Self::summarise_failures(&output.failed)
             )
         })
     }
 
-    /// How many relays' reasons a failure message names before summarising the rest.
+    /// How many relays' reasons a *reported* failure names before summarising the rest.
     ///
-    /// The status bar is one non-wrapping line, and this string competes with the content
-    /// that follows it. Every relay's reason would push that off the end.
+    /// The status bar is one non-wrapping line and the published content follows this
+    /// string, so naming every relay would push the content off the end. The log is not
+    /// so constrained, and is the only place the reasons can be read at leisure — so it
+    /// gets all of them.
     const REPORTED_FAILURES: usize = 2;
 
     /// Render per-relay failures as `url: reason`, in a stable order so the same outcome
     /// always reads the same way — `failed` is a `HashMap`.
     fn describe_failures(failed: &HashMap<RelayUrl, String>) -> String {
+        let mut reasons: Vec<String> = failed
+            .iter()
+            .map(|(url, reason)| format!("{url}: {reason}"))
+            .collect();
+        reasons.sort();
+        reasons.join(", ")
+    }
+
+    /// The same list, shortened for a status bar that can show one line of it.
+    fn summarise_failures(failed: &HashMap<RelayUrl, String>) -> String {
         let mut reasons: Vec<String> = failed
             .iter()
             .map(|(url, reason)| format!("{url}: {reason}"))
