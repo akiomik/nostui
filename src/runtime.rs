@@ -130,7 +130,7 @@ impl<'a> Application for TearsApp<'a> {
             .map(|msg| AppMsg::Nostr(NostrMsg::SubscriptionMessage(msg))),
             // Timer subscription - interval validated during initialization
             Subscription::new(self.tick_timer.clone()).map(|msg| match msg {
-                TimerEvent::Tick => AppMsg::System(SystemMsg::Tick(Instant::now())),
+                TimerEvent::Tick => AppMsg::System(SystemMsg::Tick),
             }),
             Subscription::new(TerminalEvents::new()).map(|result| match result {
                 Ok(event) => {
@@ -140,9 +140,9 @@ impl<'a> Application for TearsApp<'a> {
                         Event::Resize(width, height) => {
                             AppMsg::System(SystemMsg::Resize(width, height))
                         }
-                        // Ignore other events for now. Stamped like a real tick, which
-                        // is what the FPS counter then treats it as — noted in #525.
-                        _ => AppMsg::System(SystemMsg::Tick(Instant::now())),
+                        // Ignore other events for now. The FPS display counts them as
+                        // ticks all the same — noted in #525.
+                        _ => AppMsg::System(SystemMsg::Tick),
                     }
                 }
                 Err(e) => AppMsg::System(SystemMsg::ShowError(e.to_string())),
@@ -227,14 +227,19 @@ impl<'a> TearsApp<'a> {
                 // Terminal resize is handled automatically by ratatui
                 Command::none()
             }
-            // Count ticks for the FPS display. This measures how often the application
-            // processes a tick, which is not how often it renders: the runtime renders
-            // once per pass that leaves the view dirty, and a tick only dirties it on the
-            // one pass per second that recomputes the displayed rate. So on an idle
-            // nostui the counter reads `--tick-rate` while the screen is repainted once a
-            // second, and under relay traffic the renders the events add are ones the
-            // counter knows nothing about.
-            SystemMsg::Tick(now) => self.state.record_tick(now),
+            // Count ticks for the FPS display. The instant is read here, as the tick is
+            // handled, rather than travelling on the message from the subscription task
+            // that produced it: the counter is meant to fall behind when the update loop
+            // does, and a production stamp would keep reading `--tick-rate` no matter how
+            // long a tick waited in the queue.
+            //
+            // What it measures is therefore how often the application processes a tick,
+            // which is not how often it renders: the runtime renders once per pass that
+            // leaves the view dirty, and a tick only dirties it on the one pass per second
+            // that recomputes the displayed rate. So an idle nostui repaints once a second
+            // while ticking at `--tick-rate`, and under relay traffic the renders the
+            // events add are ones the counter knows nothing about.
+            SystemMsg::Tick => self.state.record_tick(Instant::now()),
             SystemMsg::ShowError(error) => self.state.show_error(error),
             SystemMsg::KeyInput(key) => self.handle_key_input(key),
         }
@@ -507,7 +512,6 @@ impl<'a> TearsApp<'a> {
 mod tests {
     use std::borrow::Cow;
     use std::num::NonZeroU64;
-    use std::time::Duration;
 
     use nostr_sdk::prelude::Event as NostrEvent;
     use tears::testing::TestStore;
@@ -904,40 +908,25 @@ mod tests {
     /// #510(b): an idle nostui ticks at `--tick-rate` but the rate it displays is
     /// only recomputed once a second, so the ticks in between must not repaint the
     /// whole timeline to refresh a counter that did not change.
+    ///
+    /// Only this direction can be driven from a test: the tick is stamped as it is
+    /// handled, so reaching the tick that does recompute would mean waiting a real
+    /// second. That the recomputing tick redraws is covered where the decision is
+    /// made — `Fps::update` reporting `DisplayUpdated` (see `model::fps`) — and an
+    /// inverted mapping in `record_tick` fails this test.
     #[test]
     fn test_tick_that_changes_no_displayed_value_does_not_redraw() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
-        let start = Instant::now();
 
-        // A second's worth of ticks at the default rate: the first opens the
-        // measurement interval, the rest fall inside it. None of them changes a
-        // displayed value, so none of them may redraw.
-        for i in 0..16 {
-            store.send(AppMsg::System(SystemMsg::Tick(
-                start + Duration::from_millis(i * 62),
-            )));
+        // The first tick opens the measurement interval and the rest fall inside
+        // it: a test runs far quicker than the second it takes to close.
+        for _ in 0..16 {
+            store.send(AppMsg::System(SystemMsg::Tick));
 
             assert!(!store.redraw_requested());
             assert_eq!(store.state().state.fps.app_fps(), None);
         }
 
-        store.finish();
-    }
-
-    /// The other direction: the one tick per second that does refresh the displayed
-    /// rate has to redraw, or the counter would freeze at whatever was last painted.
-    #[test]
-    fn test_tick_that_refreshes_the_displayed_rate_redraws() {
-        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
-        let start = Instant::now();
-
-        store.send(AppMsg::System(SystemMsg::Tick(start)));
-        store.send(AppMsg::System(SystemMsg::Tick(
-            start + Duration::from_secs(1),
-        )));
-
-        assert!(store.redraw_requested());
-        assert_eq!(store.state().state.fps.app_fps(), Some(1.0));
         store.finish();
     }
 }
