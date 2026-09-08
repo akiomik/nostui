@@ -19,7 +19,17 @@ pub enum FpsOutcome {
 }
 
 pub enum Message {
-    FrameRecorded { now: Instant },
+    FrameRecorded {
+        /// When the tick was handled.
+        ///
+        /// Must not precede an instant already recorded. Intervals are measured
+        /// by subtracting, which `Instant` reserves the right to panic on rather
+        /// than saturate. `AppState::record_tick` satisfies this by stamping at
+        /// dispatch, on the one update loop; a caller that stamped where the tick
+        /// was produced would not, because independent subscription tasks push
+        /// into a shared queue and can be reordered by it.
+        now: Instant,
+    },
 }
 
 /// FPS measurement data
