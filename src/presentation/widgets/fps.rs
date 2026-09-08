@@ -56,7 +56,8 @@ mod tests {
     fn test_render_some() {
         let mut fps = Fps::new();
         let now = Instant::now();
-        // The first tick starts the interval; two more land inside it
+        // The first tick starts the interval, the second lands inside it, and
+        // the third closes it a second later — two frames measured over one second
         fps.update(Message::FrameRecorded { now });
         fps.update(Message::FrameRecorded {
             now: now + Duration::from_millis(500),

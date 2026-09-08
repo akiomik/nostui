@@ -23,7 +23,7 @@ pub enum Message {
 }
 
 /// FPS measurement data
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Fps {
     app_fps: Option<f64>,
     app_frames: u32,
@@ -61,7 +61,14 @@ impl Fps {
                 };
 
                 self.app_frames += 1;
-                let elapsed = (now - started_at).as_secs_f64();
+                // Saturating, because the ticks are stamped by two independent
+                // subscription tasks (the timer, and the terminal events nostui
+                // ignores — #525) and pushed into one queue, so a later-stamped
+                // message can reach this ahead of an earlier one. Such a tick is
+                // folded into the next interval instead of subtracting backwards,
+                // which `Instant` currently saturates and may go back to panicking
+                // on.
+                let elapsed = now.saturating_duration_since(started_at).as_secs_f64();
 
                 if elapsed < 1.0 {
                     return None;
@@ -74,12 +81,6 @@ impl Fps {
                 Some(FpsOutcome::DisplayUpdated)
             }
         }
-    }
-}
-
-impl Default for Fps {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -212,6 +213,35 @@ mod tests {
             "Expected ~60 FPS, got {app_fps2}"
         );
         assert_eq!(fps.app_frames, 0, "Frame count should be reset");
+    }
+
+    /// A tick stamped before the interval opened has to be folded into it rather
+    /// than subtracting backwards. `Instant`'s saturating subtraction gives the same
+    /// answer today, so this pins the behaviour rather than guarding the explicit
+    /// `saturating_duration_since` — the point is that a reordered tick must not
+    /// close an interval that has not elapsed.
+    #[test]
+    fn test_a_tick_stamped_before_the_interval_started_does_not_end_it() {
+        let mut fps = Fps::new();
+        let start = Instant::now();
+
+        assert_eq!(fps.update(Message::FrameRecorded { now: start }), None);
+        assert_eq!(
+            fps.update(Message::FrameRecorded {
+                now: start - Duration::from_millis(1),
+            }),
+            None
+        );
+        assert_eq!(fps.app_frames, 1);
+
+        // The interval still ends where it was going to, having counted that tick
+        assert_eq!(
+            fps.update(Message::FrameRecorded {
+                now: start + Duration::from_secs(1),
+            }),
+            Some(FpsOutcome::DisplayUpdated)
+        );
+        assert_eq!(fps.app_fps, Some(2.0));
     }
 
     /// A rate identical to the one already on screen is still reported: the model
