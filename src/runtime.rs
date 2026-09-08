@@ -60,8 +60,10 @@ impl<'a> Application for TearsApp<'a> {
         // Store config separately for keybindings access
         let config = flags.config.clone();
 
-        // Initialize global state
-        let state = AppState::new_with_config(flags.pubkey, flags.config);
+        // Initialize global state. Without signing keys the application is read-only, and
+        // it needs to know that before a publish is queued rather than after.
+        let read_only = flags.keys.is_none();
+        let state = AppState::new_with_config(flags.pubkey, flags.config, read_only);
 
         // Initialize components
         let components = Components::new();

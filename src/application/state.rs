@@ -70,6 +70,11 @@ pub struct AppState<'a> {
     /// exactly once, so its reports arrive in the order the entries were pushed and
     /// can be matched positionally rather than by an id.
     pending_publishes: VecDeque<PendingPublish>,
+    /// Whether the configured key can only read — an `npub` rather than a signing key.
+    ///
+    /// Known here so a publish can be refused before it is queued. The worker rejects
+    /// them anyway, but only after the draft has been discarded.
+    read_only: bool,
     /// What the status bar is showing on a publish's behalf, if anything.
     ///
     /// Cleared by every other write to the bar, so it answers "is this still mine?" and
@@ -147,10 +152,15 @@ impl<'a> AppState<'a> {
     }
 
     /// Initialize AppState with the specified public key and config
-    pub fn new_with_config(current_user_pubkey: PublicKey, config: Config) -> Self {
+    pub fn new_with_config(
+        current_user_pubkey: PublicKey,
+        config: Config,
+        read_only: bool,
+    ) -> Self {
         Self {
             user: UserState::new_with_pubkey(current_user_pubkey),
             config: ConfigState { config },
+            read_only,
             ..Default::default()
         }
     }
@@ -384,14 +394,11 @@ impl<'a> AppState<'a> {
         // editor loses the text for good — the next `ComposingStarted` clears the buffer
         // — so a submission that has already failed keeps it for another attempt.
         //
-        // This covers only the failures this layer can see before sending. Anything the
-        // worker reports back still loses the text, because getting it back needs a way
-        // to put content into the editor that `model::editor` does not have: #514.
-        //
-        // That is not a rare tail. Nothing gates composing in read-only mode, and the
-        // signing check lives in the worker, so a user configured with an `npub` gets
-        // `true` here and loses every note they write, on every submit. An all-relays-
-        // refused send is the other instance.
+        // This covers only the failures this layer can see before sending — including
+        // read-only mode, which is refused in `begin_publish` precisely so the draft
+        // survives it. A failure the *relays* report still loses the text, because
+        // getting it back needs a way to put content into the editor that `model::editor`
+        // does not have: #514.
         if self.begin_publish(outcome, PublishOrigin::User, "Posted", content) {
             self.editor.update(EditorMessage::ComposingCanceled);
         }
@@ -469,6 +476,15 @@ impl<'a> AppState<'a> {
         // check simply does not match for it.
         let id = PublishId(self.next_publish_id);
         self.next_publish_id = self.next_publish_id.wrapping_add(1);
+
+        // Refused here rather than by the worker. The worker rejects it too, but its
+        // answer arrives after `submit_note` has closed the editor and lost the draft —
+        // and nothing gates composing in read-only mode, so that is every note the user
+        // writes. Failing before the dispatch keeps the text (#514).
+        if self.read_only {
+            self.report_publish_failure(id, origin, settled_label, &message, "read-only mode");
+            return false;
+        }
 
         // `model::nostr` declines a submission whenever it believes it is disconnected.
         if outcome.is_none() {
@@ -1618,6 +1634,36 @@ mod tests {
         // clears the buffer, so there is no way back to it.
         assert!(state.editor.is_active());
         assert_eq!(state.editor.get_content(), "h");
+    }
+
+    #[test]
+    fn read_only_mode_refuses_a_note_and_keeps_the_draft() {
+        // An `npub` configuration: connected, but with no key to sign with.
+        let mut state =
+            AppState::new_with_config(Keys::generate().public_key(), Config::default(), true);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let _ = state.on_connection_ready(tx);
+        while rx.try_recv().is_ok() {}
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+
+        // Nothing gates composing in read-only mode, so leaving this to the worker meant
+        // losing the text on every single note.
+        assert!(state.editor.is_active());
+        assert_eq!(state.editor.get_content(), "h");
+        assert_eq!(
+            state.status_bar.message(),
+            Some("[ERR: Posted] read-only mode (h)")
+        );
+
+        // And nothing was queued, so no report will arrive to settle a phantom entry.
+        assert!(rx.try_recv().is_err());
+        assert!(state.pending_publishes.is_empty());
     }
 
     #[test]

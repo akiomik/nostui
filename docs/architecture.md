@@ -269,13 +269,19 @@ the status bar, with no inward layer reaching outward:
 
 1. The worker (`infrastructure::subscription::nostr::NostrEvents`) fails to run a
    `NostrCommand` and emits `model::nostr_gateway::Message::Error { error }`,
-   where `error` is a `CommandError` (e.g. `SendEventFailed`,
+   where `error` is a `CommandError` (e.g. `AddRelayFailed`,
    `ConnectRelayFailed`).
 2. `runtime` receives it in `handle_nostr_subscription_message` and calls the
    use case `AppState::notify_subscription_error(error)`.
 3. That use case updates `model::status_bar` with an error message
    (`Message::ErrorMessageChanged`, labelled `Nostr`).
 4. `presentation`'s `StatusBarWidget` renders it on the next frame.
+
+Publishing is the exception: an event send reports its outcome — success as
+well as failure — through `Message::EventPublished`, which
+`AppState::resolve_publish` matches to the submission it belongs to. The status
+bar shows the publish as pending until then, so nothing claims a note was
+posted before a relay has said so.
 
 Relay shutdown follows the same shape via `RelayPoolNotification::Shutdown` →
 `AppState::notify_subscription_shutdown`. System-level errors raised inside the
