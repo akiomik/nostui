@@ -144,6 +144,12 @@ impl NostrEvents {
     /// One relay accepting is enough — the event exists on the network — so a partial
     /// failure is logged rather than reported.
     ///
+    /// "Confirmed", not "accepted", in what it reports. `failed` collects ack timeouts
+    /// and dropped sockets alongside outright `OK false` rejections, and those are not
+    /// the same thing: a relay can store the event and answer too late to be heard. The
+    /// user would then be told it was refused for a note that is on the relay, and would
+    /// write it again. Saying only that nothing confirmed it is what is actually known.
+    ///
     /// "Accepting" means an `OK true`, checked rather than assumed. `success` also holds
     /// `EventSendStatus::Sent` — written to a socket, never acknowledged — under any
     /// policy but `AckPolicy::all`, so counting the set's size would make this correct
@@ -172,22 +178,22 @@ impl NostrEvents {
         // failure undiagnosable anywhere.
         if output.failed.is_empty() {
             log::error!(
-                "No relay accepted event {}, and none reported why",
+                "No relay confirmed event {}, and none reported why",
                 output.value
             );
         } else {
             log::error!(
-                "No relay accepted event {}: {}",
+                "No relay confirmed event {}: {}",
                 output.value,
                 Self::describe_failures(&output.failed)
             );
         }
 
         Err(if output.failed.is_empty() {
-            String::from("no relay accepted the event")
+            String::from("no relay confirmed the event")
         } else {
             format!(
-                "no relay accepted the event: {}",
+                "no relay confirmed the event: {}",
                 Self::summarise_failures(&output.failed)
             )
         })
@@ -568,16 +574,16 @@ mod tests {
     }
 
     #[test]
-    fn a_send_every_relay_refused_is_a_failure() {
+    fn a_send_no_relay_confirmed_is_a_failure() {
         // The premise of this whole change: nostr-sdk returns `Ok` once it has tried
-        // every relay, so an all-refused send arrives as `Ok` with nothing in `success`.
-        // Reporting that as published would put "Posted" on screen for a note no relay
-        // stored — which is the bug this exists to remove.
+        // every relay, so a send nothing confirmed arrives as `Ok` with nothing in
+        // `success`. Reporting that as published would put "Posted" on screen for a note
+        // no relay is known to hold — which is the bug this exists to remove.
         let output = send_output(&[], &[("wss://a.example", "blocked")]);
 
         let error = NostrEvents::relay_verdict(&output).expect_err("should be a failure");
         assert!(
-            error.contains("no relay accepted") && error.contains("blocked"),
+            error.contains("no relay confirmed") && error.contains("blocked"),
             "expected the relay's reason to survive, got: {error}"
         );
     }

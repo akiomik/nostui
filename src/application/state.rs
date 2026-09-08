@@ -79,7 +79,15 @@ pub struct AppState<'a> {
     read_only: bool,
 }
 
-/// What is being published, which decides how the status bar names it.
+/// Status-bar label for the now-playing line.
+///
+/// Deliberately not a [`PublishKind`]: it names what is playing, not what a relay took.
+/// Borrowing the past-tense vocabulary would make an unconfirmed line read exactly like a
+/// confirmed one, which is the ambiguity the rest of this removes. #521 covers whether
+/// the wording itself should change.
+const NOW_PLAYING_LABEL: &str = "Music";
+
+/// What the user is publishing, which decides how the status bar names it.
 ///
 /// One value rather than a pair of labels: a publish that failed must not be described
 /// with the word for one that succeeded, and passing "Posted" and "Note" separately
@@ -89,7 +97,6 @@ enum PublishKind {
     Note,
     Reaction,
     Repost,
-    MusicStatus,
 }
 
 impl PublishKind {
@@ -100,7 +107,6 @@ impl PublishKind {
             Self::Note => "Posted",
             Self::Reaction => "Reacted",
             Self::Repost => "Reposted",
-            Self::MusicStatus => "Music",
         }
     }
 
@@ -111,7 +117,6 @@ impl PublishKind {
             Self::Note => "Note",
             Self::Reaction => "Reaction",
             Self::Repost => "Repost",
-            Self::MusicStatus => "Music",
         }
     }
 }
@@ -423,7 +428,7 @@ impl<'a> AppState<'a> {
         // claim this change removes everywhere else. The line still means "attempted",
         // not "accepted"; that is what #521 is for.
         if self.dispatch_nostr(outcome) {
-            self.set_status(PublishKind::MusicStatus.settled_label(), content);
+            self.set_status(NOW_PLAYING_LABEL, content);
         }
 
         Command::none()
@@ -1532,13 +1537,13 @@ mod tests {
         let _ = state.resolve_publish(
             id,
             Err(String::from(
-                "no relay accepted the event: wss://relay.example: blocked",
+                "no relay confirmed the event: wss://relay.example: blocked",
             )),
         );
 
         let message = state.status_bar.message().expect("a status message");
         assert!(
-            message.starts_with("[ERR: Reaction] no relay accepted") && message.contains(&note_id),
+            message.starts_with("[ERR: Reaction] no relay confirmed") && message.contains(&note_id),
             "expected the reason and the content, got: {message}"
         );
     }
