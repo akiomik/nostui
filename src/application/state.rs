@@ -456,7 +456,7 @@ impl<'a> AppState<'a> {
             .update(NostrMessage::EventSubmitted { id, event_builder });
 
         if !self.dispatch_nostr(outcome) {
-            self.abandon_publish(id, "not sent");
+            self.abandon_publish(id);
         }
     }
 
@@ -529,27 +529,25 @@ impl<'a> AppState<'a> {
 
     /// Give up on a publish that was never handed over, so it does not sit as "Sending".
     ///
-    /// The reason stays vague on purpose. A dispatch fails because the gateway declined
-    /// it, because no worker is listening yet, or because the worker died — and this
-    /// layer cannot tell those apart, so naming one would sometimes hide a dead worker
-    /// behind "not connected" (#519). The distinction is in the log.
-    fn abandon_publish(&mut self, id: PublishId, reason: &str) {
+    /// The cause is what the gateway believes, which is the most this layer can honestly
+    /// say: a dispatch fails either because the gateway knows it is not connected, or
+    /// because it thinks it is and the worker turned out to be gone. Both are worth
+    /// telling the user, and neither claims more than is known.
+    fn abandon_publish(&mut self, id: PublishId) {
         let Some(pending) = self.pending_publishes.remove(&id) else {
             return;
         };
 
-        // The gateway's own belief is the closest thing to a cause available here, and
-        // the status bar deliberately does not name one it cannot establish — so this is
-        // where the distinction has to live.
         let cause = if self.nostr.is_ready() {
-            "no worker to send it to"
+            "connection lost"
         } else {
             "not connected"
         };
+
         log::error!("Publish not sent, {cause}: {}", pending.message);
         self.set_status_error(
             pending.kind.subject(),
-            format!("{reason} ({})", pending.message),
+            format!("{cause} ({})", pending.message),
         );
     }
 
@@ -1439,9 +1437,11 @@ mod tests {
 
         let _ = state.publish_music_status(create_track("Song"));
 
+        // The gateway still believed it was connected, so this is a lost connection
+        // rather than never having had one — the two are worth telling apart.
         assert_eq!(
             state.status_bar.message(),
-            Some("[ERR: Music] not sent (Song - Artist)")
+            Some("[ERR: Music] connection lost (Song - Artist)")
         );
 
         // Nothing is left tracking it. An entry here would sit on "Sending" for good,
@@ -1459,7 +1459,7 @@ mod tests {
 
         assert_eq!(
             state.status_bar.message(),
-            Some("[ERR: Music] not sent (Song - Artist)")
+            Some("[ERR: Music] not connected (Song - Artist)")
         );
         assert!(state.pending_publishes.is_empty());
     }
