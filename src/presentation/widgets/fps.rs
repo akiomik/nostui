@@ -56,9 +56,13 @@ mod tests {
     fn test_render_some() {
         let mut fps = Fps::new();
         let now = Instant::now();
-        fps.update(Message::FrameRecorded { now: Some(now) });
+        // The first tick starts the interval; two more land inside it
+        fps.update(Message::FrameRecorded { now });
         fps.update(Message::FrameRecorded {
-            now: Some(now + Duration::from_secs(1)),
+            now: now + Duration::from_millis(500),
+        });
+        fps.update(Message::FrameRecorded {
+            now: now + Duration::from_secs(1),
         });
 
         let widget = FpsWidget::new(fps);

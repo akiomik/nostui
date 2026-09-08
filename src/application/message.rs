@@ -3,6 +3,8 @@
 //! This module defines the message types for the tears application.
 //! These are independent from the existing application::msg system.
 
+use std::time::Instant;
+
 use crossterm::event::KeyEvent;
 use nowhear::{MediaEvent, MediaSourceError};
 
@@ -30,8 +32,12 @@ pub enum SystemMsg {
     Quit,
     /// Terminal resize event
     Resize(u16, u16),
-    /// Tick for FPS calculation
-    Tick,
+    /// Tick for FPS calculation, stamped when the runtime received it
+    ///
+    /// The instant travels with the message so the FPS tracker measures against
+    /// the moment the tick arrived rather than reading the clock itself, which
+    /// is what lets a test drive a whole measurement interval (#510).
+    Tick(Instant),
     /// Show an error message
     ShowError(String),
     /// Key input event
