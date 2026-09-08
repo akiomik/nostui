@@ -413,14 +413,28 @@ impl NostrEvents {
         // entry per submitted event and settles them in report order, so a publish that
         // simply vanished here would sit as "Sending" forever and shift every later
         // outcome onto the wrong submission.
+        let mut shutdown_requested = false;
+
         while let Some(cmd) = cmd_rx.recv().await {
-            if matches!(cmd, NostrCommand::SendEventBuilder { .. }) {
-                let _ = msg_tx.send(Message::EventPublished {
-                    result: Err(String::from(
-                        "the connection closed before the event was sent",
-                    )),
-                });
+            match cmd {
+                NostrCommand::SendEventBuilder { .. } => {
+                    let _ = msg_tx.send(Message::EventPublished {
+                        result: Err(String::from(
+                            "the connection closed before the event was sent",
+                        )),
+                    });
+                }
+                // Queued behind whatever ended the loop — the notification stream can end
+                // in the same window as a user-initiated disconnect. Dropping it would
+                // leave the shared client connected to every relay, and tears hands that
+                // same `Arc<Client>` to the worker it starts next.
+                NostrCommand::Shutdown => shutdown_requested = true,
+                _ => {}
             }
+        }
+
+        if shutdown_requested {
+            client.disconnect().await;
         }
     }
 }

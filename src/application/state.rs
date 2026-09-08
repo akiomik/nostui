@@ -473,22 +473,11 @@ impl<'a> AppState<'a> {
         }
 
         if !self.dispatch_nostr(outcome) {
-            // Reachable only as a lost worker. An outcome exists, so `model::nostr`
-            // believes it is connected, and the sender is set and cleared in the same
-            // calls that set and clear that belief — so the sender cannot be missing
-            // here, only closed.
+            // Reachable only as a lost worker, which `dispatch_nostr` has now recorded.
+            // An outcome exists, so `model::nostr` believed it was connected, and the
+            // sender is set and cleared in the same calls that set and clear that belief
+            // — so the sender cannot have been missing here, only closed.
             //
-            // Record the loss rather than only reporting it, so the next publish says
-            // "not connected" instead of rediscovering the dead worker every time.
-            // `ConnectionLost`, not `ConnectionClosed`: the latter also clears the
-            // tracked feed subscriptions, which is right when nostui is closing the
-            // connection deliberately and wrong here. The tabs are still open, and their
-            // subscription ids are what a replacement worker needs in order to
-            // unsubscribe — dropping them leaks the subscription relay-side and leaves
-            // the tab on screen receiving nothing.
-            let _ = self.nostr.update(NostrMessage::ConnectionLost);
-            self.command_sender = None;
-
             // `pending_publishes` is deliberately left alone. A worker that exited
             // normally already drained and reported them, and tears keeps a finished
             // run's queued output deliverable, so those reports still arrive; failing
@@ -655,7 +644,11 @@ impl<'a> AppState<'a> {
     /// Returns whether the command actually reached the worker. `false` means it was
     /// dropped and nothing will ever be reported for it — which is what lets
     /// [`Self::begin_publish`] settle a publish immediately instead of waiting forever.
-    fn dispatch_nostr(&self, outcome: Option<NostrOutcome>) -> bool {
+    ///
+    /// A send that fails also records the loss here rather than leaving each caller to
+    /// remember: the worker is gone, so every later dispatch would otherwise rediscover
+    /// it, and `model::nostr` would go on believing it is connected.
+    fn dispatch_nostr(&mut self, outcome: Option<NostrOutcome>) -> bool {
         let Some(NostrOutcome::Send(command)) = outcome else {
             return false;
         };
@@ -667,6 +660,13 @@ impl<'a> AppState<'a> {
 
         if sender.send(command).is_err() {
             log::error!("Failed to send Nostr command: subscription worker is gone");
+
+            // `ConnectionLost`, not `ConnectionClosed`: the latter also clears the tracked
+            // feed subscriptions, which is right when nostui is closing the connection
+            // deliberately and wrong here. The tabs are still open, and their subscription
+            // ids are what a replacement worker needs in order to unsubscribe.
+            let _ = self.nostr.update(NostrMessage::ConnectionLost);
+            self.command_sender = None;
             return false;
         }
 
@@ -1871,6 +1871,25 @@ mod tests {
         let _ = state.on_connection_ready(tx);
 
         assert!(state.pending_publishes.is_empty());
+    }
+
+    #[test]
+    fn a_failed_dispatch_records_the_loss_wherever_it_happens() {
+        let (mut state, rx) = connected_state();
+
+        // Not a publish: opening a tab goes through the same dispatcher, and the recovery
+        // used to live only in the publish path.
+        drop(rx);
+        let _ = state.open_mention_tab();
+
+        assert!(
+            !state.nostr.is_ready(),
+            "the gateway must stop believing it is connected"
+        );
+
+        // And the belief and the sender move together, so the next dispatch reports
+        // "not connected" instead of rediscovering the dead worker.
+        assert!(state.command_sender.is_none());
     }
 
     #[test]
