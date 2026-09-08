@@ -1430,6 +1430,26 @@ mod tests {
     }
 
     #[test]
+    fn a_publish_is_settled_when_the_worker_has_gone() {
+        let (mut state, rx) = connected_state();
+
+        // The gateway still believes it is connected — this is the other way a dispatch
+        // fails, and the one the disconnected test cannot reach.
+        drop(rx);
+
+        let _ = state.publish_music_status(create_track("Song"));
+
+        assert_eq!(
+            state.status_bar.message(),
+            Some("[ERR: Music] not sent (Song - Artist)")
+        );
+
+        // Nothing is left tracking it. An entry here would sit on "Sending" for good,
+        // since the worker that would have reported it is the one that went away.
+        assert!(state.pending_publishes.is_empty());
+    }
+
+    #[test]
     fn publishing_while_disconnected_does_not_claim_success() {
         // Not connected: `model::nostr` declines the submission, so nothing is queued and
         // no outcome will ever arrive to settle it.
