@@ -329,7 +329,7 @@ impl<'a> AppState<'a> {
         let event_builder = build(note);
         log::info!("{} event: {note_id}", kind.subject());
 
-        self.publish(kind, note_id, event_builder);
+        let _ = self.publish(kind, note_id, event_builder);
 
         Command::none()
     }
@@ -373,10 +373,13 @@ impl<'a> AppState<'a> {
             EventBuilder::new(Kind::TextNote, &content)
         };
 
-        self.publish(PublishKind::Note, &content, event_builder);
-
-        // Clear UI state.
-        self.editor.update(EditorMessage::ComposingCanceled);
+        // Only discard the draft once it is actually on its way. Closing the editor
+        // loses the text for good — the next `ComposingStarted` clears the buffer — and
+        // this change is what makes a pre-send failure knowable in time to keep it. A
+        // failure the relays report later still loses it: #514.
+        if self.publish(PublishKind::Note, &content, event_builder) {
+            self.editor.update(EditorMessage::ComposingCanceled);
+        }
 
         Command::none()
     }
@@ -479,12 +482,15 @@ impl<'a> AppState<'a> {
     /// The three steps live together because they only make sense together — a tracked
     /// publish that was never dispatched sits on "Sending" for good, and a dispatch with
     /// nothing tracking it can never be settled by its report.
+    ///
+    /// Returns whether it is on its way. `false` means it already failed, and a caller
+    /// about to discard what it published — the editor's buffer — should keep it.
     fn publish(
         &mut self,
         kind: PublishKind,
         message: impl Into<String>,
         event_builder: EventBuilder,
-    ) {
+    ) -> bool {
         let id = self.begin_publish(kind, message);
         let outcome = self.nostr.update(NostrMessage::EventSubmitted {
             id: Some(id),
@@ -493,7 +499,10 @@ impl<'a> AppState<'a> {
 
         if !self.dispatch_nostr(outcome) {
             self.abandon_publish(id);
+            return false;
         }
+
+        true
     }
 
     /// Hand a submitted event to the worker and show it as pending.
@@ -1488,6 +1497,38 @@ mod tests {
             message.starts_with("[ERR: Reaction] no relay accepted") && message.contains(&note_id),
             "expected the reason and the content, got: {message}"
         );
+    }
+
+    #[test]
+    fn a_submission_that_fails_before_it_is_sent_keeps_the_draft() {
+        // Not connected, so the failure is known before the command is queued.
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+
+        // Closing the editor loses the text for good: the next `ComposingStarted` clears
+        // the buffer, so there is no way back to it.
+        assert!(state.editor.is_active());
+        assert_eq!(state.editor.get_content(), "h");
+    }
+
+    #[test]
+    fn a_submission_that_is_on_its_way_closes_the_editor() {
+        let (mut state, _rx) = connected_state();
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+
+        assert!(!state.editor.is_active());
     }
 
     #[test]
