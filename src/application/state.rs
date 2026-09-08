@@ -514,15 +514,36 @@ impl<'a> AppState<'a> {
     fn fail_pending_publishes(&mut self, reason: &str) {
         let abandoned: Vec<PendingPublish> = self.pending_publishes.drain(..).collect();
 
-        for pending in abandoned {
-            self.report_publish_failure(
-                pending.id,
-                pending.origin,
-                &pending.settled_label,
-                &pending.message,
-                reason,
-            );
+        for pending in &abandoned {
+            log::error!("Publish abandoned, {reason}: {}", pending.message);
         }
+
+        // One report, not one per entry. Reporting in a loop leaves only the last entry
+        // visible — and if that one is automatic its report is suppressed, so a user's
+        // own lost note would be written and then wiped by a track change queued behind
+        // it. The first user-origin entry is the one they have been waiting on longest.
+        let mut users = abandoned
+            .iter()
+            .filter(|pending| pending.origin == PublishOrigin::User);
+
+        let Some(first) = users.next() else {
+            return;
+        };
+
+        let others = users.count();
+        let reason = if others == 0 {
+            reason.to_owned()
+        } else {
+            format!("{reason} (and {others} more)")
+        };
+
+        self.report_publish_failure(
+            first.id,
+            first.origin,
+            &first.settled_label,
+            &first.message,
+            &reason,
+        );
     }
 
     /// Report a publish that failed, as loudly as its origin deserves.
@@ -669,7 +690,12 @@ impl<'a> AppState<'a> {
             // feed subscriptions, which is right when nostui is closing the connection
             // deliberately and wrong here. The tabs are still open, and their subscription
             // ids are what a replacement worker needs in order to unsubscribe.
-            let _ = self.nostr.update(NostrMessage::ConnectionLost);
+            let outcome = self.nostr.update(NostrMessage::ConnectionLost);
+            debug_assert!(
+                outcome.is_none(),
+                "ConnectionLost must not ask for a command: the worker it would be \
+                 addressed to is the one that just went away"
+            );
             self.command_sender = None;
             return false;
         }
@@ -1862,6 +1888,34 @@ mod tests {
         // Its line is already gone, so there is nothing of its own to retire and it must
         // not clear what replaced it.
         assert_eq!(state.status_bar.message(), moved_on.as_deref());
+    }
+
+    #[test]
+    fn abandoning_publishes_reports_the_users_own_loss() -> Result<()> {
+        let (mut state, _rx) = connected_state();
+        let keys = Keys::generate();
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let Ok(note1) = event.id.to_bech32();
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+
+        // A track change queues an automatic publish behind the user's reaction.
+        let _ = state.react_to_selected();
+        let _ = state.publish_music_status(create_track("Song"));
+
+        let (tx, _rx2) = mpsc::unbounded_channel();
+        let _ = state.on_connection_ready(tx);
+
+        // Reporting entry by entry would leave only the last one visible, and that one is
+        // automatic — so its suppression would wipe the note the user actually lost.
+        let message = state.status_bar.message().expect("a status message");
+        assert!(
+            message.starts_with("[ERR: Reacted]") && message.contains(&note1),
+            "the user's own lost publish must survive the loop, got: {message}"
+        );
+
+        Ok(())
     }
 
     #[test]

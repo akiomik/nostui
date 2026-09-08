@@ -345,6 +345,9 @@ impl NostrEvents {
         msg_tx: mpsc::UnboundedSender<Message>,
         mut cmd_rx: mpsc::UnboundedReceiver<NostrCommand>,
     ) {
+        // Set by either route out of the loop below, and acted on once after the drain.
+        let mut shutdown_requested = false;
+
         // Initialize the home feed subscription
         let mut notifications =
             Self::initialize_home_feed(&client, pubkey, Arc::clone(&contact_list_cache), &msg_tx)
@@ -371,8 +374,10 @@ impl NostrEvents {
                 cmd = cmd_rx.recv() => {
                     match cmd {
                         Some(NostrCommand::Shutdown) => {
-                            // Disconnect from all relays and exit
-                            client.disconnect().await;
+                            // Recorded rather than acted on here, so the disconnect has a
+                            // single site below. Draining first also means the publishes
+                            // queued behind this are reported before the relays go.
+                            shutdown_requested = true;
                             break;
                         }
                         // Awaited inline on purpose, and load-bearing: the application
@@ -413,8 +418,6 @@ impl NostrEvents {
         // entry per submitted event and settles them in report order, so a publish that
         // simply vanished here would sit as "Sending" forever and shift every later
         // outcome onto the wrong submission.
-        let mut shutdown_requested = false;
-
         while let Some(cmd) = cmd_rx.recv().await {
             match cmd {
                 NostrCommand::SendEventBuilder { .. } => {
