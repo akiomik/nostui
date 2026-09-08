@@ -322,13 +322,7 @@ impl<'a> AppState<'a> {
         let event_builder = build(note);
         log::info!("{} event: {note_id}", kind.subject());
 
-        let id = self.begin_publish(kind, note_id);
-        let outcome = self
-            .nostr
-            .update(NostrMessage::EventSubmitted { id, event_builder });
-        if !self.dispatch_nostr(outcome) {
-            self.abandon_publish(id, "not sent");
-        }
+        self.publish(kind, note_id, event_builder);
 
         Command::none()
     }
@@ -372,13 +366,7 @@ impl<'a> AppState<'a> {
             EventBuilder::new(Kind::TextNote, &content)
         };
 
-        let id = self.begin_publish(PublishKind::Note, &content);
-        let outcome = self
-            .nostr
-            .update(NostrMessage::EventSubmitted { id, event_builder });
-        if !self.dispatch_nostr(outcome) {
-            self.abandon_publish(id, "not sent");
-        }
+        self.publish(PublishKind::Note, &content, event_builder);
 
         // Clear UI state.
         self.editor.update(EditorMessage::ComposingCanceled);
@@ -397,13 +385,7 @@ impl<'a> AppState<'a> {
         let content = status.content();
         let event_builder = status.live_status_builder();
 
-        let id = self.begin_publish(PublishKind::MusicStatus, &content);
-        let outcome = self
-            .nostr
-            .update(NostrMessage::EventSubmitted { id, event_builder });
-        if !self.dispatch_nostr(outcome) {
-            self.abandon_publish(id, "not sent");
-        }
+        self.publish(PublishKind::MusicStatus, &content, event_builder);
 
         Command::none()
     }
@@ -435,11 +417,11 @@ impl<'a> AppState<'a> {
     /// to send; the application owns the sender and performs the actual I/O.
     fn dispatch_nostr(&self, outcome: Option<NostrOutcome>) -> bool {
         let Some(NostrOutcome::Send(command)) = outcome else {
-            // The gateway declined it, which it does whenever it believes it is not
-            // connected. Logged because this is the likeliest of the three ways a
-            // dispatch fails, and the status bar deliberately does not name a cause it
-            // cannot establish — leaving this silent would put the reason nowhere.
-            log::warn!("Nostr command declined: not connected");
+            // Not logged. Most `None`s are ordinary — `ConnectionReady` and
+            // `SubscriptionCreated` never dispatch, `SubscriptionRequested` declines the
+            // home feed and anything already subscribed — so warning here would fill the
+            // log with false alarms on every successful startup. Where it matters, the
+            // caller knows what it was trying to send and says so.
             return false;
         };
 
@@ -454,6 +436,28 @@ impl<'a> AppState<'a> {
         }
 
         true
+    }
+
+    /// Publish an event: track it, hand it to the worker, and settle it at once if the
+    /// worker never got it.
+    ///
+    /// The three steps live together because they only make sense together — a tracked
+    /// publish that was never dispatched sits on "Sending" for good, and a dispatch with
+    /// nothing tracking it can never be settled by its report.
+    fn publish(
+        &mut self,
+        kind: PublishKind,
+        message: impl Into<String>,
+        event_builder: EventBuilder,
+    ) {
+        let id = self.begin_publish(kind, message);
+        let outcome = self
+            .nostr
+            .update(NostrMessage::EventSubmitted { id, event_builder });
+
+        if !self.dispatch_nostr(outcome) {
+            self.abandon_publish(id, "not sent");
+        }
     }
 
     /// Hand a submitted event to the worker and show it as pending.
@@ -534,7 +538,15 @@ impl<'a> AppState<'a> {
             return;
         };
 
-        log::error!("Publish not sent, {reason}: {}", pending.message);
+        // The gateway's own belief is the closest thing to a cause available here, and
+        // the status bar deliberately does not name one it cannot establish — so this is
+        // where the distinction has to live.
+        let cause = if self.nostr.is_ready() {
+            "no worker to send it to"
+        } else {
+            "not connected"
+        };
+        log::error!("Publish not sent, {cause}: {}", pending.message);
         self.set_status_error(
             pending.kind.subject(),
             format!("{reason} ({})", pending.message),

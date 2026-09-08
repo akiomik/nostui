@@ -144,12 +144,14 @@ impl NostrEvents {
     /// One relay accepting is enough — the event exists on the network — so a partial
     /// failure is logged rather than reported.
     ///
-    /// "Accepting" means an entry in `success`, which the caller's `AckPolicy::all`
-    /// makes equivalent to an `OK true`. That policy is set explicitly at the send for
-    /// this reason: under `AckPolicy::none` the same field would hold events merely
-    /// written to a socket.
+    /// "Accepting" means an `OK true`, checked rather than assumed. `success` also holds
+    /// `EventSendStatus::Sent` — written to a socket, never acknowledged — under any
+    /// policy but `AckPolicy::all`, so counting the set's size would make this correct
+    /// only for as long as nobody changes the policy at the send. Checking the status
+    /// makes a change there report failure loudly instead of reinstating the claim this
+    /// exists to remove.
     fn relay_verdict(output: &SendEventOutput) -> Result<(), String> {
-        if !output.success.is_empty() {
+        if output.success.values().any(EventSendStatus::is_ack) {
             if !output.failed.is_empty() {
                 log::warn!(
                     "Event {} accepted by {} relay(s), refused by {}",
@@ -552,11 +554,16 @@ mod tests {
     }
 
     #[test]
-    fn one_relay_accepting_is_enough() {
-        // The event exists on the network, so a partial failure is logged, not reported.
+    fn a_send_nobody_acknowledged_is_not_a_publish() {
+        // `Sent` means written to a socket without waiting for an `OK`. It appears under
+        // any policy but `AckPolicy::all`, so if that setting is ever dropped from the
+        // send this must report failure rather than quietly calling it published.
+        //
+        // The accepting direction cannot be tested from here: `EventSendStatus::Ack`
+        // wraps an `EventSendAcknowledgement` with no public constructor.
         let output = send_output(&["wss://a.example"], &[("wss://b.example", "rate-limited")]);
 
-        assert_eq!(NostrEvents::relay_verdict(&output), Ok(()));
+        assert!(NostrEvents::relay_verdict(&output).is_err());
     }
 
     #[test]
