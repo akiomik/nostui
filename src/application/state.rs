@@ -73,6 +73,9 @@ pub struct AppState<'a> {
     /// Source of [`PublishId`]s, monotonic for the life of the application.
     next_publish_id: u64,
     /// Whether the configured key can only read — an `npub` rather than a signing key.
+    ///
+    /// Known here so a publish that could never succeed is refused before it is queued,
+    /// rather than failing in the worker after the caller has moved on.
     read_only: bool,
 }
 
@@ -392,10 +395,10 @@ impl<'a> AppState<'a> {
             return Command::none();
         };
 
-        // Nothing to broadcast a status with. Every send would fail in the worker, and
-        // #521 keeps that off the bar — so attempting it would mean a guaranteed failure,
-        // on every track change, that the user is never told about. The feature needs a
-        // signing key; without one it simply does not run.
+        // Nothing to broadcast a status with, and unlike the publishes above there is
+        // nobody to tell: #521 keeps a music failure off the bar, so attempting it would
+        // mean a guaranteed failure on every track change that the user never sees. The
+        // feature needs a signing key; without one it simply does not run.
         if self.read_only {
             return Command::none();
         }
@@ -492,6 +495,16 @@ impl<'a> AppState<'a> {
         event_builder: EventBuilder,
     ) -> bool {
         let id = self.begin_publish(kind, message);
+
+        // Refused here rather than by the worker. Without a signing key every send fails,
+        // so queueing it buys a round trip and a delayed error — and for a note it costs
+        // the draft, because `submit_note` would have closed the editor by the time the
+        // answer came back.
+        if self.read_only {
+            self.abandon_publish(id);
+            return false;
+        }
+
         let outcome = self.nostr.update(NostrMessage::EventSubmitted {
             id: Some(id),
             event_builder,
@@ -585,7 +598,9 @@ impl<'a> AppState<'a> {
             return;
         };
 
-        let cause = if self.nostr.is_ready() {
+        let cause = if self.read_only {
+            "read-only mode"
+        } else if self.nostr.is_ready() {
             "connection lost"
         } else {
             "not connected"
@@ -1314,6 +1329,35 @@ mod tests {
         // Not tracked as a publish: a track change is not something the user did, so the
         // line reports what nostui attempted, as it always has (#521).
         assert_eq!(state.status_bar.message(), Some("[Music] Song - Artist"));
+        assert!(state.pending_publishes.is_empty());
+    }
+
+    #[test]
+    fn read_only_mode_refuses_a_note_and_keeps_the_draft() {
+        // Connected, but with no key to sign with — so the send would fail in the worker,
+        // by which time the editor would have been closed and the text lost.
+        let mut state =
+            AppState::new_with_config(Keys::generate().public_key(), Config::default(), true);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let _ = state.on_connection_ready(tx);
+        while rx.try_recv().is_ok() {}
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+
+        assert!(state.editor.is_active());
+        assert_eq!(state.editor.get_content(), "h");
+        assert_eq!(
+            state.status_bar.message(),
+            Some("[ERR: Note] read-only mode (h)")
+        );
+
+        // Nothing was queued, so no report will arrive to settle a phantom entry.
+        assert!(rx.try_recv().is_err());
         assert!(state.pending_publishes.is_empty());
     }
 
