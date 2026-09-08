@@ -267,6 +267,11 @@ impl NostrEvents {
                         }
                         Err(e) => Err(e.to_string()),
                     },
+                    // Unreachable as things stand: the application refuses a publish
+                    // before queueing it when there is no signing key, and the NIP-38
+                    // status short-circuits for the same reason. Kept anyway — this is
+                    // the layer that actually holds the keys, and a future publish path
+                    // that forgot the check would otherwise sign nothing and say nothing.
                     None => Err(String::from("cannot send events in read-only mode")),
                 };
 
