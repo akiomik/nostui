@@ -423,23 +423,23 @@ impl<'a> TearsApp<'a> {
 
     /// Handle NostrEvents subscription messages
     ///
-    /// Every arm here returns a redrawing command — including the two that change nothing
-    /// — so on tears 0.11 each inbound relay notification that lands in its own pass costs
-    /// one full render. With the frame rate gone there is no ceiling above that, and on a
-    /// busy feed redraw frequency tracks relay throughput where 0.10.x clamped it to
-    /// `--frame-rate`.
+    /// The two arms that only log decline the redraw, because for them
+    /// `Command::without_redraw`'s declaration is true rather than convenient:
+    /// `ClientNotification::Event` only logs (nostui routes events from the `Message`
+    /// stream instead, see the note below), and a `Message` carrying anything other than
+    /// `RelayMessage::Event` also only logs. The pool emits both notifications for each
+    /// newly-seen event, so the ignored `Event` used to cost a full render per note for
+    /// no visible change.
     ///
-    /// This is a known, accepted regression, not an oversight. `Command::without_redraw`
-    /// is not a general fix: it declares that the update did not change the visible view,
-    /// which is false for an arm that appends to the timeline. Bounding it properly means
-    /// deciding per message whether the view actually changed — tracked in #510.
+    /// Every other arm returns a redrawing command, so on tears 0.11 each inbound relay
+    /// notification that lands in its own pass still costs one render. With the frame rate
+    /// gone there is no ceiling above that, and on a busy feed redraw frequency tracks
+    /// relay throughput where 0.10.x clamped it to `--frame-rate`.
     ///
-    /// Two arms are exempt from that reasoning and are worth noting for #510, because for
-    /// them the declaration would be true rather than convenient: `ClientNotification::Event`
-    /// only logs (nostui routes events from the `Message` stream instead, see the note
-    /// below), and a `Message` carrying anything other than `RelayMessage::Event` also only
-    /// logs. Since the pool emits both notifications for each newly-seen event, the ignored
-    /// `Event` doubles the redraw count per note for no visible change.
+    /// That remainder is a known, accepted regression, not an oversight. `without_redraw`
+    /// is not a general fix: the declaration is false for an arm that appends to the
+    /// timeline. Bounding it properly means deciding per message whether the view actually
+    /// changed — tracked in #510.
     fn handle_nostr_subscription_message(
         &mut self,
         msg: NostrSubscriptionMessage,
@@ -473,7 +473,7 @@ impl<'a> TearsApp<'a> {
                         "Received event {} from subscription {subscription_id:?}",
                         event.id
                     );
-                    Command::none()
+                    Command::none().without_redraw()
                 }
                 ClientNotification::Message { message, .. } => {
                     log::debug!("Received relay message: {message:?}");
@@ -486,7 +486,7 @@ impl<'a> TearsApp<'a> {
                         self.state
                             .route_relay_event(&subscription_id, event.into_owned())
                     } else {
-                        Command::none()
+                        Command::none().without_redraw()
                     }
                 }
                 ClientNotification::Shutdown => self.state.notify_subscription_shutdown(),
@@ -500,7 +500,11 @@ impl<'a> TearsApp<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::num::NonZeroU64;
+
+    use nostr_sdk::prelude::Event as NostrEvent;
+    use tears::testing::TestStore;
 
     use super::*;
     use crate::application::config::Config;
@@ -509,22 +513,40 @@ mod tests {
     use crate::model::status_bar::Message as StatusBarMessage;
     use crate::model::timeline::Message as TimelineMessage;
 
-    /// Create a test app instance
-    fn create_test_app() -> TearsApp<'static> {
+    /// Create flags for a test app instance
+    fn test_flags() -> InitFlags {
         let keys = Keys::generate();
-        let client = Client::default();
-        let config = Config::default();
 
-        let flags = InitFlags {
+        InitFlags {
             pubkey: keys.public_key(),
             keys: Some(keys),
-            config,
-            nostr_client: client,
+            config: Config::default(),
+            nostr_client: Client::default(),
             tick_timer: Timer::new(NonZeroU64::new(62).expect("non-zero")),
-        };
+        }
+    }
 
-        let (app, _) = TearsApp::new(flags);
+    /// Create a test app instance
+    fn create_test_app() -> TearsApp<'static> {
+        let (app, _) = TearsApp::new(test_flags());
         app
+    }
+
+    /// Wrap a relay pool notification the way the subscription delivers it.
+    fn notification(notif: ClientNotification) -> AppMsg {
+        AppMsg::Nostr(NostrMsg::SubscriptionMessage(
+            NostrSubscriptionMessage::Notification(Box::new(notif)),
+        ))
+    }
+
+    fn test_relay_url() -> RelayUrl {
+        RelayUrl::parse("wss://relay.example.com").expect("valid relay url")
+    }
+
+    fn test_note() -> NostrEvent {
+        EventBuilder::new(Kind::TextNote, "test note")
+            .finalize(&Keys::generate())
+            .expect("Failed to sign test event")
     }
 
     #[test]
@@ -806,5 +828,65 @@ mod tests {
         // Try to select tab beyond max (stub does nothing)
         let _ = app.handle_timeline_msg(TimelineMsg::SelectTab(5));
         assert_eq!(app.state.timeline.active_tab_index(), 0);
+    }
+
+    /// The pool reports each newly-seen event twice — once as `Event`, once as a
+    /// `Message` — and nostui reads only the `Message`. Redrawing for the arm it
+    /// ignores would spend a full render on nothing, so that arm declines it (#510).
+    #[test]
+    fn test_ignored_event_notification_does_not_redraw() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(notification(ClientNotification::Event {
+            relay_url: test_relay_url(),
+            subscription_id: SubscriptionId::new("unknown"),
+            event: Box::new(test_note()),
+        }));
+
+        assert!(!store.redraw_requested());
+        store.finish();
+    }
+
+    /// A relay message that is not an `EVENT` — an `EOSE`, here — is only logged,
+    /// so it changes nothing the view shows and declines the redraw too (#510).
+    #[test]
+    fn test_non_event_relay_message_does_not_redraw() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(notification(ClientNotification::Message {
+            relay_url: test_relay_url(),
+            message: Box::new(RelayMessage::EndOfStoredEvents(Cow::Owned(
+                SubscriptionId::new("home"),
+            ))),
+        }));
+
+        assert!(!store.redraw_requested());
+        store.finish();
+    }
+
+    /// The other half of #510(a): declining the redraw is specific to the two arms
+    /// that only log. An `EVENT` routed to a tab appends to the timeline, so it must
+    /// still redraw.
+    #[test]
+    fn test_routed_event_message_still_redraws() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let subscription_id = SubscriptionId::new("home");
+
+        store.send(AppMsg::Nostr(NostrMsg::SubscriptionMessage(
+            NostrSubscriptionMessage::SubscriptionCreated {
+                feed: FeedKind::Home,
+                subscription_id: subscription_id.clone(),
+            },
+        )));
+        store.send(notification(ClientNotification::Message {
+            relay_url: test_relay_url(),
+            message: Box::new(RelayMessage::Event {
+                subscription_id: Cow::Owned(subscription_id),
+                event: Cow::Owned(test_note()),
+            }),
+        }));
+
+        assert!(store.redraw_requested());
+        store.finish();
     }
 }
