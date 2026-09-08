@@ -599,8 +599,10 @@ mod tests {
         // any policy but `AckPolicy::all`, so if that setting is ever dropped from the
         // send this must report failure rather than quietly calling it published.
         //
-        // The accepting direction cannot be tested from here: `EventSendStatus::Ack`
-        // wraps an `EventSendAcknowledgement` with no public constructor.
+        // The accepting direction is not covered by a unit test: `EventSendStatus::Ack`
+        // wraps an `EventSendAcknowledgement` with no public constructor, so it cannot be
+        // built here. It is reachable end to end — nostr-sdk ships a `local-relay`
+        // feature — which is #523.
         let output = send_output(&["wss://a.example"], &[("wss://b.example", "rate-limited")]);
 
         assert!(NostrEvents::relay_verdict(&output).is_err());
