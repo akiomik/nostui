@@ -907,31 +907,28 @@ mod tests {
     }
 
     /// #510(b): an idle nostui ticks at `--tick-rate` but the rate it displays is
-    /// only recomputed once a second, so the ticks in between must not repaint the
-    /// whole timeline to refresh a counter that did not change.
+    /// only recomputed once a second, so a tick that recomputed nothing must not
+    /// repaint the whole timeline to refresh a counter that did not change.
     ///
-    /// Only this direction can be driven from a test: the tick is stamped as it is
-    /// handled, so reaching the tick that does recompute would mean waiting a real
-    /// second. That the recomputing tick redraws is covered where the decision is
-    /// made — `Fps::update` reporting `DisplayUpdated` (see `model::fps`) — and an
-    /// inverted mapping in `record_tick` fails this test.
+    /// One tick, because the first is the only one whose outcome does not depend on
+    /// the clock: it opens the measurement interval and returns before any interval
+    /// is measured, so no amount of scheduling delay can turn it into a recompute.
+    /// Later ticks reach `record_tick` through the same `None` arm, and which of
+    /// `Fps::update`'s two `None` paths produced it is pinned in `model::fps`.
     ///
-    /// The same stamping leaves this test reading the real clock: it holds while the
-    /// sends below all land inside one second, which sixteen synchronous `update`
-    /// calls have many orders of magnitude of room for, but is not a property the
-    /// test can assert.
+    /// The tick that does recompute cannot be driven from here at all: it is stamped
+    /// as it is handled, so reaching it would mean waiting a real second. That
+    /// direction is likewise covered where the decision is made — `Fps::update`
+    /// reporting `DisplayUpdated`. An inverted mapping in `record_tick` fails this
+    /// test.
     #[test]
     fn test_tick_that_changes_no_displayed_value_does_not_redraw() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
-        // The first tick opens the measurement interval and the rest fall inside it.
-        for _ in 0..16 {
-            store.send(AppMsg::System(SystemMsg::Tick));
+        store.send(AppMsg::System(SystemMsg::Tick));
 
-            assert!(!store.redraw_requested());
-            assert_eq!(store.state().state.fps.app_fps(), None);
-        }
-
+        assert!(!store.redraw_requested());
+        assert_eq!(store.state().state.fps.app_fps(), None);
         store.finish();
     }
 }

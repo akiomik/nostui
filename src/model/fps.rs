@@ -22,12 +22,13 @@ pub enum Message {
     FrameRecorded {
         /// When the tick was handled.
         ///
-        /// Must not precede an instant already recorded. Intervals are measured
-        /// by subtracting, which `Instant` reserves the right to panic on rather
-        /// than saturate. `AppState::record_tick` satisfies this by stamping at
-        /// dispatch, on the one update loop; a caller that stamped where the tick
-        /// was produced would not, because independent subscription tasks push
-        /// into a shared queue and can be reordered by it.
+        /// Expected not to precede an instant already recorded.
+        /// `AppState::record_tick` satisfies that by stamping at dispatch, on the
+        /// one update loop; a caller that stamped where the tick was produced would
+        /// not, because independent subscription tasks push into a shared queue and
+        /// can be reordered by it. `update` measures saturatingly rather than trust
+        /// the caller, so violating this skews a debug counter instead of panicking
+        /// the update loop on an `Instant` subtraction.
         now: Instant,
     },
 }
@@ -71,7 +72,7 @@ impl Fps {
                 };
 
                 self.app_frames += 1;
-                let elapsed = (now - started_at).as_secs_f64();
+                let elapsed = now.saturating_duration_since(started_at).as_secs_f64();
 
                 if elapsed < 1.0 {
                     return None;
@@ -104,8 +105,7 @@ mod tests {
         let fps1 = Fps::new();
         let fps2 = Fps::default();
 
-        assert_eq!(fps1.app_fps, fps2.app_fps);
-        assert_eq!(fps1.app_frames, fps2.app_frames);
+        assert_eq!(fps1, fps2);
     }
 
     #[test]
