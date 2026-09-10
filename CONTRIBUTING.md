@@ -116,11 +116,15 @@ $ RUSTDOCFLAGS='-D warnings' just doc
 ```
 
 `Code Coverage` is the other, and it is not a required check. When Codecov goes
-red, read the uncovered lines rather than the percentage:
+red, read the uncovered lines rather than the percentage — `just test-cov` gives
+the summary, and the lines take a flag it does not pass:
 
 ```console
 $ cargo llvm-cov --all-features --workspace --show-missing-lines
 ```
+
+Both need [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov), which CI
+installs for itself and a checkout does not have.
 
 Testable logic left uncovered is worth covering; the entry-point glue that takes
 the terminal over or connects to relays has no unit test today, and a red mark
