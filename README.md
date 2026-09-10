@@ -131,3 +131,9 @@ The following actions are available:
 
 For how the codebase is organised — the layers, their dependency direction, and
 the contracts between them — see [docs/architecture.md](docs/architecture.md).
+
+## Contributing
+
+Conventions the tooling does not check — commit messages, how tests are named
+and what they have to prove, the local checks before pushing — are in
+[CONTRIBUTING.md](CONTRIBUTING.md).

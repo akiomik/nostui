@@ -32,8 +32,6 @@ impl Reference {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -86,6 +84,7 @@ mod tests {
             )
         ])
     ]
+    #[allow(clippy::unwrap_used)]
     fn find_extracts_recognised_references_in_order_and_rejects_the_rest(
         #[case] content: &str,
         #[case] expected: Vec<Reference>,
