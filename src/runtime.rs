@@ -1109,6 +1109,25 @@ mod tests {
         ));
     }
 
+    /// #540: refusing a blank draft writes to the status bar, so unlike its neighbours
+    /// in `submit_note` it has to redraw — otherwise the line saying why never appears,
+    /// which is the whole of what the refusal is for. Asserted here because this is
+    /// where the directive is observable.
+    #[test]
+    fn test_refusing_a_blank_draft_redraws() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(AppMsg::Editor(EditorMsg::StartComposing));
+        store.send(AppMsg::Editor(EditorMsg::SubmitNote));
+
+        assert!(store.redraw_requested());
+        assert_eq!(
+            store.state().state.status_bar.message(),
+            Some("[ERR: Note] nothing to post")
+        );
+        store.finish();
+    }
+
     /// A terminal event nostui does not act on changes nothing, so it must not
     /// render. Before #527 this arm produced a tick, which the FPS display counted
     /// as one and redrew for.
