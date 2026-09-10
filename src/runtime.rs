@@ -186,9 +186,9 @@ impl<'a> Application for TearsApp<'a> {
 /// plain press, because none of the three paths downstream has any use for the
 /// difference and each of them handled it differently (#536). The binding map compares
 /// the whole `KeyEvent`, and every entry in it comes from `KeyEvent::new`; the composer
-/// and normal mode's fallback read the code alone. So a key the map should have matched
-/// would miss it and fall through to a fallback that does nothing, while the other two
-/// paths carried on as if it were a press.
+/// reads `(code, modifiers)`, and normal mode's fallback the code alone. So a key the
+/// map should have matched would miss it and fall through to a fallback that does
+/// nothing, while the other two paths carried on as if it were a press.
 ///
 /// Both of the fields `KeyEvent::new` fixes are reset here, not just the kind. The
 /// kitty keyboard protocol is what reports a repeat, and the same parser fills `state`
@@ -198,7 +198,10 @@ impl<'a> Application for TearsApp<'a> {
 ///
 /// It does mean nothing downstream can tell a held key from a fresh one, or a numpad key
 /// from its counterpart on the main row. That is the point, and this is where to come
-/// back if anything ever needs to — refusing to repeat a destructive action, say.
+/// back if anything ever needs to. One thing already does: holding a key now fires its
+/// binding once per repeat, and some of them publish or close things (#543). Refusing
+/// that means the kind has to survive as far as whoever decides, so part of this has to
+/// move rather than be added to.
 /// Nothing reports a repeat today in any case: nostui never asks for the protocol, so
 /// none of this has bitten anyone yet.
 ///
