@@ -1346,43 +1346,52 @@ mod tests {
     }
 
     /// Whitespace and a stray newline are as empty as nothing at all.
+    ///
+    /// Both shapes, because they are not the same one. Spaces leave a line holding
+    /// whitespace; pressing Enter on an untouched composer leaves two empty lines, which
+    /// `get_content` joins into a bare `"\n"`. Same answer, different buffer.
     #[test]
     fn test_submit_note_refuses_a_draft_of_only_whitespace() {
-        let (mut state, _rx) = connected_state();
+        for keys in [
+            vec![KeyCode::Char(' '), KeyCode::Char(' ')],
+            vec![KeyCode::Enter],
+        ] {
+            let (mut state, _rx) = connected_state();
 
-        state.editor.update(EditorMessage::ComposingStarted);
-        // A newline is not a line holding whitespace: Enter leaves the buffer as two
-        // empty lines, which `get_content` joins into `"\n"`. Different shape, same
-        // answer, and only one of the two was covered.
-        for code in [KeyCode::Char(' '), KeyCode::Enter, KeyCode::Char(' ')] {
-            state.editor.update(EditorMessage::KeyEventReceived {
-                event: KeyEvent::new(code, KeyModifiers::NONE),
-            });
+            state.editor.update(EditorMessage::ComposingStarted);
+            for code in &keys {
+                state.editor.update(EditorMessage::KeyEventReceived {
+                    event: KeyEvent::new(*code, KeyModifiers::NONE),
+                });
+            }
+
+            // Otherwise this would hold just as well if the keystrokes never landed, and
+            // would be saying "an empty buffer is empty" rather than what it claims.
+            assert!(
+                !state.editor.get_content().is_empty(),
+                "{keys:?} should have reached the buffer"
+            );
+
+            let _ = state.submit_note();
+
+            assert!(
+                state.pending_publishes.is_empty(),
+                "{keys:?} should have published nothing"
+            );
+            assert_eq!(
+                state.status_bar.message(),
+                Some("[ERR: Note] nothing to post")
+            );
+            assert!(state.editor.is_active(), "the composer stays open");
         }
-
-        // Otherwise this would hold just as well if the keystrokes never landed, and
-        // would be saying "an empty buffer is empty" rather than what it claims.
-        assert!(
-            !state.editor.get_content().is_empty(),
-            "the whitespace reached the buffer"
-        );
-
-        let _ = state.submit_note();
-
-        assert!(state.pending_publishes.is_empty(), "nothing was published");
-        assert_eq!(
-            state.status_bar.message(),
-            Some("[ERR: Note] nothing to post")
-        );
-        assert!(state.editor.is_active(), "the composer stays open");
     }
 
     /// The other side of it: trimming decides, and does not touch what is sent.
     ///
-    /// Asserted on the event handed to the worker, not on the status line. Both are
+    /// Asserted on the event handed to the worker, not only on the status line. Both are
     /// built from the same `content`, so a bar reading `[Sending]  hi ` would go on
     /// reading that if the builder started trimming — which is the one change this test
-    /// exists to catch.
+    /// exists to catch. The bar is checked too, since it is what the user sees.
     #[test]
     fn test_submit_note_posts_padded_content_as_typed() {
         let (mut state, mut rx) = connected_state();
