@@ -1895,9 +1895,9 @@ mod tests {
         assert!(message.starts_with("[ERR: Nostr]"));
     }
 
-    /// The word reaches the user, and `typos` does not read string literals like this
-    /// one — it does not flag `disconntected`, which is how that spelling survived. So
-    /// the spelling is asserted here instead of left to the linter.
+    /// The word reaches the user, and `typos` scans this file but does not know
+    /// `disconntected` — this very comment carries that spelling and still lints
+    /// clean. So the spelling is asserted here instead of left to the linter.
     #[test]
     fn test_notify_subscription_shutdown_says_disconnected() {
         let mut state = AppState::new(Keys::generate().public_key());
