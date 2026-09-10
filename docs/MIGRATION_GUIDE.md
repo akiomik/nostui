@@ -89,7 +89,9 @@ The render half of this was already addressed: nostui stopped redrawing for tick
 
 **Impact:**
 
-1. **As a user**: the counter is gone from the screen, and an idle nostui now genuinely idles — barring the `nip-38` case noted under `--frame-rate` below. If you were watching it to see whether the application was keeping up, there is no replacement; the logs are the remaining diagnostic.
+1. **As a user**: the counter is gone from the screen, and an idle nostui now genuinely idles. If you were watching it to see whether the application was keeping up, there is no replacement; the logs are the remaining diagnostic.
+
+   **If you use `nip-38`**, one thing to know: the tick used to re-check nostui's subscriptions sixteen times a second, which quietly restarted a media source that had stopped. Nothing does that now. A media source that starts and later dies — a session bus restarting, say — stops reporting, and "now playing" stays stopped for the rest of the run rather than coming back on its own. Restart nostui to get it back. A source that cannot be started at all was never reliably restarted either, and is unchanged. Both are [#529](https://github.com/akiomik/nostui/issues/529).
 
 2. **In custom code**: remove references to `state.fps`. There is no equivalent to read.
 
@@ -134,7 +136,7 @@ Drop the option wherever nostui is launched — a shell alias, a `.desktop` entr
 **Note:**
 There is no direct replacement, and no remaining option that behaves like the old throttle — nostui takes no options at all now beyond `--help` and `--version`.
 
-Nothing is needed in the idle direction: with the FPS counter and its tick gone, an idle nostui neither renders nor runs an update pass. (One exception, unchanged by this release: with `nip-38` enabled on a host where the media source cannot be built, the error it reports keeps restarting it.) What has no ceiling any more is relay traffic. Redraws follow inbound events instead of being clamped to 16 fps, so a busy home feed can redraw more often than it used to.
+Nothing is needed in the idle direction: with the FPS counter and its tick gone, an idle nostui neither renders nor runs an update pass — barring the `nip-38` cases in the impact list above. What has no ceiling any more is relay traffic. Redraws follow inbound events instead of being clamped to 16 fps, so a busy home feed can redraw more often than it used to.
 
 ---
 
