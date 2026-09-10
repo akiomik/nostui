@@ -400,11 +400,12 @@ impl<'a> TearsApp<'a> {
 
     /// Handle media messages
     ///
-    /// Only a track change reaches the screen, via the NIP-38 status line. The other
-    /// events nowhear reports — pausing, seeking, changing the volume, a player coming
-    /// or going — are not displayed anywhere, and neither is a media source error beyond
-    /// the log, so both decline the redraw they would otherwise cost. Without that,
-    /// nudging the volume of a player nostui is watching repaints the whole timeline.
+    /// A track change is the only thing here that can reach the screen, via the NIP-38
+    /// status line — and only if `MusicStatus` accepts it, which `publish_music_status`
+    /// decides. The other events nowhear reports — pausing, seeking, changing the
+    /// volume, a player coming or going — are displayed nowhere at all, so they decline
+    /// the redraw they would otherwise cost. Without that, nudging the volume of a
+    /// player nostui is watching repaints the whole timeline.
     ///
     /// The undisplayed events are listed rather than caught by a wildcard. Declining the
     /// redraw is an assertion that they change nothing visible, and a wildcard would
@@ -412,8 +413,9 @@ impl<'a> TearsApp<'a> {
     /// periodic repaint left to mask it. `MediaEvent` is not `#[non_exhaustive]`, so
     /// naming them makes the next variant a compile error instead.
     ///
-    /// The error arm is the exception, and deliberately so. Nothing it does reaches the
-    /// screen either, but it is the one that can repeat: a source that cannot be built
+    /// A media source error reaches the screen no more than they do, and on that
+    /// reasoning would decline the redraw with them. It keeps one, deliberately,
+    /// because it is the one message here that can repeat: a source that cannot be built
     /// reports, and the report is what restarts it, so it fails and reports again with
     /// no backoff (#529). The repaint is the only thing left costing that loop anything
     /// per iteration. Keeping it is a brake nobody designed, held until #529 fits a real
