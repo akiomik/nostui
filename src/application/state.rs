@@ -824,7 +824,7 @@ impl<'a> AppState<'a> {
     /// Show that the Nostr subscription was shut down.
     pub fn notify_subscription_shutdown(&mut self) -> Command<AppMsg> {
         log::info!("Nostr subscription shut down");
-        self.set_status("Nostr", "disconntected");
+        self.set_status("Nostr", "disconnected");
         Command::none()
     }
 
@@ -1893,5 +1893,17 @@ mod tests {
 
         let message = state.status_bar.message().expect("status set");
         assert!(message.starts_with("[ERR: Nostr]"));
+    }
+
+    /// The word reaches the user, and `typos` does not read string literals like this
+    /// one — it does not flag `disconntected`, which is how that spelling survived. So
+    /// the spelling is asserted here instead of left to the linter.
+    #[test]
+    fn test_notify_subscription_shutdown_says_disconnected() {
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        let _ = state.notify_subscription_shutdown();
+
+        assert_eq!(state.status_bar.message(), Some("[Nostr] disconnected"));
     }
 }
