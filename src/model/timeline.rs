@@ -768,9 +768,9 @@ mod tests {
             });
         }
 
-        // Guards the subtraction below and pins what the loop above is assumed to have
-        // produced: `notes` is a set, so events colliding would silently leave it empty
-        // and `len() - 1` would panic about arithmetic rather than about the timeline.
+        // Pins what the loop above is assumed to have produced. `notes` is a set, so
+        // events that collided would leave fewer than five, and the loop below would
+        // quietly check fewer indices while still passing — the weakening this catches.
         assert_eq!(timeline.len(), 5);
 
         // Every index but the last, rather than a sample of them: "only" is not earned
