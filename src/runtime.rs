@@ -931,7 +931,9 @@ mod tests {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
         store.send(AppMsg::Media(Ok(MediaEvent::TrackChanged {
-            player_name: "Music".to_owned(),
+            // Not "Music": that is `NOW_PLAYING_LABEL`, and the assertion below could
+            // not tell the label from an echoed player name.
+            player_name: "Spotify".to_owned(),
             track: Track {
                 title: "Song".to_owned(),
                 artist: vec!["Artist".to_owned()],

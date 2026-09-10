@@ -218,24 +218,29 @@ composition driver and the only place that bridges the framework:
 - `subscriptions` wires `NostrEvents`, terminal events, media, and OS signals.
   All of them are event-driven: nostui declares no periodic source, so an idle
   application runs no update passes.
+
   That also decides when a subscription that ended is restarted. tears marks the
   declared set dirty on any pass where `update` ran and re-admits whatever is
   declared but not running (`kernel/pass.rs`); a source that merely *finishes*
-  marks nothing by itself. `media` is the only source that ends on its own in
-  practice — its stream ends when the build fails, and on Linux when nowhear's
-  D-Bus task dies afterwards — so it comes back on the next message from
-  anything else. (`NostrEvents` ends too, but only when its command channel
-  closes, which `close_connection` does at quit, or on a `ClientNotification::
-  Shutdown` that nostui never asks for; neither leaves an application running
-  without it.) On a
-  live feed that is immediate; on a nostui with no traffic and no input there is
-  no next message, and it stays stopped. The tick used to make it at most 62 ms
-  in both cases. Tracked in
-  [#529](https://github.com/akiomik/nostui/issues/529), along with the other end
-  of the same gap: when the source cannot be built at all, its error is itself a
-  message, so the restart it triggers fails and retries with no backoff. The
-  error is the one media message that still redraws, which is the only thing
-  costing that loop anything per iteration until #529 bounds it properly.
+  marks nothing by itself, and `reconcile` skips a run whose exit has not been
+  reflected yet. So a restart takes a message from somewhere else, and may take
+  more than one.
+
+  `media` is the only source that ends on its own in practice: its stream ends
+  when the build fails, and on Linux when nowhear's D-Bus task dies afterwards.
+  (`NostrEvents` ends too, but only when its command channel closes, which
+  `close_connection` does at quit, or on a `ClientNotification::Shutdown` that
+  nostui never asks for; neither leaves an application running without it.) On a
+  live feed the next message is immediate, so neither media failure is visible;
+  on a nostui with no traffic and no input there is no next message, and it stays
+  stopped. The tick used to supply one every 62 ms, which is what made both
+  cases self-healing.
+
+  Both are tracked in [#529](https://github.com/akiomik/nostui/issues/529). The
+  unbuildable case has a second face: its error *is* a message, so it can drive
+  its own restart and fail again with no backoff — whether it does is the race
+  above. The error is the one media message that still redraws, which is the only
+  thing costing that loop anything per iteration until #529 bounds it properly.
 - `view` renders the components against `&AppState`.
 - input handling maps key events to a configured `Action` and then to an `AppMsg`.
 
