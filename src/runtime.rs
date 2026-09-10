@@ -175,11 +175,23 @@ impl<'a> Application for TearsApp<'a> {
 
 /// Map one terminal event to the message it should become.
 ///
-/// A key event is input only when the key is going down. A Windows console reports
-/// releases too — crossterm's WinAPI source sets the kind from the record's `key_down`
-/// flag and passes both up — so without this every binding ran twice there: `j` scrolled
-/// two notes, `x` closed two tabs (#531). Unix reports presses only, so this changes
-/// nothing there.
+/// A key event is input when the key is going down. A Windows console reports releases
+/// too — crossterm's WinAPI source sets the kind from the record's `key_down` flag and
+/// passes both up — and nostui acted on some of them (#531). Unix reports presses only,
+/// so this changes nothing there.
+///
+/// Not the configured bindings, though: those live in a map keyed by `KeyEvent`, whose
+/// `Eq` and `Hash` include the kind, so a release never matched one. What a release did
+/// reach were the two paths that read the key's code alone. Cancelling a draft with
+/// `Esc` closed the composer on the press, and the release then fell through normal
+/// mode's fallback to `Deselect` — one keystroke also clearing a timeline selection
+/// nobody asked it to. Typing was safe: `tui-textarea` discards releases itself.
+///
+/// "Going down" is the rule rather than the whole story. The same parser deliberately
+/// reports an Alt code — Alt held over a numpad sequence — as a `Release` carrying the
+/// composed character, so that it cannot be discarded as a release. nostui never
+/// received those anyway, since `tui-textarea` dropped them; supporting Alt codes on
+/// Windows means coming back here first.
 ///
 /// `Repeat` is treated as input for the same reason: it means the key is still down.
 /// What comes of that depends on the mode. Composing reads `(code, modifiers)` and never
@@ -934,9 +946,11 @@ mod tests {
         store.finish();
     }
 
-    /// #531: a Windows console reports a release for every press. A release is not
-    /// someone pressing a key, so it must not reach `KeyInput` — before this it did,
-    /// and every binding ran twice there.
+    /// #531: a Windows console reports a release for every press, and a release is not
+    /// someone pressing a key. Configured bindings were safe — the map they live in
+    /// compares the kind — but the paths matching on the key's code alone were not:
+    /// a release of `Esc` reached normal mode's fallback and deselected the timeline
+    /// behind a draft the press had just cancelled.
     #[test]
     fn test_key_release_is_not_input() {
         let release = KeyEvent::new_with_kind(
