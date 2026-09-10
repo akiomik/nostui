@@ -44,7 +44,8 @@ pub enum SystemMsg {
     /// arrive. Before #527 they became ticks, which the FPS display counted as such.
     ///
     /// That is about the events routed *here*. A Windows console also reports key
-    /// releases, which the arm above turns into `KeyInput` like any press — #531.
+    /// releases, and the `Event::Key` arm in `TearsApp::subscriptions` turns those into
+    /// `KeyInput` like any press — #531.
     TerminalEventIgnored,
     /// Show an error message
     ShowError(String),
