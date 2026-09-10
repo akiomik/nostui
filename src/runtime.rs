@@ -576,7 +576,7 @@ mod tests {
     use crate::model::timeline::Message as TimelineMessage;
 
     /// Create flags for a test app instance
-    fn test_flags() -> InitFlags {
+    fn create_test_flags() -> InitFlags {
         let keys = Keys::generate();
 
         InitFlags {
@@ -589,7 +589,7 @@ mod tests {
 
     /// Create a test app instance
     fn create_test_app() -> TearsApp<'static> {
-        let (app, _) = TearsApp::new(test_flags());
+        let (app, _) = TearsApp::new(create_test_flags());
         app
     }
 
@@ -598,7 +598,7 @@ mod tests {
     /// Put there rather than taken from `.config/config.json5`, so a test pins the
     /// lookup and not what the shipped defaults happen to say.
     fn store_with_binding(key: KeyEvent, action: KeyAction) -> TestStore<TearsApp<'static>> {
-        let mut flags = test_flags();
+        let mut flags = create_test_flags();
         flags.config.keybindings.home.insert(vec![key], action);
         TestStore::new(flags)
     }
@@ -610,11 +610,11 @@ mod tests {
         ))
     }
 
-    fn test_relay_url() -> RelayUrl {
+    fn create_test_relay_url() -> RelayUrl {
         RelayUrl::parse("wss://relay.example.com").expect("valid relay url")
     }
 
-    fn test_note() -> NostrEvent {
+    fn create_test_note() -> NostrEvent {
         EventBuilder::new(Kind::TextNote, "test note")
             .finalize(&Keys::generate())
             .expect("Failed to sign test event")
@@ -906,12 +906,12 @@ mod tests {
     /// ignores would spend a full render on nothing, so that arm declines it (#510).
     #[test]
     fn ignored_event_notification_does_not_redraw() {
-        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let mut store = TestStore::<TearsApp<'static>>::new(create_test_flags());
 
         store.send(notification(ClientNotification::Event {
-            relay_url: test_relay_url(),
+            relay_url: create_test_relay_url(),
             subscription_id: SubscriptionId::new("unknown"),
-            event: Box::new(test_note()),
+            event: Box::new(create_test_note()),
         }));
 
         assert!(!store.redraw_requested());
@@ -922,10 +922,10 @@ mod tests {
     /// so it changes nothing the view shows and declines the redraw too (#510).
     #[test]
     fn non_event_relay_message_does_not_redraw() {
-        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let mut store = TestStore::<TearsApp<'static>>::new(create_test_flags());
 
         store.send(notification(ClientNotification::Message {
-            relay_url: test_relay_url(),
+            relay_url: create_test_relay_url(),
             message: Box::new(RelayMessage::EndOfStoredEvents(Cow::Owned(
                 SubscriptionId::new("home"),
             ))),
@@ -944,7 +944,7 @@ mod tests {
     /// anyway, so asserting the directive alone would hold either way.
     #[test]
     fn routed_event_message_still_redraws() {
-        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let mut store = TestStore::<TearsApp<'static>>::new(create_test_flags());
         let subscription_id = SubscriptionId::new("home");
 
         store.send(AppMsg::Nostr(NostrMsg::SubscriptionMessage(
@@ -954,10 +954,10 @@ mod tests {
             },
         )));
         store.send(notification(ClientNotification::Message {
-            relay_url: test_relay_url(),
+            relay_url: create_test_relay_url(),
             message: Box::new(RelayMessage::Event {
                 subscription_id: Cow::Owned(subscription_id),
-                event: Cow::Owned(test_note()),
+                event: Cow::Owned(create_test_note()),
             }),
         }));
 
@@ -1084,7 +1084,7 @@ mod tests {
     /// now that a held key produces one of these per repeat rather than none (#536).
     #[test]
     fn a_key_bound_to_nothing_does_not_redraw() {
-        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let mut store = TestStore::<TearsApp<'static>>::new(create_test_flags());
 
         store.send(AppMsg::System(SystemMsg::KeyInput(KeyEvent::new(
             KeyCode::F(12),
@@ -1115,7 +1115,7 @@ mod tests {
     /// where the directive is observable.
     #[test]
     fn refusing_a_blank_draft_redraws() {
-        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let mut store = TestStore::<TearsApp<'static>>::new(create_test_flags());
 
         store.send(AppMsg::Editor(EditorMsg::StartComposing));
         store.send(AppMsg::Editor(EditorMsg::SubmitNote));
@@ -1133,7 +1133,7 @@ mod tests {
     /// as one and redrew for.
     #[test]
     fn ignored_terminal_event_does_not_redraw() {
-        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let mut store = TestStore::<TearsApp<'static>>::new(create_test_flags());
 
         store.send(AppMsg::System(SystemMsg::TerminalEventIgnored));
 
@@ -1147,7 +1147,7 @@ mod tests {
     /// and the now-playing line invisible on a client with nothing else going on.
     #[test]
     fn track_the_status_line_shows_redraws() {
-        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let mut store = TestStore::<TearsApp<'static>>::new(create_test_flags());
 
         store.send(AppMsg::Media(Ok(MediaEvent::TrackChanged {
             // Not "Music": that is `NOW_PLAYING_LABEL`, and the assertion below could
@@ -1177,7 +1177,7 @@ mod tests {
     /// without the user touching nostui at all.
     #[test]
     fn undisplayed_media_event_does_not_redraw() {
-        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let mut store = TestStore::<TearsApp<'static>>::new(create_test_flags());
 
         store.send(AppMsg::Media(Ok(MediaEvent::VolumeChanged {
             player_name: "Music".to_owned(),
@@ -1194,7 +1194,7 @@ mod tests {
     /// hide within a second, and #527 removed the tick.
     #[test]
     fn timeline_message_that_does_nothing_still_clears_the_status_bar_on_screen() {
-        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let mut store = TestStore::<TearsApp<'static>>::new(create_test_flags());
         let subscription_id = SubscriptionId::new("home");
 
         // Complete startup: until an event arrives, timeline messages are ignored.
@@ -1205,10 +1205,10 @@ mod tests {
             },
         )));
         store.send(notification(ClientNotification::Message {
-            relay_url: test_relay_url(),
+            relay_url: create_test_relay_url(),
             message: Box::new(RelayMessage::Event {
                 subscription_id: Cow::Owned(subscription_id),
-                event: Cow::Owned(test_note()),
+                event: Cow::Owned(create_test_note()),
             }),
         }));
         store.send(AppMsg::System(SystemMsg::ShowError("boom".to_owned())));
@@ -1228,7 +1228,7 @@ mod tests {
     /// radio and live streams report routinely while their metadata keeps changing.
     #[test]
     fn track_the_status_line_rejects_does_not_redraw() {
-        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let mut store = TestStore::<TearsApp<'static>>::new(create_test_flags());
 
         store.send(AppMsg::Media(Ok(MediaEvent::TrackChanged {
             player_name: "Radio".to_owned(),
@@ -1254,7 +1254,7 @@ mod tests {
     /// that loop until #529 bounds it. Pinned so the brake is not removed by tidying.
     #[test]
     fn media_source_error_keeps_its_redraw_as_a_brake() {
-        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let mut store = TestStore::<TearsApp<'static>>::new(create_test_flags());
 
         store.send(AppMsg::Media(Err(MediaSourceError::UnsupportedPlatform)));
 

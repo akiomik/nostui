@@ -191,7 +191,7 @@ mod tests {
     }
 
     #[test]
-    fn profile_count_counts_distinct_pubkeys() {
+    fn profile_count_counts_the_profiles_held() {
         let mut state = UserState::new();
         assert_eq!(state.profile_count(), 0);
 
@@ -226,7 +226,7 @@ mod tests {
     }
 
     #[test]
-    fn clear_profiles_empties_the_state() {
+    fn clear_profiles_drops_every_profile() {
         let mut state = UserState::new();
         let keys = Keys::generate();
         let profile = create_test_profile(keys.public_key(), Timestamp::now());

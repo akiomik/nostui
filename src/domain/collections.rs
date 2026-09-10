@@ -323,17 +323,22 @@ mod tests {
             events_set.insert(event.clone());
         }
 
+        let mut expected: Vec<_> = test_events.iter().map(|e| e.id).collect();
+        expected.sort();
+
         // Deref経由でスライスメソッドを使用
         assert_eq!(events_set.len(), 3);
         assert_eq!(events_set.first().unwrap().content, "first");
 
         // iter()でのイテレーション（Deref経由）
-        let collected: Vec<_> = events_set.iter().collect();
-        assert_eq!(collected.len(), 3);
+        let mut collected: Vec<_> = events_set.iter().map(|e| e.id).collect();
+        collected.sort();
+        assert_eq!(collected, expected);
 
         // into_iter()でのイテレーション
-        let ids: Vec<_> = events_set.into_iter().map(|e| e.id).collect();
-        assert_eq!(ids.len(), 3);
+        let mut ids: Vec<_> = events_set.clone().into_iter().map(|e| e.id).collect();
+        ids.sort();
+        assert_eq!(ids, expected);
 
         Ok(())
     }

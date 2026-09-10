@@ -46,7 +46,7 @@ mod tests {
     }
 
     #[test]
-    fn message_is_none_until_something_sets_it() {
+    fn message_defaults_to_none() {
         let status_bar = StatusBar::default();
         assert_eq!(status_bar.message(), None);
     }

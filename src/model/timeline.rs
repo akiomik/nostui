@@ -664,7 +664,7 @@ mod tests {
     }
 
     #[test]
-    fn note_by_index_returns_none_out_of_range() {
+    fn note_by_index_finds_a_note_and_is_none_out_of_range() {
         let mut timeline = Timeline::default();
 
         let event = create_test_event(1000, 1, "Test note");
