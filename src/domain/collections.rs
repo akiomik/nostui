@@ -323,21 +323,21 @@ mod tests {
             events_set.insert(event.clone());
         }
 
-        let mut expected: Vec<_> = test_events.iter().map(|e| e.id).collect();
-        expected.sort();
+        // Unsorted: `EventSet` documents that it preserves insertion order, and nothing
+        // else in the crate pins that. Sorting both sides would let a reimplementation
+        // over a `HashSet` — which would scramble the timeline — pass.
+        let expected: Vec<_> = test_events.iter().map(|e| e.id).collect();
 
         // Deref経由でスライスメソッドを使用
         assert_eq!(events_set.len(), 3);
         assert_eq!(events_set.first().unwrap().content, "first");
 
         // iter()でのイテレーション（Deref経由）
-        let mut collected: Vec<_> = events_set.iter().map(|e| e.id).collect();
-        collected.sort();
+        let collected: Vec<_> = events_set.iter().map(|e| e.id).collect();
         assert_eq!(collected, expected);
 
         // into_iter()でのイテレーション
-        let mut ids: Vec<_> = events_set.clone().into_iter().map(|e| e.id).collect();
-        ids.sort();
+        let ids: Vec<_> = events_set.into_iter().map(|e| e.id).collect();
         assert_eq!(ids, expected);
 
         Ok(())

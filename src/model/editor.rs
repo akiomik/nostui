@@ -314,10 +314,21 @@ mod tests {
     }
 
     #[test]
-    fn textarea_of_a_new_editor_is_one_empty_line() {
-        let editor = Editor::new();
-        let textarea = editor.textarea();
-        assert_eq!(textarea.lines(), [""]);
+    fn textarea_holds_what_was_typed() {
+        let mut editor = Editor::new();
+        editor.update(Message::ComposingStarted);
+        for code in ['h', 'i'] {
+            editor.update(Message::KeyEventReceived {
+                event: create_key_event(KeyCode::Char(code)),
+            });
+        }
+
+        // The composer is rendered from this, and from nothing else, so a `textarea()`
+        // handing back a fresh or stale `TextArea` would draw an empty box while the
+        // user typed. Asserting a new editor's textarea is blank cannot catch that —
+        // every default `TextArea` is blank — and `new_editor_default_state` already
+        // covers the empty case through `get_content`.
+        assert_eq!(editor.textarea().lines(), ["hi"]);
     }
 
     #[test]
