@@ -16,11 +16,17 @@ Everything published is written in English — code, comments, documentation,
 commit messages, and the titles and bodies of pull requests and issues. Where
 something will be read decides it, not what kind of thing it is.
 
+That is about prose a contributor writes, not about text a test operates on.
+The CJK literals in `wrap_text`'s tests are the double-width columns those tests
+are for, and an ASCII replacement would keep passing while checking nothing;
+`domain::nostr::nip10`'s note fixtures are content in the same way.
+
 ## Commit messages and pull request titles
 
 [Conventional Commits][cc]: `type: summary`, with `feat`, `fix`, `docs`,
-`refactor`, `perf`, `test`, `build`, `ci`, `chore` and `revert` as the types. A scope
-is allowed and rarely taken — two commits in the history carry one, beside
+`refactor`, `perf`, `test`, `build`, `ci`, `chore` and `revert` as the types, and
+`!` before the `:` for a breaking change (`feat!`, `refactor!`). A scope is
+allowed and rarely taken — two commits in the history carry one, beside
 Dependabot's `build(deps)`.
 
 The summary states what the change claims, not which file it touched:
@@ -86,9 +92,11 @@ uncommitted work with it.
   `just lint` denies warnings — so an `unwrap` fails the lint rather than
   review. Where `?` cannot reach, inside an `rstest` `#[case(...)]` argument for
   instance, put `#[allow(clippy::unwrap_used)]` on the one test that needs it
-  rather than contorting the case. The module-wide `#![allow(…)]` in
-  `domain::nostr::nip27` covers a whole file of such cases and is the exception;
-  taken by default it also silences every test added to the module later.
+  rather than contorting the case. The inner `#![allow(…)]` at the top of
+  `domain::nostr::nip27`'s `mod tests` covers a module of them and is the
+  exception — it belongs inside the test module, since at the top of the file it
+  would cover the production code too, and taken by default it silences every
+  test added to the module afterwards.
 
 ### Where the redraw directive is observable
 
