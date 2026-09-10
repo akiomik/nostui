@@ -176,46 +176,24 @@ impl<'a> Application for TearsApp<'a> {
 /// Map one terminal event to the message it should become.
 ///
 /// A key event is input when the key is going down. A Windows console reports releases
-/// too — crossterm's WinAPI source sets the kind from the record's `key_down` flag and
-/// passes both up — and nostui acted on some of them (#531). Unix reports presses only,
-/// so this changes nothing there.
+/// too — crossterm takes the kind from the record's `key_down` flag — and nostui acted
+/// on some of them. Not the configured bindings, whose map is keyed by `KeyEvent` and so
+/// compares the kind; the two paths that read the key's code alone. Cancelling a draft
+/// with `Esc` closed the composer on the press, and the release then landed in normal
+/// mode, whose fallback reads `code` and fires `Deselect` (#531).
 ///
-/// Not the configured bindings, though: those live in a map keyed by `KeyEvent`, whose
-/// `Eq` and `Hash` include the kind, so a release never matched one. What a release did
-/// reach were the two paths that read the key's code alone. Cancelling a draft with
-/// `Esc` closed the composer on the press, and the release then fell through normal
-/// mode's fallback to `Deselect` — one keystroke also clearing a timeline selection
-/// nobody asked it to. Typing was safe: `tui-textarea` discards releases itself.
+/// `Repeat` counts as input, because a repeat is the key still being down. What each
+/// path does with one after that differs, and inconsistently — that is #536, which this
+/// function cannot settle. Nothing reports a repeat today in any case: only the kitty
+/// keyboard protocol does, and nostui never asks for it.
 ///
-/// "Going down" is the rule rather than the whole story, and the exception is worth
-/// knowing before someone goes looking for it. The same parser reports an Alt code —
-/// Alt held over a numpad sequence — as a `KeyCode::Char` carrying the composed
-/// character, with the kind still taken from `key_down`, so it arrives here as a
-/// `Release`. crossterm's exception is only to its own discarding of releases; the arm
-/// below is a separate filter and does drop it.
+/// Not every release is a key coming up. crossterm reports a Windows Alt code as a
+/// `Release` carrying the composed character, so the arm below drops it; it never typed
+/// anything before either, since `tui-textarea` discarded it further down. Making it
+/// work is #537, and it starts here.
 ///
-/// Nothing changes today: before this, an Alt code reached `tui-textarea` and was
-/// discarded there for the same reason, so it never typed anything either way. What
-/// changes is where it stops. Adding Alt-code support on Windows (#537) starts here
-/// rather than ends here.
-///
-/// `Repeat` is treated as input for the same reason: it means the key is still down.
-/// What comes of that depends on which path takes it, and the three do not agree —
-/// which is #536, not something this function can settle. Configured bindings live in a
-/// map keyed by `KeyEvent`, whose `Eq` and `Hash` include the kind, against entries
-/// built by `KeyEvent::new` — `Press` — so a repeat matches nothing there. Composing
-/// never consults that map: its `Esc` and `Ctrl+P` arms read `(code, modifiers)` alone,
-/// so a repeat fires them again, and everything else reaches `tui-textarea`, which drops
-/// only `Release` and so types the repeat as it should. Nothing produces one today in
-/// any of them: crossterm reports that kind only through the kitty keyboard protocol,
-/// which nostui never asks for.
-///
-/// It is named rather than lumped in with `Release` because a repeat *is* someone
-/// pressing the key, and `KeyEventKind` is a closed enum, so saying which of the three
-/// is which costs nothing.
-///
-/// A free function rather than the closure it replaces: the closure lives inside
-/// `subscriptions`, which no test drives, and the decision above is worth pinning.
+/// A free function rather than the closure it replaces: the closure lived inside
+/// `subscriptions`, which no test drives.
 fn terminal_event_to_msg(event: Event) -> AppMsg {
     match event {
         Event::Key(key) => match key.kind {
@@ -989,7 +967,7 @@ mod tests {
                     terminal_event_to_msg(Event::Key(key)),
                     AppMsg::System(SystemMsg::KeyInput(got)) if got == key
                 ),
-                "{kind:?} should reach the keybindings"
+                "{kind:?} should reach `KeyInput`"
             );
         }
     }
