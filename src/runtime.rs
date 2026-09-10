@@ -181,9 +181,11 @@ impl<'a> Application for TearsApp<'a> {
 /// closed the composer on the press and then deselected the timeline on the release
 /// (#531). A repeat is the key still down, so that is input.
 ///
-/// One release is not a key coming up: crossterm reports a Windows Alt code as a
-/// `Release` carrying the composed character, so this drops it. It never typed anything
-/// before either — `tui-textarea` discarded it — and making it work is #537.
+/// Not every release is a key coming up: crossterm reports a Windows Alt code as a
+/// `Release` carrying the composed character, so this drops it — and so does
+/// `handle_key_input`, which refuses releases on its own account. Making it work is
+/// #537, and it has both of those to get past. It never typed anything before either;
+/// `tui-textarea` discarded it further down.
 ///
 /// A free function rather than the closure it replaces, which lived inside
 /// `subscriptions` where no test could drive it.
