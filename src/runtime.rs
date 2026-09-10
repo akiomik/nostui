@@ -181,12 +181,15 @@ impl<'a> Application for TearsApp<'a> {
 /// two notes, `x` closed two tabs (#531). Unix reports presses only, so this changes
 /// nothing there.
 ///
-/// `Repeat` counts as a press because it means the key is still down, which is what
-/// someone holding `j` to scroll is asking for. Nothing produces it today: crossterm
-/// reports that kind only through the kitty keyboard protocol, and nostui never pushes
-/// the enhancement flags that turn it on. Naming it is what keeps holding a key working
-/// if that ever changes, and `KeyEventKind` is a closed enum, so the match stays honest
-/// about all three.
+/// `Repeat` is treated as input for the same reason: it means the key is still down.
+/// That is where the resemblance to a press ends today — the keybinding map is keyed by
+/// `KeyEvent`, whose `Eq` and `Hash` include the kind, and configured bindings are built
+/// with `KeyEvent::new`, which sets `Press`. So a repeat reaches `handle_key_input` and
+/// then matches nothing (#536). Nothing produces one either: crossterm reports that kind
+/// only through the kitty keyboard protocol, which nostui never asks for. It is named
+/// rather than lumped in with `Release` because a repeat *is* someone pressing the key,
+/// and `KeyEventKind` is a closed enum, so saying which of the three is which costs
+/// nothing.
 ///
 /// A free function rather than the closure it replaces: the closure lives inside
 /// `subscriptions`, which no test drives, and the decision above is worth pinning.
@@ -947,9 +950,10 @@ mod tests {
         ));
     }
 
-    /// The other two kinds are the key going down or staying down, which is what a
-    /// binding is for. `Repeat` is unreachable until nostui asks for the kitty
-    /// keyboard protocol; naming it is what keeps holding a key working if it does.
+    /// The other two kinds are the key going down or staying down, and this pins where
+    /// the mapping sends them — not what happens next. A repeat gets no further than
+    /// `handle_key_input` today, since the binding map compares the kind (#536), and is
+    /// unreachable anyway until nostui asks for the kitty keyboard protocol.
     #[test]
     fn test_key_press_and_repeat_are_input() {
         for kind in [KeyEventKind::Press, KeyEventKind::Repeat] {
