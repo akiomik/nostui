@@ -283,12 +283,11 @@ mod tests {
     use super::*;
 
     // Helper function to create test events
-    fn create_test_event(timestamp: u64, id_suffix: u8, content: &str) -> Event {
+    fn create_test_event(timestamp: u64, content: &str) -> Event {
         let keys = Keys::generate();
-        let mut id_bytes = [0u8; 32];
-        id_bytes[31] = id_suffix; // Make each ID unique
 
-        // Create a basic text note event
+        // Create a basic text note event. Each event gets a freshly generated author, so
+        // the ids are distinct without the caller having to arrange it.
         EventBuilder::new(Kind::TextNote, content)
             .custom_created_at(Timestamp::from(timestamp))
             .finalize(&keys)
@@ -377,7 +376,7 @@ mod tests {
     #[test]
     fn note_added_to_home_tab() {
         let mut timeline = Timeline::default();
-        let event = create_test_event(1000, 1, "Hello, Nostr!");
+        let event = create_test_event(1000, "Hello, Nostr!");
         let event_id = event.id;
 
         let _ = timeline.update(Message::NoteAddedToTab {
@@ -394,7 +393,7 @@ mod tests {
     #[test]
     fn note_added_to_nonexistent_tab() {
         let mut timeline = Timeline::default();
-        let event = create_test_event(1000, 1, "Hello, Nostr!");
+        let event = create_test_event(1000, "Hello, Nostr!");
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let _ = timeline.update(Message::NoteAddedToTab {
@@ -416,7 +415,7 @@ mod tests {
         let _ = timeline.update(Message::TabAdded {
             feed: FeedKind::Author(pubkey),
         });
-        let event = create_test_event(1000, 1, "Note");
+        let event = create_test_event(1000, "Note");
         let _ = timeline.update(Message::NoteAddedToTab {
             event,
             feed: FeedKind::Author(pubkey),
@@ -444,7 +443,7 @@ mod tests {
         });
 
         // Add the same event to both tabs
-        let event = create_test_event(1000, 1, "Shared note");
+        let event = create_test_event(1000, "Shared note");
         let event_id = event.id;
 
         let _ = timeline.update(Message::NoteAddedToTab {
@@ -471,9 +470,9 @@ mod tests {
         let mut timeline = Timeline::default();
 
         // Add notes in non-chronological order
-        let event1 = create_test_event(3000, 1, "Newest");
-        let event2 = create_test_event(1000, 2, "Oldest");
-        let event3 = create_test_event(2000, 3, "Middle");
+        let event1 = create_test_event(3000, "Newest");
+        let event2 = create_test_event(1000, "Oldest");
+        let event3 = create_test_event(2000, "Middle");
 
         let _ = timeline.update(Message::NoteAddedToTab {
             event: event2,
@@ -499,7 +498,7 @@ mod tests {
         let mut timeline = Timeline::default();
 
         // Add a text note first
-        let text_event = create_test_event(1000, 1, "Original note");
+        let text_event = create_test_event(1000, "Original note");
         let text_event_id = text_event.id;
 
         let _ = timeline.update(Message::NoteAddedToTab {
@@ -526,7 +525,7 @@ mod tests {
         let mut timeline = Timeline::default();
 
         // Add a reaction to a non-existent note
-        let nonexistent_event = create_test_event(999, 99, "Nonexistent");
+        let nonexistent_event = create_test_event(999, "Nonexistent");
         let reaction_event = create_reaction_event(&nonexistent_event, 1000);
 
         let _ = timeline.update(Message::ReactionAdded {
@@ -542,7 +541,7 @@ mod tests {
         let mut timeline = Timeline::default();
 
         // Add a text note first
-        let text_event = create_test_event(1000, 1, "Original note");
+        let text_event = create_test_event(1000, "Original note");
         let text_event_id = text_event.id;
 
         let _ = timeline.update(Message::NoteAddedToTab {
@@ -569,7 +568,7 @@ mod tests {
         let mut timeline = Timeline::default();
 
         // Add a text note first
-        let text_event = create_test_event(1000, 1, "Original note");
+        let text_event = create_test_event(1000, "Original note");
         let text_event_id = text_event.id;
 
         let _ = timeline.update(Message::NoteAddedToTab {
@@ -595,7 +594,7 @@ mod tests {
 
         // Add some notes
         for i in 0..5 {
-            let event = create_test_event(1000 + i, i as u8, &format!("Note {i}"));
+            let event = create_test_event(1000 + i, &format!("Note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
                 feed: FeedKind::Home,
@@ -617,7 +616,7 @@ mod tests {
 
         // Add some notes
         for i in 0..5 {
-            let event = create_test_event(1000 + i, i as u8, &format!("Note {i}"));
+            let event = create_test_event(1000 + i, &format!("Note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
                 feed: FeedKind::Home,
@@ -648,12 +647,10 @@ mod tests {
         // Two notes, and both ends of the selection checked. With one note at index 0,
         // a `selected_note` that ignored the selection and returned the tab's first
         // note would pass, and the `None` branch would never run.
-        // Newest first, as the tab stores them, so this reads in index order. The
-        // timestamps are what order these; `create_test_event`'s suffix argument looks
-        // like it distinguishes them and does not (#550).
+        // Newest first, as the tab stores them, so this reads in index order.
         let mut ids = Vec::new();
-        for (i, timestamp) in [2000, 1000].into_iter().enumerate() {
-            let event = create_test_event(timestamp, i as u8, "Test note");
+        for timestamp in [2000, 1000] {
+            let event = create_test_event(timestamp, "Test note");
             ids.push(event.id);
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
@@ -678,7 +675,7 @@ mod tests {
     fn note_by_index_finds_a_note_and_is_none_out_of_range() {
         let mut timeline = Timeline::default();
 
-        let event = create_test_event(1000, 1, "Test note");
+        let event = create_test_event(1000, "Test note");
         let event_id = event.id;
 
         let _ = timeline.update(Message::NoteAddedToTab {
@@ -700,7 +697,7 @@ mod tests {
 
         // Add some notes
         for i in 0..3 {
-            let event = create_test_event(1000 + i, i as u8, &format!("Note {i}"));
+            let event = create_test_event(1000 + i, &format!("Note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
                 feed: FeedKind::Home,
@@ -724,7 +721,7 @@ mod tests {
         let mut timeline = Timeline::default();
 
         // Add initial note
-        let event1 = create_test_event(2000, 1, "Recent note");
+        let event1 = create_test_event(2000, "Recent note");
         let _ = timeline.update(Message::NoteAddedToTab {
             event: event1,
             feed: FeedKind::Home,
@@ -739,7 +736,7 @@ mod tests {
         );
 
         // Add an older note (timestamp < loading_more_since)
-        let event2 = create_test_event(1000, 2, "Older note");
+        let event2 = create_test_event(1000, "Older note");
         let _ = timeline.update(Message::NoteAddedToTab {
             event: event2,
             feed: FeedKind::Home,
@@ -761,7 +758,7 @@ mod tests {
 
         // Add some notes
         for i in 0..5 {
-            let event = create_test_event(1000 + i, i as u8, &format!("Note {i}"));
+            let event = create_test_event(1000 + i, &format!("Note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
                 feed: FeedKind::Home,
@@ -992,7 +989,7 @@ mod tests {
         // Add notes to Home tab
         let _ = timeline.update(Message::TabSelected { index: 0 });
         for i in 0..3 {
-            let event = create_test_event(1000 + i, i as u8, &format!("Home note {i}"));
+            let event = create_test_event(1000 + i, &format!("Home note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
                 feed: FeedKind::Home,
@@ -1001,7 +998,7 @@ mod tests {
 
         // Add notes to user timeline tab
         for i in 3..6 {
-            let event = create_test_event(2000 + i, i as u8, &format!("User note {i}"));
+            let event = create_test_event(2000 + i, &format!("User note {i}"));
             let _ = timeline.update(Message::NoteAddedToTab {
                 event,
                 feed: FeedKind::Author(pubkey),
