@@ -233,7 +233,9 @@ composition driver and the only place that bridges the framework:
   in both cases. Tracked in
   [#529](https://github.com/akiomik/nostui/issues/529), along with the other end
   of the same gap: when the source cannot be built at all, its error is itself a
-  message, so the restart it triggers fails and retries with no backoff.
+  message, so the restart it triggers fails and retries with no backoff. The
+  error is the one media message that still redraws, which is the only thing
+  costing that loop anything per iteration until #529 bounds it properly.
 - `view` renders the components against `&AppState`.
 - input handling maps key events to a configured `Action` and then to an `AppMsg`.
 

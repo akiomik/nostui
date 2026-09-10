@@ -411,6 +411,13 @@ impl<'a> TearsApp<'a> {
     /// extend that assertion to whatever nowhear adds next — silently, and with no
     /// periodic repaint left to mask it. `MediaEvent` is not `#[non_exhaustive]`, so
     /// naming them makes the next variant a compile error instead.
+    ///
+    /// The error arm is the exception, and deliberately so. Nothing it does reaches the
+    /// screen either, but it is the one that can repeat: a source that cannot be built
+    /// reports, and the report is what restarts it, so it fails and reports again with
+    /// no backoff (#529). The repaint is the only thing left costing that loop anything
+    /// per iteration. Keeping it is a brake nobody designed, held until #529 fits a real
+    /// one — a wasted render on the rare genuine error is the cheaper mistake.
     fn handle_media_msg(&mut self, msg: Result<MediaEvent, MediaSourceError>) -> Command<AppMsg> {
         match msg {
             Ok(MediaEvent::TrackChanged { track, .. }) => self.state.publish_music_status(track),
@@ -423,7 +430,7 @@ impl<'a> TearsApp<'a> {
             ) => Command::none().without_redraw(),
             Err(e) => {
                 log::error!("media source error: {e}");
-                Command::none().without_redraw()
+                Command::none()
             }
         }
     }
@@ -1020,16 +1027,17 @@ mod tests {
         store.finish();
     }
 
-    /// A media source that cannot be built is logged and nothing else, so it must not
-    /// repaint. It restarts itself as long as it keeps failing (#529); the render is
-    /// the part this can decline.
+    /// A media source error shows nothing, so on its own merits it would decline the
+    /// redraw like its neighbours. It keeps one because the error is what restarts the
+    /// source that produced it, and the repaint is the only per-iteration cost left in
+    /// that loop until #529 bounds it. Pinned so the brake is not removed by tidying.
     #[test]
-    fn test_media_source_error_does_not_redraw() {
+    fn test_media_source_error_keeps_its_redraw_as_a_brake() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
         store.send(AppMsg::Media(Err(MediaSourceError::UnsupportedPlatform)));
 
-        assert!(!store.redraw_requested());
+        assert!(store.redraw_requested());
         store.finish();
     }
 }
