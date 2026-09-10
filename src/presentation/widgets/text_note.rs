@@ -513,7 +513,7 @@ mod tests {
     }
 
     #[test]
-    fn widget_new() -> Result<(), Box<dyn Error>> {
+    fn widget_new_keeps_the_note_it_renders() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Test content")?;
         let text_note = TextNote::new(event);
 

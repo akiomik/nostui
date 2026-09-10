@@ -38,7 +38,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn message_getter() {
+    fn message_returns_what_was_set() {
         let status_bar = StatusBar {
             message: Some("test message".to_string()),
         };
@@ -46,7 +46,7 @@ mod tests {
     }
 
     #[test]
-    fn message_getter_none() {
+    fn message_is_none_until_something_sets_it() {
         let status_bar = StatusBar::default();
         assert_eq!(status_bar.message(), None);
     }

@@ -246,7 +246,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reply_tags_builder_build_root(root_event: Event) -> Result<()> {
+    fn reply_tags_builder_build_root(root_event: Event) -> Result<()> {
         let expected = vec![
             Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
@@ -272,7 +272,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reply_tags_builder_build_reply(reply_event: Event) -> Result<()> {
+    fn reply_tags_builder_build_reply(reply_event: Event) -> Result<()> {
         let expected = vec![
             Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(
@@ -307,7 +307,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reply_tags_builder_build_tag(tag_event: Event) -> Result<()> {
+    fn reply_tags_builder_build_tag(tag_event: Event) -> Result<()> {
         let expected = vec![
             Tag::from(TagStandard::Event {
                 event_id: EventId::from_hex(

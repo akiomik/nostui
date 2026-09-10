@@ -86,7 +86,7 @@ mod tests {
             )
         ])
     ]
-    fn test_parse(#[case] content: &str, #[case] expected: Vec<Reference>) {
+    fn parse_finds_every_reference(#[case] content: &str, #[case] expected: Vec<Reference>) {
         assert_eq!(Reference::find(content), expected);
     }
 }

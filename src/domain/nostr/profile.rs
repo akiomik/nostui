@@ -58,7 +58,7 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn profile_new() {
+    fn profile_new_keeps_what_it_was_built_from() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -78,7 +78,7 @@ mod tests {
     #[case(Metadata::new().display_name(""), None)]
     #[case(Metadata::new().display_name("").name(""), None)]
     #[case(Metadata::new().display_name("").name("hoge"), None)]
-    fn test_display_name(
+    fn display_name_is_only_the_display_name_and_never_blank(
         #[case] metadata: Metadata,
         #[case] expected: Option<&String>,
     ) -> Result<()> {
@@ -98,7 +98,10 @@ mod tests {
     #[case(Metadata::new().display_name("foo"), None)]
     #[case(Metadata::new().name(""), None)]
     #[case(Metadata::new().name("foo").display_name("foo"), Some("@foo".to_owned()))]
-    fn test_name(#[case] metadata: Metadata, #[case] expected: Option<String>) -> Result<()> {
+    fn handle_prefixes_the_name_and_ignores_the_display_name(
+        #[case] metadata: Metadata,
+        #[case] expected: Option<String>,
+    ) -> Result<()> {
         let key = PublicKey::from_str(
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )?;

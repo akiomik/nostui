@@ -314,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn textarea_reference() {
+    fn textarea_exposes_the_buffer_it_holds() {
         let editor = Editor::new();
         let textarea = editor.textarea();
         assert_eq!(textarea.lines().len(), 1);

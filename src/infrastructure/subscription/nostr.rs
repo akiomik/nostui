@@ -747,7 +747,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_first_message_is_ready() {
+    async fn first_message_is_ready() {
         let client = Arc::new(Client::default());
         let nostr_events = NostrEvents::new(client, Keys::generate().public_key(), None);
 
