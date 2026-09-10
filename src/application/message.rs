@@ -42,6 +42,9 @@ pub enum SystemMsg {
     /// anyone asked — crossterm parses them unconditionally, and `enable_raw_mode`
     /// does not clear `ENABLE_MOUSE_INPUT`, which is on by default — so there they do
     /// arrive. Before #527 they became ticks, which the FPS display counted as such.
+    ///
+    /// That is about the events routed *here*. A Windows console also reports key
+    /// releases, which the arm above turns into `KeyInput` like any press — #531.
     TerminalEventIgnored,
     /// Show an error message
     ShowError(String),
