@@ -398,13 +398,20 @@ impl<'a> TearsApp<'a> {
         }
     }
 
+    /// Handle media messages
+    ///
+    /// Only a track change reaches the screen, via the NIP-38 status line. The other
+    /// events nowhear reports — pausing, seeking, changing the volume — are not
+    /// displayed anywhere, and neither is a media source error beyond the log, so both
+    /// decline the redraw they would otherwise cost. Without that, nudging the volume
+    /// of a player nostui is watching repaints the whole timeline.
     fn handle_media_msg(&mut self, msg: Result<MediaEvent, MediaSourceError>) -> Command<AppMsg> {
         match msg {
             Ok(MediaEvent::TrackChanged { track, .. }) => self.state.publish_music_status(track),
-            Ok(_) => Command::none(),
+            Ok(_) => Command::none().without_redraw(),
             Err(e) => {
                 log::error!("media source error: {e}");
-                Command::none()
+                Command::none().without_redraw()
             }
         }
     }
@@ -889,6 +896,34 @@ mod tests {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
         store.send(AppMsg::System(SystemMsg::TerminalEventIgnored));
+
+        assert!(!store.redraw_requested());
+        store.finish();
+    }
+    /// The media events nostui does not display — pausing, seeking, volume — must not
+    /// repaint either. With the tick gone these are the remaining messages that arrive
+    /// without the user touching nostui at all.
+    #[test]
+    fn test_undisplayed_media_event_does_not_redraw() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(AppMsg::Media(Ok(MediaEvent::VolumeChanged {
+            player_name: "Music".to_owned(),
+            volume: 0.5,
+        })));
+
+        assert!(!store.redraw_requested());
+        store.finish();
+    }
+
+    /// A media source that cannot be built is logged and nothing else, so it must not
+    /// repaint. It restarts itself as long as it keeps failing (#529); the render is
+    /// the part this can decline.
+    #[test]
+    fn test_media_source_error_does_not_redraw() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(AppMsg::Media(Err(MediaSourceError::UnsupportedPlatform)));
 
         assert!(!store.redraw_requested());
         store.finish();
