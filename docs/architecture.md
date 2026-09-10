@@ -223,12 +223,15 @@ composition driver and the only place that bridges the framework:
   falls short at both ends, tracked together in
   [#529](https://github.com/akiomik/nostui/issues/529):
   - with `nip-38` enabled on a host where the media source cannot be built, the
-    error it reports restarts the subscription, which fails again — an unbounded
-    retry with no backoff. Not new; the error message, not the tick, always drove
-    that re-evaluation.
+    error it reports is the only thing that re-evaluates the set — and whether
+    that re-evaluation restarts anything is a race, since `reconcile` skips a
+    subscription whose run has not been reflected as finished yet. Win the race
+    and it is an unbounded retry with no backoff; lose it and "now playing" is
+    dead for the session after one log line. Neither outcome is new, but the tick
+    used to make the second one temporary.
   - when the source is built and then dies, the stream ends having reported
-    nothing, so nothing restarts it and "now playing" stops for the rest of the
-    session. This one *is* new: the tick used to re-evaluate within 62 ms.
+    nothing at all, so there is no re-evaluation to race: nothing restarts it.
+    This one *is* new; the tick used to re-evaluate within 62 ms.
 - `view` renders the components against `&AppState`.
 - input handling maps key events to a configured `Action` and then to an `AppMsg`.
 
