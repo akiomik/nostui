@@ -52,6 +52,13 @@ pub enum SystemMsg {
     /// Show an error message
     ShowError(String),
     /// Key input event
+    ///
+    /// The key arrives normalised to what `KeyEvent::new` would build: `kind` is always
+    /// `Press` and `state` is always `NONE`, whatever the terminal reported. Three
+    /// consumers rely on that — the binding map compares both fields, and the composer
+    /// and normal mode's fallback compare neither — so a handler that reads `kind` here
+    /// to tell a held key from a fresh one will see `Press` every time and never fire.
+    /// `terminal_event_to_msg` is where the normalisation happens and why (#536).
     KeyInput(KeyEvent),
 }
 
