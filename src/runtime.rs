@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use nostr_sdk::prelude::*;
 use nowhear::{MediaEvent, MediaSourceError};
 use ratatui::prelude::*;
@@ -123,16 +123,7 @@ impl<'a> Application for TearsApp<'a> {
             ))
             .map(|msg| AppMsg::Nostr(NostrMsg::SubscriptionMessage(msg))),
             Subscription::new(TerminalEvents::new()).map(|result| match result {
-                Ok(event) => {
-                    // Handle different terminal event types
-                    match event {
-                        Event::Key(key) => AppMsg::System(SystemMsg::KeyInput(key)),
-                        Event::Resize(width, height) => {
-                            AppMsg::System(SystemMsg::Resize(width, height))
-                        }
-                        _ => AppMsg::System(SystemMsg::TerminalEventIgnored),
-                    }
-                }
+                Ok(event) => terminal_event_to_msg(event),
                 Err(e) => AppMsg::System(SystemMsg::ShowError(e.to_string())),
             }),
         ];
@@ -179,6 +170,34 @@ impl<'a> Application for TearsApp<'a> {
         }
 
         subs
+    }
+}
+
+/// Map one terminal event to the message it should become.
+///
+/// A key event is input only when the key is going down. A Windows console reports
+/// releases too — crossterm's WinAPI source sets the kind from the record's `key_down`
+/// flag and passes both up — so without this every binding ran twice there: `j` scrolled
+/// two notes, `x` closed two tabs (#531). Unix reports presses only, so this changes
+/// nothing there.
+///
+/// `Repeat` counts as a press because it means the key is still down, which is what
+/// someone holding `j` to scroll is asking for. Nothing produces it today: crossterm
+/// reports that kind only through the kitty keyboard protocol, and nostui never pushes
+/// the enhancement flags that turn it on. Naming it is what keeps holding a key working
+/// if that ever changes, and `KeyEventKind` is a closed enum, so the match stays honest
+/// about all three.
+///
+/// A free function rather than the closure it replaces: the closure lives inside
+/// `subscriptions`, which no test drives, and the decision above is worth pinning.
+fn terminal_event_to_msg(event: Event) -> AppMsg {
+    match event {
+        Event::Key(key) => match key.kind {
+            KeyEventKind::Press | KeyEventKind::Repeat => AppMsg::System(SystemMsg::KeyInput(key)),
+            KeyEventKind::Release => AppMsg::System(SystemMsg::TerminalEventIgnored),
+        },
+        Event::Resize(width, height) => AppMsg::System(SystemMsg::Resize(width, height)),
+        _ => AppMsg::System(SystemMsg::TerminalEventIgnored),
     }
 }
 
@@ -909,6 +928,55 @@ mod tests {
         assert_eq!(store.state().state.timeline.len(), 1);
         assert!(store.redraw_requested());
         store.finish();
+    }
+
+    /// #531: a Windows console reports a release for every press. A release is not
+    /// someone pressing a key, so it must not reach `KeyInput` — before this it did,
+    /// and every binding ran twice there.
+    #[test]
+    fn test_key_release_is_not_input() {
+        let release = KeyEvent::new_with_kind(
+            KeyCode::Char('j'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        );
+
+        assert!(matches!(
+            terminal_event_to_msg(Event::Key(release)),
+            AppMsg::System(SystemMsg::TerminalEventIgnored)
+        ));
+    }
+
+    /// The other two kinds are the key going down or staying down, which is what a
+    /// binding is for. `Repeat` is unreachable until nostui asks for the kitty
+    /// keyboard protocol; naming it is what keeps holding a key working if it does.
+    #[test]
+    fn test_key_press_and_repeat_are_input() {
+        for kind in [KeyEventKind::Press, KeyEventKind::Repeat] {
+            let key = KeyEvent::new_with_kind(KeyCode::Char('j'), KeyModifiers::NONE, kind);
+
+            assert!(
+                matches!(
+                    terminal_event_to_msg(Event::Key(key)),
+                    AppMsg::System(SystemMsg::KeyInput(got)) if got == key
+                ),
+                "{kind:?} should reach the keybindings"
+            );
+        }
+    }
+
+    /// Resizes still route to their own message, and everything else nostui does not
+    /// act on to the one that does nothing.
+    #[test]
+    fn test_other_terminal_events_keep_their_routing() {
+        assert!(matches!(
+            terminal_event_to_msg(Event::Resize(80, 24)),
+            AppMsg::System(SystemMsg::Resize(80, 24))
+        ));
+        assert!(matches!(
+            terminal_event_to_msg(Event::FocusGained),
+            AppMsg::System(SystemMsg::TerminalEventIgnored)
+        ));
     }
 
     /// A terminal event nostui does not act on changes nothing, so it must not
