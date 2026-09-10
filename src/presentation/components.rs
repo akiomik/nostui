@@ -69,16 +69,26 @@ mod tests {
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
 
+    use crate::model::status_bar::Message as StatusBarMessage;
+
     use super::*;
 
     /// #527 removed the FPS counter, and with it the one-line row it was given at
     /// the top of the screen. That line belongs to the timeline now, so the home
     /// component starts at row 0 and the status bar still ends at the bottom.
+    ///
+    /// Both halves matter: dropping the row re-indexed the layout under the status
+    /// bar as well, so a test that only looked at the top would not notice the
+    /// bottom pane moving.
     #[test]
     fn test_home_component_starts_at_the_top_row() {
         let mut terminal = Terminal::new(TestBackend::new(40, 8)).expect("test terminal");
         let mut components = Components::new();
-        let state = AppState::default();
+        let mut state = AppState::default();
+        state.status_bar.update(StatusBarMessage::MessageChanged {
+            label: "Probe".to_owned(),
+            message: "probe message".to_owned(),
+        });
 
         terminal
             .draw(|frame| components.render(frame, &state))
@@ -96,6 +106,11 @@ mod tests {
             row(2).contains("No notes to display"),
             "expected the timeline below it, got: {}",
             row(2)
+        );
+        assert!(
+            row(7).contains("[Probe] probe message"),
+            "expected the status bar on the bottom row, got: {}",
+            row(7)
         );
     }
 }

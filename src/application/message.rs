@@ -32,9 +32,12 @@ pub enum SystemMsg {
     Resize(u16, u16),
     /// A terminal event nostui does not act on
     ///
-    /// The subscription cannot decline to produce a message, so an event with no
-    /// handler becomes this and is dropped here instead. Before #527 it became a
-    /// tick, which counted it as one in the FPS display and redrew for it.
+    /// The mapping from `crossterm::event::Event` has to be total and a subscription
+    /// cannot decline to produce a message, so an event with no handler becomes this
+    /// and is dropped where it is handled. Little is expected to reach it: nostui
+    /// enables neither mouse capture, bracketed paste, nor focus reporting, so those
+    /// are not delivered. Before #527 the same arm produced a tick, which the FPS
+    /// display then counted as one.
     TerminalEventIgnored,
     /// Show an error message
     ShowError(String),

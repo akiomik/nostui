@@ -216,8 +216,7 @@ impl<'a> TearsApp<'a> {
                 Command::none()
             }
             // A terminal event with no handler. Nothing to do and nothing to show, so
-            // the pass ends without a render — which is the whole of what nostui now
-            // asks of the loop when the user is not doing anything.
+            // the pass ends without a render.
             SystemMsg::TerminalEventIgnored => Command::none().without_redraw(),
             SystemMsg::ShowError(error) => self.state.show_error(error),
             SystemMsg::KeyInput(key) => self.handle_key_input(key),
@@ -883,8 +882,8 @@ mod tests {
     }
 
     /// A terminal event nostui does not act on changes nothing, so it must not
-    /// render. Before #527 it was turned into a tick, which counted it in the FPS
-    /// display and redrew for it.
+    /// render. Before #527 this arm produced a tick, which the FPS display counted
+    /// as one and redrew for.
     #[test]
     fn test_ignored_terminal_event_does_not_redraw() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
