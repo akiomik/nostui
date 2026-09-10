@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use nostr_sdk::prelude::*;
 use nowhear::{MediaEvent, MediaSourceError};
 use ratatui::prelude::*;
@@ -123,16 +123,7 @@ impl<'a> Application for TearsApp<'a> {
             ))
             .map(|msg| AppMsg::Nostr(NostrMsg::SubscriptionMessage(msg))),
             Subscription::new(TerminalEvents::new()).map(|result| match result {
-                Ok(event) => {
-                    // Handle different terminal event types
-                    match event {
-                        Event::Key(key) => AppMsg::System(SystemMsg::KeyInput(key)),
-                        Event::Resize(width, height) => {
-                            AppMsg::System(SystemMsg::Resize(width, height))
-                        }
-                        _ => AppMsg::System(SystemMsg::TerminalEventIgnored),
-                    }
-                }
+                Ok(event) => terminal_event_to_msg(event),
                 Err(e) => AppMsg::System(SystemMsg::ShowError(e.to_string())),
             }),
         ];
@@ -179,6 +170,38 @@ impl<'a> Application for TearsApp<'a> {
         }
 
         subs
+    }
+}
+
+/// Map one terminal event to the message it should become.
+///
+/// A key event is input when the key is going down. A Windows console reports releases
+/// too — crossterm takes the kind from the record's `key_down` flag — and nostui acted
+/// on some of them. Not the configured bindings, whose map is keyed by `KeyEvent` and so
+/// compares the kind; the two paths that read the key's code alone. Cancelling a draft
+/// with `Esc` closed the composer on the press, and the release then landed in normal
+/// mode, whose fallback reads `code` and fires `Deselect` (#531).
+///
+/// `Repeat` counts as input, because a repeat is the key still being down. What each
+/// path does with one after that differs, and inconsistently — that is #536, which this
+/// function cannot settle. Nothing reports a repeat today in any case: only the kitty
+/// keyboard protocol does, and nostui never asks for it.
+///
+/// Not every release is a key coming up. crossterm reports a Windows Alt code as a
+/// `Release` carrying the composed character, so the arm below drops it; it never typed
+/// anything before either, since `tui-textarea` discarded it further down. Making it
+/// work is #537, and it starts here.
+///
+/// A free function rather than the closure it replaces: the closure lived inside
+/// `subscriptions`, which no test drives.
+fn terminal_event_to_msg(event: Event) -> AppMsg {
+    match event {
+        Event::Key(key) => match key.kind {
+            KeyEventKind::Press | KeyEventKind::Repeat => AppMsg::System(SystemMsg::KeyInput(key)),
+            KeyEventKind::Release => AppMsg::System(SystemMsg::TerminalEventIgnored),
+        },
+        Event::Resize(width, height) => AppMsg::System(SystemMsg::Resize(width, height)),
+        _ => AppMsg::System(SystemMsg::TerminalEventIgnored),
     }
 }
 
@@ -909,6 +932,58 @@ mod tests {
         assert_eq!(store.state().state.timeline.len(), 1);
         assert!(store.redraw_requested());
         store.finish();
+    }
+
+    /// #531: a Windows console reports a release for every press, and a release is not
+    /// someone pressing a key. Configured bindings were safe — the map they live in
+    /// compares the kind — but the paths matching on the key's code alone were not:
+    /// a release of `Esc` reached normal mode's fallback and deselected the timeline
+    /// behind a draft the press had just cancelled.
+    #[test]
+    fn test_key_release_is_not_input() {
+        let release = KeyEvent::new_with_kind(
+            KeyCode::Char('j'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        );
+
+        assert!(matches!(
+            terminal_event_to_msg(Event::Key(release)),
+            AppMsg::System(SystemMsg::TerminalEventIgnored)
+        ));
+    }
+
+    /// The other two kinds are the key going down or staying down, and this pins where
+    /// the mapping sends them — not what happens next, which the three key paths answer
+    /// differently and inconsistently (#536). All of it is moot until nostui asks for the
+    /// kitty keyboard protocol, which is the only thing that reports a repeat.
+    #[test]
+    fn test_key_press_and_repeat_are_input() {
+        for kind in [KeyEventKind::Press, KeyEventKind::Repeat] {
+            let key = KeyEvent::new_with_kind(KeyCode::Char('j'), KeyModifiers::NONE, kind);
+
+            assert!(
+                matches!(
+                    terminal_event_to_msg(Event::Key(key)),
+                    AppMsg::System(SystemMsg::KeyInput(got)) if got == key
+                ),
+                "{kind:?} should reach `KeyInput`"
+            );
+        }
+    }
+
+    /// Resizes still route to their own message, and everything else nostui does not
+    /// act on to the one that does nothing.
+    #[test]
+    fn test_other_terminal_events_keep_their_routing() {
+        assert!(matches!(
+            terminal_event_to_msg(Event::Resize(80, 24)),
+            AppMsg::System(SystemMsg::Resize(80, 24))
+        ));
+        assert!(matches!(
+            terminal_event_to_msg(Event::FocusGained),
+            AppMsg::System(SystemMsg::TerminalEventIgnored)
+        ));
     }
 
     /// A terminal event nostui does not act on changes nothing, so it must not

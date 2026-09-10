@@ -43,9 +43,11 @@ pub enum SystemMsg {
     /// does not clear `ENABLE_MOUSE_INPUT`, which is on by default — so there they do
     /// arrive. Before #527 they became ticks, which the FPS display counted as such.
     ///
-    /// That is about the events routed *here*. A Windows console also reports key
-    /// releases, and the `Event::Key` arm in `TearsApp::subscriptions` turns those into
-    /// `KeyInput` like any press — #531.
+    /// A Windows console also reports key releases, and those come here too since #531:
+    /// a release is not someone pressing a key. Configured bindings never matched one —
+    /// their map compares the kind — but the paths that read the key's code alone did
+    /// act on it, so cancelling a draft with `Esc` also cleared the timeline selection.
+    /// See `terminal_event_to_msg`.
     TerminalEventIgnored,
     /// Show an error message
     ShowError(String),
