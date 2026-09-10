@@ -86,7 +86,7 @@ mod tests {
             )
         ])
     ]
-    fn find_needs_a_nostr_scheme_not_glued_to_a_word(
+    fn find_extracts_recognised_references_in_order_and_rejects_the_rest(
         #[case] content: &str,
         #[case] expected: Vec<Reference>,
     ) {
