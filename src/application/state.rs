@@ -369,7 +369,21 @@ impl<'a> AppState<'a> {
 
     /// Publish the editor's current content as a text note, or as a NIP-10 reply
     /// when a reply target is set, then reset the editor.
+    /// No-op when the composer is closed.
     pub fn submit_note(&mut self) -> Command<AppMsg> {
+        // A composer that is not open has nothing to submit, and trying costs more than
+        // nothing: `ComposingCanceled` leaves the buffer alone — the next
+        // `ComposingStarted` is what clears it — so a second submission arriving after
+        // the first succeeded would read the same draft and publish the same note again.
+        //
+        // Guarded here rather than where the extra submission comes from, because that
+        // is not one place: a key path can queue two before either is applied, and the
+        // next way to do it need not be a key path at all (#538).
+        if !self.editor.is_active() {
+            log::warn!("Ignoring a note submission: the composer is not open");
+            return Command::none().without_redraw();
+        }
+
         let content = self.editor.get_content();
 
         let event_builder = if let Some(reply_to_event) = self.editor.reply_target() {
@@ -1294,6 +1308,34 @@ mod tests {
         assert_eq!(state.status_bar.message(), Some("[Posted] hi"));
     }
 
+    /// #538: the buffer outlives the composer, so a submission that arrives after the
+    /// editor closed would publish the same note a second time.
+    #[test]
+    fn test_submit_note_publishes_once_when_submitted_twice() {
+        let (mut state, _rx) = connected_state();
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+        let id = only_pending(&state);
+
+        // The composer is closed now, and the draft is still in the buffer.
+        assert!(!state.editor.is_active());
+        assert_eq!(state.editor.get_content(), "h");
+
+        let _ = state.submit_note();
+
+        assert_eq!(
+            only_pending(&state),
+            id,
+            "the second submission published nothing"
+        );
+        assert_eq!(state.status_bar.message(), Some("[Sending] h"));
+    }
+
     #[test]
     fn test_submit_note_as_reply_posts_and_resets_editor() -> Result<()> {
         let (mut state, _rx) = connected_state();
@@ -1566,6 +1608,32 @@ mod tests {
         // the buffer, so there is no way back to it.
         assert!(state.editor.is_active());
         assert_eq!(state.editor.get_content(), "h");
+    }
+
+    /// The other side of #538's guard: it must not block the retry the kept draft
+    /// exists for. A submission that failed before it was sent leaves the composer
+    /// open, so the next one is a first attempt, not a duplicate.
+    #[test]
+    fn a_kept_draft_can_still_be_submitted_again() {
+        let mut state = AppState::new(Keys::generate().public_key());
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        // Not connected: the failure is known before the command is queued.
+        let _ = state.submit_note();
+        assert!(state.editor.is_active());
+        assert!(state.pending_publishes.is_empty());
+
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let _ = state.on_connection_ready(tx);
+        let _ = state.submit_note();
+
+        let _ = only_pending(&state);
+        assert_eq!(state.status_bar.message(), Some("[Sending] h"));
+        assert!(!state.editor.is_active());
     }
 
     #[test]
