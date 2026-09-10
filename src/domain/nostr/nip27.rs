@@ -86,7 +86,7 @@ mod tests {
             )
         ])
     ]
-    fn find_matches_only_delimited_nostr_uris(
+    fn find_needs_a_nostr_scheme_not_glued_to_a_word(
         #[case] content: &str,
         #[case] expected: Vec<Reference>,
     ) {
