@@ -77,6 +77,7 @@ If you need to temporarily background the application:
 - The row that displayed "X.XX ticks per sec (app) X.XX frames per sec (render)" at the top of the screen is gone, and the line it occupied belongs to the timeline
 - `model::fps` and `presentation::widgets::fps` have been removed, along with `AppState::fps` and `AppState::record_tick`
 - With them go the application tick they measured: `SystemMsg::Tick`, the `Timer` subscription, `InitFlags::tick_timer`, and `--tick-rate` (see *Removed: `--tick-rate` command line option* below)
+- `SystemMsg` gains `TerminalEventIgnored` in the same change. A terminal event nostui does not act on used to be reported as a tick; it now has its own variant, which is handled by doing nothing
 
 **Reason:**
 The counter was a debugging aid and a study of what the framework offers; it never drove a decision a user makes. What it did do was keep the process awake.
@@ -91,7 +92,9 @@ The render half of this was already addressed: nostui stopped redrawing for tick
 
 2. **In custom code**: remove references to `state.fps`. There is no equivalent to read.
 
-3. **Constructing `InitFlags`**: drop the `tick_timer` field. A struct literal that still sets it no longer compiles.
+3. **Matching on `SystemMsg`**: an exhaustive `match` needs an arm for `TerminalEventIgnored` as well as the removal of the `Tick` one, or it stops compiling. There is nothing to do in it.
+
+4. **Constructing `InitFlags`**: drop the `tick_timer` field. A struct literal that still sets it no longer compiles.
 
    ```diff
    let init_flags = InitFlags {
