@@ -313,10 +313,13 @@ mod tests {
     #[allow(clippy::unwrap_used)]
     fn iteration_yields_every_inserted_event_in_insertion_order() -> Result<()> {
         let mut events_set = EventSet::new();
+        // Suffixes out of order on purpose: with ascending ids, insertion order and id
+        // order coincide and a `BTreeSet`-by-id reimplementation would pass while
+        // reordering the timeline.
         let test_events = [
-            create_test_event(1, "first")?,
-            create_test_event(2, "second")?,
-            create_test_event(3, "third")?,
+            create_test_event(3, "first")?,
+            create_test_event(1, "second")?,
+            create_test_event(2, "third")?,
         ];
 
         for event in test_events.iter() {
