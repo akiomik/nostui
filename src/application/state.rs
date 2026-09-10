@@ -369,7 +369,7 @@ impl<'a> AppState<'a> {
 
     /// Publish the editor's current content as a text note, or as a NIP-10 reply
     /// when a reply target is set, then reset the editor.
-    /// No-op when the composer is closed.
+    /// No-op when the composer is closed, and refused when the draft is blank.
     pub fn submit_note(&mut self) -> Command<AppMsg> {
         // A composer that is not open has nothing to submit, and trying costs more than
         // nothing: `ComposingCanceled` leaves the buffer alone — the next
@@ -385,6 +385,21 @@ impl<'a> AppState<'a> {
         }
 
         let content = self.editor.get_content();
+
+        // Refused before it costs anything. An empty note is a real event on the relays
+        // that says nothing and cannot be recalled, and `Ctrl+P` on a composer nobody has
+        // typed into is far likelier to be a slip than a request.
+        //
+        // Trimmed only to decide: whitespace and a stray newline are as empty as nothing
+        // at all. What gets published is the content as typed.
+        //
+        // The composer stays open, like the pre-send refusals below, so nothing is lost
+        // and the user can carry on typing — and it says so rather than ignoring the key,
+        // which would read as a broken binding (#540).
+        if content.trim().is_empty() {
+            self.set_status_error(PublishKind::Note.subject(), "nothing to post");
+            return Command::none();
+        }
 
         let event_builder = if let Some(reply_to_event) = self.editor.reply_target() {
             log::info!("Publishing reply: {content}");
@@ -1306,6 +1321,59 @@ mod tests {
         let _ = state.resolve_publish(id, Ok(()));
 
         assert_eq!(state.status_bar.message(), Some("[Posted] hi"));
+    }
+
+    /// #540: an empty note is an event the relays keep and nobody can read.
+    #[test]
+    fn test_submit_note_refuses_an_empty_draft() {
+        let (mut state, _rx) = connected_state();
+
+        state.editor.update(EditorMessage::ComposingStarted);
+
+        let _ = state.submit_note();
+
+        assert!(state.pending_publishes.is_empty(), "nothing was published");
+        assert_eq!(
+            state.status_bar.message(),
+            Some("[ERR: Note] nothing to post")
+        );
+        assert!(state.editor.is_active(), "the composer stays open");
+    }
+
+    /// Whitespace and a stray newline are as empty as nothing at all.
+    #[test]
+    fn test_submit_note_refuses_a_draft_of_only_whitespace() {
+        let (mut state, _rx) = connected_state();
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        for code in [' ', '\t'] {
+            state.editor.update(EditorMessage::KeyEventReceived {
+                event: KeyEvent::new(KeyCode::Char(code), KeyModifiers::NONE),
+            });
+        }
+
+        let _ = state.submit_note();
+
+        assert!(state.pending_publishes.is_empty(), "nothing was published");
+        assert!(state.editor.is_active(), "the composer stays open");
+    }
+
+    /// The other side of it: trimming decides, and does not touch what is sent.
+    #[test]
+    fn test_submit_note_posts_padded_content_as_typed() {
+        let (mut state, _rx) = connected_state();
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        for code in [' ', 'h', 'i', ' '] {
+            state.editor.update(EditorMessage::KeyEventReceived {
+                event: KeyEvent::new(KeyCode::Char(code), KeyModifiers::NONE),
+            });
+        }
+
+        let _ = state.submit_note();
+
+        let _ = only_pending(&state);
+        assert_eq!(state.status_bar.message(), Some("[Sending]  hi "));
     }
 
     /// #538: the buffer outlives the composer, so a submission that arrives after the
