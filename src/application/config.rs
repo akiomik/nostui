@@ -120,7 +120,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn config_loads_relays_or_reports_why_it_cannot() {
+    fn config_new_either_loads_a_key_and_relays_or_says_what_is_missing() {
         // This test needs to be updated to work in an environment where config files exist
         // For now, let's test that Config::new() either succeeds or fails for expected reasons
         match Config::new() {

@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     #[allow(clippy::unwrap_used)]
-    fn iteration_yields_every_inserted_event() -> Result<()> {
+    fn iteration_yields_every_inserted_event_in_insertion_order() -> Result<()> {
         let mut events_set = EventSet::new();
         let test_events = [
             create_test_event(1, "first")?,

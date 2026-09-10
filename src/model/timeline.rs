@@ -761,6 +761,14 @@ mod tests {
         let _ = timeline.update(Message::FirstItemSelected);
         assert!(!timeline.is_at_bottom());
 
+        // Nor anywhere in between: without this the name's "only" is unearned, and an
+        // `is_at_bottom` true from the second note onwards would pass.
+        let _ = timeline.update(Message::ItemSelected { index: 2 });
+        assert!(!timeline.is_at_bottom());
+
+        // Nor anywhere in between: without this the name's "only" is unearned, and an
+        // `is_at_bottom` true from the second note onwards would pass.
+
         // Select last item - at bottom
         let _ = timeline.update(Message::LastItemSelected);
         assert!(timeline.is_at_bottom());

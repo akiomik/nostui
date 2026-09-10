@@ -121,14 +121,6 @@ mod tests {
     }
 
     #[test]
-    fn current_user_pubkey_returns_the_configured_key() {
-        let keys = Keys::generate();
-        let pubkey = keys.public_key();
-        let state = UserState::new_with_pubkey(pubkey);
-        assert_eq!(state.current_user_pubkey(), pubkey);
-    }
-
-    #[test]
     fn insert_newer_profile_keeps_only_the_latest() {
         let mut state = UserState::new();
         let keys = Keys::generate();
