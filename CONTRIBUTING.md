@@ -15,9 +15,10 @@ Everything published is written in English — code, comments, documentation,
 commit messages, and the titles and bodies of pull requests and issues. Where
 something will be read decides it, not what kind of thing it is.
 
-That is about prose somebody wrote to be read. Text a test operates on is data:
-`wrap_text`'s CJK literals are the double-width columns its tests are about, and
-replacing them with ASCII would leave the tests passing and checking nothing.
+That is about prose somebody wrote to be read. Text that a test or a benchmark
+operates on is data: `wrap_text`'s CJK literals are the double-width columns its
+tests and its bench are about, and replacing them with ASCII would leave the
+tests green and the benchmark measuring something else.
 
 ## Commit messages and pull request titles
 
@@ -86,11 +87,10 @@ Three things about the store decide whether such a test works:
 
 - `new` asserts that no Tokio runtime is entered, so the test is a plain
   `#[test]`; `#[tokio::test]` panics.
-- The flag carries the most recent command's directive, so read it immediately
-  after the `send` under test. Anything dispatched afterwards overwrites it.
-- `finish()` ends the test. It checks that every message the store produced was
-  received — on drop if the test never called it, which fails somewhere other
-  than the assertion.
+- Read the flag immediately after the `send` under test. It holds one command's
+  directive, so anything else dispatched is what you read instead.
+- End with `finish()`. Skipping it does not skip the check it makes: the same
+  one runs at drop, and fails there rather than at the assertion.
 
 ## Before you push
 
