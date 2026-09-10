@@ -927,7 +927,7 @@ mod tests {
     /// The positive control for the two below it: a track the NIP-38 line *can*
     /// describe is put on the status bar, so that pass has to redraw. Without this,
     /// swapping the arms in `publish_music_status` would leave both of them passing
-    /// and "Now Playing" invisible on a client with nothing else going on.
+    /// and the now-playing line invisible on a client with nothing else going on.
     #[test]
     fn test_track_the_status_line_shows_redraws() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());

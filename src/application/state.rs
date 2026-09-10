@@ -403,8 +403,8 @@ impl<'a> AppState<'a> {
     pub fn publish_music_status(&mut self, track: Track) -> Command<AppMsg> {
         // Nothing was shown and nothing was sent, so this event needs no repaint. Not a
         // claim that the bar is then right: a rejected track arriving after a valid one
-        // leaves the earlier `[Now Playing]` line standing, along with the relay status
-        // it published. Repainting would only draw that same stale text again — what to
+        // leaves the earlier `NOW_PLAYING_LABEL` line standing, along with the relay
+        // status it published. Repainting would only draw that same stale text again — what to
         // do about superseding it is #521's.
         //
         // Not a rare path either: `MusicStatus::new` also rejects a track with no
