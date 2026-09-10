@@ -220,10 +220,16 @@ mod tests {
     #[test]
     fn clear_profiles_drops_every_profile() {
         let mut state = UserState::new();
-        let keys = Keys::generate();
-        let profile = create_test_profile(keys.public_key(), Timestamp::now());
-        state.insert_newer_profile(profile);
-        assert_eq!(state.profile_count(), 1);
+
+        // More than one, since "every" is what the name claims: draining only the first
+        // entry, or removing a single key, would pass with one and leave stale profiles
+        // on screen after a reset.
+        for _ in 0..3 {
+            let keys = Keys::generate();
+            let profile = create_test_profile(keys.public_key(), Timestamp::now());
+            state.insert_newer_profile(profile);
+        }
+        assert_eq!(state.profile_count(), 3);
 
         state.clear_profiles();
         assert_eq!(state.profile_count(), 0);
