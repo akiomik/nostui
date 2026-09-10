@@ -314,10 +314,10 @@ mod tests {
     }
 
     #[test]
-    fn a_new_editor_has_one_empty_line() {
+    fn textarea_of_a_new_editor_is_one_empty_line() {
         let editor = Editor::new();
         let textarea = editor.textarea();
-        assert_eq!(textarea.lines().len(), 1);
+        assert_eq!(textarea.lines(), [""]);
     }
 
     #[test]
