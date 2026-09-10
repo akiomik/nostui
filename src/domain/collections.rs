@@ -332,7 +332,8 @@ mod tests {
         // any behaviour a user could see. Sorting both sides would guard neither.
         let expected: Vec<_> = test_events.iter().map(|e| e.id).collect();
 
-        // len() reaches the slice through Deref; EventSet defines none of its own.
+        // len() reaches the slice through Deref, EventSet defining none of its own;
+        // first() on the line below is EventSet's own method, not the slice's.
         assert_eq!(events_set.len(), 3);
         assert_eq!(events_set.first().unwrap().content, "first");
 
