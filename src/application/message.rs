@@ -34,10 +34,14 @@ pub enum SystemMsg {
     ///
     /// The mapping from `crossterm::event::Event` has to be total and a subscription
     /// cannot decline to produce a message, so an event with no handler becomes this
-    /// and is dropped where it is handled. Little is expected to reach it: nostui
-    /// enables neither mouse capture, bracketed paste, nor focus reporting, so those
-    /// are not delivered. Before #527 the same arm produced a tick, which the FPS
-    /// display then counted as one.
+    /// and is dropped where it is handled.
+    ///
+    /// How much reaches it depends on the platform. On unix a mouse, paste or focus
+    /// event is delivered only if the application asks for it, and nostui asks for
+    /// none of them. A Windows console reports mouse and focus records whether or not
+    /// anyone asked — crossterm parses them unconditionally, and `enable_raw_mode`
+    /// does not clear `ENABLE_MOUSE_INPUT`, which is on by default — so there they do
+    /// arrive. Before #527 they became ticks, which the FPS display counted as such.
     TerminalEventIgnored,
     /// Show an error message
     ShowError(String),

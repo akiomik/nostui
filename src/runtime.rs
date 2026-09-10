@@ -498,6 +498,7 @@ mod tests {
     use std::borrow::Cow;
 
     use nostr_sdk::prelude::Event as NostrEvent;
+    use nowhear::Track;
     use tears::testing::TestStore;
 
     use super::*;
@@ -900,6 +901,7 @@ mod tests {
         assert!(!store.redraw_requested());
         store.finish();
     }
+
     /// The media events nostui does not display — pausing, seeking, volume — must not
     /// repaint either. With the tick gone these are the remaining messages that arrive
     /// without the user touching nostui at all.
@@ -913,6 +915,31 @@ mod tests {
         })));
 
         assert!(!store.redraw_requested());
+        store.finish();
+    }
+
+    /// A track the NIP-38 status cannot describe is not shown and not sent, so it must
+    /// not repaint either. `MusicStatus::new` rejects a track with no duration, which
+    /// radio and live streams report routinely while their metadata keeps changing.
+    #[test]
+    fn test_track_the_status_line_rejects_does_not_redraw() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(AppMsg::Media(Ok(MediaEvent::TrackChanged {
+            player_name: "Radio".to_owned(),
+            track: Track {
+                title: "Some Stream".to_owned(),
+                artist: vec!["Station".to_owned()],
+                duration: None,
+                album: None,
+                album_artist: vec![],
+                track_number: None,
+                artwork: None,
+            },
+        })));
+
+        assert!(!store.redraw_requested());
+        assert_eq!(store.state().state.status_bar.message(), None);
         store.finish();
     }
 

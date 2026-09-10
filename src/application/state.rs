@@ -328,7 +328,7 @@ impl<'a> AppState<'a> {
         build: fn(&TextNote) -> EventBuilder,
     ) -> Command<AppMsg> {
         let Some(note) = self.timeline.selected_note() else {
-            return Command::none();
+            return Command::none().without_redraw();
         };
 
         let note_id = note.bech32_id();
@@ -398,8 +398,12 @@ impl<'a> AppState<'a> {
     /// would take the indicator away from anyone in read-only mode, and from anyone
     /// whose track changes before the worker is ready.
     pub fn publish_music_status(&mut self, track: Track) -> Command<AppMsg> {
+        // Nothing was shown and nothing was sent, so nothing needs repainting. This is
+        // not a rare path: `MusicStatus::new` also rejects a track with no duration, and
+        // radio and live streams routinely report none while changing metadata as they
+        // play.
         let Some(status) = MusicStatus::new(track) else {
-            return Command::none();
+            return Command::none().without_redraw();
         };
 
         self.set_status(NOW_PLAYING_LABEL, status.content());
