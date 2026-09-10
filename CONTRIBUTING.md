@@ -19,7 +19,7 @@ something will be read decides it, not what kind of thing it is.
 ## Commit messages and pull request titles
 
 [Conventional Commits][cc]: `type: summary`, with `feat`, `fix`, `docs`,
-`refactor`, `perf`, `test`, `build`, `chore` and `revert` as the types. A scope
+`refactor`, `perf`, `test`, `build`, `ci`, `chore` and `revert` as the types. A scope
 is allowed and rarely taken — two commits in the history carry one, beside
 Dependabot's `build(deps)`.
 
@@ -85,8 +85,10 @@ uncommitted work with it.
   `Option`. This one is checked — `Cargo.toml` sets `unwrap_used = "warn"` and
   `just lint` denies warnings — so an `unwrap` fails the lint rather than
   review. Where `?` cannot reach, inside an `rstest` `#[case(...)]` argument for
-  instance, the tree opens the module with `#![allow(clippy::unwrap_used)]`
-  instead of contorting the case.
+  instance, put `#[allow(clippy::unwrap_used)]` on the one test that needs it
+  rather than contorting the case. The module-wide `#![allow(…)]` in
+  `domain::nostr::nip27` covers a whole file of such cases and is the exception;
+  taken by default it also silences every test added to the module later.
 
 ### Where the redraw directive is observable
 
