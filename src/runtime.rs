@@ -245,14 +245,22 @@ impl<'a> TearsApp<'a> {
         // This ensures it works reliably across different terminal emulators and
         // properly separates OS signals from application keybindings
 
+        // A release is not someone pressing a key (#531). `terminal_event_to_msg` routes
+        // those away before they reach here, but refusing them here too is the
+        // difference between a guarantee and a habit — and the normalisation below would
+        // otherwise launder one into a press, which is worse than the bug #531 fixed:
+        // the binding map used to reject a release on its kind, so only the paths
+        // reading the code alone misfired.
+        if key.kind == KeyEventKind::Release {
+            return Command::none().without_redraw();
+        }
+
         // Reduce the key to what `KeyEvent::new` would have built, which is what the
         // keybinding map was parsed from. It compares `kind` and `state` as well as the
         // code and modifiers, and the two paths below compare various subsets, so a key
         // the terminal decorated — a repeat, or anything with Num Lock lit — used to
-        // resolve differently in each of them (#536). Normalised here rather than where
-        // the event is mapped, so it holds for every producer of `KeyInput` rather than
-        // one of them.
-
+        // resolve differently in each of them (#536). Here rather than where the event
+        // is mapped, so it holds for every producer of `KeyInput` rather than one.
         let key = KeyEvent {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
@@ -953,6 +961,48 @@ mod tests {
 
         assert_eq!(store.state().state.timeline.len(), 1);
         assert!(store.redraw_requested());
+        store.finish();
+    }
+
+    /// The mapping's own half of #531: a press and a repeat both become `KeyInput`.
+    ///
+    /// One line, and load-bearing out of proportion to it — every other test here sends
+    /// a `KeyInput` directly, so without this the whole terminal-key route is unguarded
+    /// and routing every key to `TerminalEventIgnored` would leave the suite green. The
+    /// work this branch points at next edits exactly this match (#537, #543).
+    #[test]
+    fn test_a_key_going_down_is_input() {
+        for kind in [KeyEventKind::Press, KeyEventKind::Repeat] {
+            let key = KeyEvent::new_with_kind(KeyCode::Char('j'), KeyModifiers::NONE, kind);
+
+            assert!(
+                matches!(
+                    terminal_event_to_msg(Event::Key(key)),
+                    AppMsg::System(SystemMsg::KeyInput(got)) if got == key
+                ),
+                "{kind:?} should reach `KeyInput`"
+            );
+        }
+    }
+
+    /// The consumer refuses a release too, rather than trusting the mapping to have
+    /// dropped it. A producer that forwarded one raw would otherwise have it normalised
+    /// into a press before the lookup — `f`'s release publishing a reaction, which is
+    /// worse than what #531 fixed.
+    #[test]
+    fn test_the_handler_refuses_a_release_of_its_own_accord() {
+        let f = KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE);
+        let mut store = store_with_binding(f, KeyAction::React);
+
+        store.send(AppMsg::System(SystemMsg::KeyInput(
+            KeyEvent::new_with_kind(
+                KeyCode::Char('f'),
+                KeyModifiers::NONE,
+                KeyEventKind::Release,
+            ),
+        )));
+
+        assert!(!store.redraw_requested());
         store.finish();
     }
 
