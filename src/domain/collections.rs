@@ -314,8 +314,8 @@ mod tests {
     fn iteration_yields_every_inserted_event_in_insertion_order() -> Result<()> {
         let mut events_set = EventSet::new();
         // Suffixes out of order on purpose: with ascending ids, insertion order and id
-        // order coincide and a `BTreeSet`-by-id reimplementation would pass while
-        // reordering the timeline.
+        // order coincide, so the assertions below could not tell the two apart and a
+        // reimplementation over any id-ordered container would pass.
         let test_events = [
             create_test_event(3, "first")?,
             create_test_event(1, "second")?,
@@ -326,9 +326,11 @@ mod tests {
             events_set.insert(event.clone());
         }
 
-        // Unsorted: `EventSet` documents that it preserves insertion order, and nothing
-        // else in the crate pins that. Sorting both sides would let a reimplementation
-        // over a `HashSet` — which would scramble the timeline — pass.
+        // Unsorted, because the type's doc promises insertion order and nothing else in
+        // the crate pins it. No caller observes the order today — `EventSet` holds a
+        // note's reactions, reposts and zap receipts, which are read by two `len()`s and
+        // an order-independent fold — so this guards the documented contract rather than
+        // any behaviour a user could see. Sorting both sides would guard neither.
         let expected: Vec<_> = test_events.iter().map(|e| e.id).collect();
 
         // Deref経由でスライスメソッドを使用

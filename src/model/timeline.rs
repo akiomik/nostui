@@ -648,7 +648,9 @@ mod tests {
         // Two notes, and both ends of the selection checked. With one note at index 0,
         // a `selected_note` that ignored the selection and returned the tab's first
         // note would pass, and the `None` branch would never run.
-        // Newest first, as the tab stores them, so this reads in index order.
+        // Newest first, as the tab stores them, so this reads in index order. The
+        // timestamps are what order these; `create_test_event`'s suffix argument looks
+        // like it distinguishes them and does not (#550).
         let mut ids = Vec::new();
         for (i, timestamp) in [2000, 1000].into_iter().enumerate() {
             let event = create_test_event(timestamp, i as u8, "Test note");
