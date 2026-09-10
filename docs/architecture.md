@@ -217,7 +217,11 @@ composition driver and the only place that bridges the framework:
 - `update` routes an `AppMsg` to the matching `AppState` use case.
 - `subscriptions` wires `NostrEvents`, terminal events, media, and OS signals.
   All of them are event-driven: nostui declares no periodic source, so an idle
-  application runs no update passes.
+  application runs no update passes. One case falls short of that and is not new:
+  with `nip-38` enabled on a host where the media source cannot be built, the
+  error it reports restarts the subscription, which fails again — an unbounded
+  retry with no backoff, tracked in
+  [#529](https://github.com/akiomik/nostui/issues/529).
 - `view` renders the components against `&AppState`.
 - input handling maps key events to a configured `Action` and then to an `AppMsg`.
 
