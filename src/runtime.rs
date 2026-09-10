@@ -508,6 +508,7 @@ impl<'a> TearsApp<'a> {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::time::Duration;
 
     use nostr_sdk::prelude::Event as NostrEvent;
     use nowhear::Track;
@@ -911,6 +912,35 @@ mod tests {
         store.send(AppMsg::System(SystemMsg::TerminalEventIgnored));
 
         assert!(!store.redraw_requested());
+        store.finish();
+    }
+
+    /// The positive control for the two below it: a track the NIP-38 line *can*
+    /// describe is put on the status bar, so that pass has to redraw. Without this,
+    /// swapping the arms in `publish_music_status` would leave both of them passing
+    /// and "Now Playing" invisible on a client with nothing else going on.
+    #[test]
+    fn test_track_the_status_line_shows_redraws() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(AppMsg::Media(Ok(MediaEvent::TrackChanged {
+            player_name: "Music".to_owned(),
+            track: Track {
+                title: "Song".to_owned(),
+                artist: vec!["Artist".to_owned()],
+                duration: Some(Duration::from_secs(180)),
+                album: None,
+                album_artist: vec![],
+                track_number: None,
+                artwork: None,
+            },
+        })));
+
+        assert!(store.redraw_requested());
+        assert_eq!(
+            store.state().state.status_bar.message(),
+            Some("[Music] Song - Artist")
+        );
         store.finish();
     }
 

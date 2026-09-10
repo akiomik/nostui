@@ -221,9 +221,13 @@ composition driver and the only place that bridges the framework:
   That also decides when a subscription that ended is restarted. tears marks the
   declared set dirty on any pass where `update` ran and re-admits whatever is
   declared but not running (`kernel/pass.rs`); a source that merely *finishes*
-  marks nothing by itself. `media` is the one source that can end on its own —
-  its stream ends when the build fails, and on Linux when nowhear's D-Bus task
-  dies afterwards — so it comes back on the next message from anything else. On a
+  marks nothing by itself. `media` is the only source that ends on its own in
+  practice — its stream ends when the build fails, and on Linux when nowhear's
+  D-Bus task dies afterwards — so it comes back on the next message from
+  anything else. (`NostrEvents` ends too, but only when its command channel
+  closes, which `close_connection` does at quit, or on a `ClientNotification::
+  Shutdown` that nostui never asks for; neither leaves an application running
+  without it.) On a
   live feed that is immediate; on a nostui with no traffic and no input there is
   no next message, and it stays stopped. The tick used to make it at most 62 ms
   in both cases. Tracked in
