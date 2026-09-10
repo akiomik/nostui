@@ -369,7 +369,7 @@ impl<'a> AppState<'a> {
 
     /// Publish the editor's current content as a text note, or as a NIP-10 reply
     /// when a reply target is set, then reset the editor.
-    /// No-op when the composer is closed.
+    /// No-op when the composer is closed, and refused when the draft is blank.
     pub fn submit_note(&mut self) -> Command<AppMsg> {
         // A composer that is not open has nothing to submit, and trying costs more than
         // nothing: `ComposingCanceled` leaves the buffer alone — the next
@@ -385,6 +385,26 @@ impl<'a> AppState<'a> {
         }
 
         let content = self.editor.get_content();
+
+        // Refused before it costs anything. An empty note is a real event on the relays
+        // that says nothing and cannot be recalled, and `Ctrl+P` on a composer nobody has
+        // typed into is far likelier to be a slip than a request.
+        //
+        // Trimmed only to decide: whitespace and a stray newline are as empty as nothing
+        // at all. What gets published is the content as typed.
+        //
+        // The composer stays open, like the pre-send refusals below, so nothing is lost
+        // and the user can carry on typing — and it says so rather than ignoring the key,
+        // which would read as a broken binding (#540).
+        if content.trim().is_empty() {
+            // At the level its neighbours use, not the one this deserves: "Ctrl+P did
+            // nothing" gets triaged by grepping the log at warn and above, and a refusal
+            // that only shows at info is missing from exactly that search. The bar is no
+            // help by then — the next status has overwritten it.
+            log::warn!("Refusing to publish a blank note");
+            self.set_status_error(PublishKind::Note.subject(), "nothing to post");
+            return Command::none();
+        }
 
         let event_builder = if let Some(reply_to_event) = self.editor.reply_target() {
             log::info!("Publishing reply: {content}");
@@ -1306,6 +1326,94 @@ mod tests {
         let _ = state.resolve_publish(id, Ok(()));
 
         assert_eq!(state.status_bar.message(), Some("[Posted] hi"));
+    }
+
+    /// #540: an empty note is an event the relays keep and nobody can read.
+    #[test]
+    fn test_submit_note_refuses_an_empty_draft() {
+        let (mut state, _rx) = connected_state();
+
+        state.editor.update(EditorMessage::ComposingStarted);
+
+        let _ = state.submit_note();
+
+        assert!(state.pending_publishes.is_empty(), "nothing was published");
+        assert_eq!(
+            state.status_bar.message(),
+            Some("[ERR: Note] nothing to post")
+        );
+        assert!(state.editor.is_active(), "the composer stays open");
+    }
+
+    /// Whitespace and a stray newline are as empty as nothing at all.
+    ///
+    /// Both shapes, because they are not the same one. Spaces leave a line holding
+    /// whitespace; pressing Enter on an untouched composer leaves two empty lines, which
+    /// `get_content` joins into a bare `"\n"`. Same answer, different buffer.
+    #[test]
+    fn test_submit_note_refuses_a_draft_of_only_whitespace() {
+        for keys in [
+            vec![KeyCode::Char(' '), KeyCode::Char(' ')],
+            vec![KeyCode::Enter],
+        ] {
+            let (mut state, _rx) = connected_state();
+
+            state.editor.update(EditorMessage::ComposingStarted);
+            for code in &keys {
+                state.editor.update(EditorMessage::KeyEventReceived {
+                    event: KeyEvent::new(*code, KeyModifiers::NONE),
+                });
+            }
+
+            // Otherwise this would hold just as well if the keystrokes never landed, and
+            // would be saying "an empty buffer is empty" rather than what it claims.
+            assert!(
+                !state.editor.get_content().is_empty(),
+                "{keys:?} should have reached the buffer"
+            );
+
+            let _ = state.submit_note();
+
+            assert!(
+                state.pending_publishes.is_empty(),
+                "{keys:?} should have published nothing"
+            );
+            assert_eq!(
+                state.status_bar.message(),
+                Some("[ERR: Note] nothing to post")
+            );
+            assert!(state.editor.is_active(), "the composer stays open");
+        }
+    }
+
+    /// The other side of it: trimming decides, and does not touch what is sent.
+    ///
+    /// Asserted on the event handed to the worker, not only on the status line. Both are
+    /// built from the same `content`, so a bar reading `[Sending]  hi ` would go on
+    /// reading that if the builder started trimming — which is the one change this test
+    /// exists to catch. The bar is checked too, since it is what the user sees.
+    #[test]
+    fn test_submit_note_posts_padded_content_as_typed() {
+        let (mut state, mut rx) = connected_state();
+
+        state.editor.update(EditorMessage::ComposingStarted);
+        for code in [' ', 'h', 'i', ' '] {
+            state.editor.update(EditorMessage::KeyEventReceived {
+                event: KeyEvent::new(KeyCode::Char(code), KeyModifiers::NONE),
+            });
+        }
+
+        let _ = state.submit_note();
+
+        let Ok(NostrCommand::SendEventBuilder { event_builder, .. }) = rx.try_recv() else {
+            panic!("the note should have been handed to the worker");
+        };
+        let event = event_builder
+            .finalize(&Keys::generate())
+            .expect("the builder should sign");
+
+        assert_eq!(event.content, " hi ");
+        assert_eq!(state.status_bar.message(), Some("[Sending]  hi "));
     }
 
     /// #538: the buffer outlives the composer, so a submission that arrives after the
