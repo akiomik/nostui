@@ -771,8 +771,12 @@ mod tests {
         assert!(!timeline.is_at_bottom());
 
         // Nor anywhere in between: without this the name's "only" is unearned, and an
-        // `is_at_bottom` true from the second note onwards would pass.
-        let _ = timeline.update(Message::ItemSelected { index: 2 });
+        // `is_at_bottom` true from the second note onwards would pass. Derived from the
+        // notes actually present, so shrinking the loop cannot make it select the last
+        // one and pass vacuously.
+        let middle = timeline.len() / 2;
+        assert!(middle > 0 && middle < timeline.len() - 1, "a middle exists");
+        let _ = timeline.update(Message::ItemSelected { index: middle });
         assert!(!timeline.is_at_bottom());
 
         // Select last item - at bottom

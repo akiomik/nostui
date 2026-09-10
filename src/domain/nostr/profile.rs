@@ -189,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn name_empty_string_display_name_is_skipped() {
+    fn name_keeps_a_whitespace_only_display_name() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
