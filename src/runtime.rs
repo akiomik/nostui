@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 use nostr_sdk::prelude::*;
 use nowhear::{MediaEvent, MediaSourceError};
 use ratatui::prelude::*;
@@ -182,18 +182,25 @@ impl<'a> Application for TearsApp<'a> {
 /// with `Esc` closed the composer on the press, and the release then landed in normal
 /// mode, whose fallback reads `code` and fires `Deselect` (#531).
 ///
-/// A repeat is the key still being down, so it becomes input too — and becomes a press
-/// on the way, because none of the three paths downstream has any use for the
-/// difference and each of them handled it differently before (#536). The binding map
-/// compares the kind and its entries are all `Press`, so a repeat used to match nothing
-/// and holding a key did nothing; the composer and normal mode's fallback read the code
-/// alone and so were already treating the two alike. Normalising here is what makes all
-/// three agree, rather than three separate opinions about a distinction nobody wants.
+/// A repeat is the key still being down, so it becomes input too — and arrives as a
+/// plain press, because none of the three paths downstream has any use for the
+/// difference and each of them handled it differently (#536). The binding map compares
+/// the whole `KeyEvent`, and every entry in it comes from `KeyEvent::new`; the composer
+/// and normal mode's fallback read the code alone. So a key the map should have matched
+/// would miss it and fall through to a fallback that does nothing, while the other two
+/// paths carried on as if it were a press.
 ///
-/// It does mean nothing downstream can tell a held key from a fresh press. That is the
-/// point, and it is where to come back if anything ever needs to — refusing to repeat a
-/// destructive action, say. Nothing reports a repeat today in any case: only the kitty
-/// keyboard protocol does, and nostui never asks for it.
+/// Both of the fields `KeyEvent::new` fixes are reset here, not just the kind. The
+/// kitty keyboard protocol is what reports a repeat, and the same parser fills `state`
+/// from the same modifier mask — `NUM_LOCK` is on by default on most keyboards with a
+/// numpad — so leaving `state` alone would reproduce the miss on the very day repeats
+/// start arriving. Normalising both is what lets the three paths agree by construction.
+///
+/// It does mean nothing downstream can tell a held key from a fresh one, or a numpad key
+/// from its counterpart on the main row. That is the point, and this is where to come
+/// back if anything ever needs to — refusing to repeat a destructive action, say.
+/// Nothing reports a repeat today in any case: nostui never asks for the protocol, so
+/// none of this has bitten anyone yet.
 ///
 /// Not every release is a key coming up. crossterm reports a Windows Alt code as a
 /// `Release` carrying the composed character, so the arm below drops it; it never typed
@@ -208,6 +215,7 @@ fn terminal_event_to_msg(event: Event) -> AppMsg {
             KeyEventKind::Press | KeyEventKind::Repeat => {
                 AppMsg::System(SystemMsg::KeyInput(KeyEvent {
                     kind: KeyEventKind::Press,
+                    state: KeyEventState::NONE,
                     ..key
                 }))
             }
@@ -361,8 +369,10 @@ impl<'a> TearsApp<'a> {
             // System
             KeyAction::Quit => Command::message(AppMsg::System(SystemMsg::Quit)).into(),
             KeyAction::SubmitTextNote => {
-                // Only valid in composing mode, handled separately
-                Command::none()
+                // Only valid in composing mode, handled separately. Declining the redraw
+                // for the same reason the unbound fallback does: this changes nothing,
+                // and the key it is bound to is one somebody can hold down (#536).
+                Command::none().without_redraw()
             }
         }
     }
@@ -992,9 +1002,11 @@ mod tests {
         }
     }
 
-    /// What that buys: holding a key reaches the binding it is configured for. Before
-    /// #536 a repeat hashed differently from the `Press` the config was parsed into, so
-    /// it matched nothing and holding `j` did not scroll.
+    /// What that buys: a key the enhanced protocol decorates still reaches the binding
+    /// it is configured for. Without the normalisation a repeat, or a press carrying
+    /// `NUM_LOCK`, would hash differently from the plain `Press` the config is parsed
+    /// into, match nothing, and fall through to a fallback that does nothing — holding
+    /// `j` would not scroll.
     ///
     /// The binding is put there rather than taken from the shipped defaults, so the test
     /// pins the lookup rather than what `.config/config.json5` happens to say.
@@ -1007,13 +1019,40 @@ mod tests {
         );
         let mut store = TestStore::<TearsApp<'static>>::new(flags);
 
-        store.send(terminal_event_to_msg(Event::Key(KeyEvent::new_with_kind(
-            KeyCode::Char('j'),
-            KeyModifiers::NONE,
-            KeyEventKind::Repeat,
-        ))));
+        // A held key on a keyboard with the numpad lit: both of the fields the map
+        // compares are decorated, and both have to be normalised for this to resolve.
+        store.send(terminal_event_to_msg(Event::Key(
+            KeyEvent::new_with_kind_and_state(
+                KeyCode::Char('j'),
+                KeyModifiers::NONE,
+                KeyEventKind::Repeat,
+                KeyEventState::NUM_LOCK,
+            ),
+        )));
 
         store.receive_matching(|msg| matches!(msg, AppMsg::Timeline(TimelineMsg::ScrollDown)));
+        store.finish();
+    }
+
+    /// `SubmitTextNote` is a no-op outside the composer, and `Ctrl+P` is bound to it in
+    /// normal mode too — so holding it there would repaint per repeat for nothing. Same
+    /// reasoning as the unbound fallback; the fallback's test cannot reach it, because
+    /// this key *is* bound.
+    #[test]
+    fn test_a_bound_key_that_does_nothing_does_not_redraw() {
+        let mut flags = test_flags();
+        flags.config.keybindings.home.insert(
+            vec![KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL)],
+            KeyAction::SubmitTextNote,
+        );
+        let mut store = TestStore::<TearsApp<'static>>::new(flags);
+
+        store.send(AppMsg::System(SystemMsg::KeyInput(KeyEvent::new(
+            KeyCode::Char('p'),
+            KeyModifiers::CONTROL,
+        ))));
+
+        assert!(!store.redraw_requested());
         store.finish();
     }
 
