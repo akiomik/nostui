@@ -397,6 +397,10 @@ impl<'a> AppState<'a> {
         // and the user can carry on typing — and it says so rather than ignoring the key,
         // which would read as a broken binding (#540).
         if content.trim().is_empty() {
+            // Logged like the refusals around it, so "Ctrl+P did nothing" is answerable
+            // from the log rather than only from the bar, which the next status
+            // overwrites.
+            log::info!("Refusing to publish a blank note");
             self.set_status_error(PublishKind::Note.subject(), "nothing to post");
             return Command::none();
         }
@@ -1346,15 +1350,26 @@ mod tests {
         let (mut state, _rx) = connected_state();
 
         state.editor.update(EditorMessage::ComposingStarted);
-        for code in [' ', '\t'] {
+        for code in [' ', ' '] {
             state.editor.update(EditorMessage::KeyEventReceived {
                 event: KeyEvent::new(KeyCode::Char(code), KeyModifiers::NONE),
             });
         }
 
+        // Otherwise this would hold just as well if the keystrokes never landed, and
+        // would be saying "an empty buffer is empty" rather than what it claims.
+        assert!(
+            !state.editor.get_content().is_empty(),
+            "the whitespace reached the buffer"
+        );
+
         let _ = state.submit_note();
 
         assert!(state.pending_publishes.is_empty(), "nothing was published");
+        assert_eq!(
+            state.status_bar.message(),
+            Some("[ERR: Note] nothing to post")
+        );
         assert!(state.editor.is_active(), "the composer stays open");
     }
 
