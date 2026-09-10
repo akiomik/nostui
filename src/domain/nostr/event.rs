@@ -158,7 +158,7 @@ mod tests {
     }
 
     #[test]
-    fn find_event_id_from_last_e_tag_reads_the_e_tag() {
+    fn find_event_id_from_last_e_tag_finds_the_only_one() {
         let keys = Keys::generate();
         let target_id = EventId::from_byte_array([0; EventId::LEN]);
 
@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn find_event_id_from_last_e_tag_multiple_tags() {
+    fn find_event_id_from_last_e_tag_takes_the_last_of_several() {
         let keys = Keys::generate();
         let first_id = EventId::from_byte_array([0; EventId::LEN]);
         let last_id = EventId::from_slice(&[1u8; 32]).expect("Valid event ID");
@@ -188,7 +188,7 @@ mod tests {
     }
 
     #[test]
-    fn find_event_id_from_last_e_tag_no_tags() {
+    fn find_event_id_from_last_e_tag_is_none_without_one() {
         let keys = Keys::generate();
 
         let event = EventBuilder::new(Kind::Reaction, "+")

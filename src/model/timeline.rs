@@ -332,7 +332,7 @@ mod tests {
     }
 
     #[test]
-    fn a_default_timeline_is_one_empty_tab() {
+    fn timeline_default_is_one_empty_tab() {
         let timeline = Timeline::default();
 
         assert_eq!(timeline.tabs().len(), 1);
