@@ -768,21 +768,17 @@ mod tests {
             });
         }
 
-        // Select first item - not at bottom
-        let _ = timeline.update(Message::FirstItemSelected);
-        assert!(!timeline.is_at_bottom());
+        // Every index but the last, rather than a sample of them: "only" is not earned
+        // by checking the first and one in the middle, since `selected_index >= len - 2`
+        // would pass that and report the bottom a note early, firing the load-more path
+        // before the user reaches it.
+        let last = timeline.len() - 1;
+        for index in 0..last {
+            let _ = timeline.update(Message::ItemSelected { index });
+            assert!(!timeline.is_at_bottom(), "index {index} of {last}");
+        }
 
-        // Nor anywhere in between: without this the name's "only" is unearned, and an
-        // `is_at_bottom` true from the second note onwards would pass. Derived from the
-        // notes actually present, so shrinking the loop cannot make it select the last
-        // one and pass vacuously.
-        let middle = timeline.len() / 2;
-        assert!(middle > 0 && middle < timeline.len() - 1, "a middle exists");
-        let _ = timeline.update(Message::ItemSelected { index: middle });
-        assert!(!timeline.is_at_bottom());
-
-        // Select last item - at bottom
-        let _ = timeline.update(Message::LastItemSelected);
+        let _ = timeline.update(Message::ItemSelected { index: last });
         assert!(timeline.is_at_bottom());
     }
 
