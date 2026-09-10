@@ -200,15 +200,19 @@ impl<'a> Application for TearsApp<'a> {
 /// rather than ends here.
 ///
 /// `Repeat` is treated as input for the same reason: it means the key is still down.
-/// What comes of that depends on the mode. Composing reads `(code, modifiers)` and never
-/// the kind, and `tui-textarea` drops only `Release`, so a held key types repeats the way
-/// it should. Normal mode looks the binding up in a map keyed by `KeyEvent`, whose `Eq`
-/// and `Hash` include the kind, against entries built by `KeyEvent::new` — `Press` — so
-/// there a repeat matches nothing (#536). Nothing produces one today in either mode:
-/// crossterm reports that kind only through the kitty keyboard protocol, which nostui
-/// never asks for. It is named rather than lumped in with `Release` because a repeat *is*
-/// someone pressing the key, and `KeyEventKind` is a closed enum, so saying which of the
-/// three is which costs nothing.
+/// What comes of that depends on which path takes it, and the three do not agree —
+/// which is #536, not something this function can settle. Configured bindings live in a
+/// map keyed by `KeyEvent`, whose `Eq` and `Hash` include the kind, against entries
+/// built by `KeyEvent::new` — `Press` — so a repeat matches nothing there. Composing
+/// never consults that map: its `Esc` and `Ctrl+P` arms read `(code, modifiers)` alone,
+/// so a repeat fires them again, and everything else reaches `tui-textarea`, which drops
+/// only `Release` and so types the repeat as it should. Nothing produces one today in
+/// any of them: crossterm reports that kind only through the kitty keyboard protocol,
+/// which nostui never asks for.
+///
+/// It is named rather than lumped in with `Release` because a repeat *is* someone
+/// pressing the key, and `KeyEventKind` is a closed enum, so saying which of the three
+/// is which costs nothing.
 ///
 /// A free function rather than the closure it replaces: the closure lives inside
 /// `subscriptions`, which no test drives, and the decision above is worth pinning.
@@ -972,9 +976,9 @@ mod tests {
     }
 
     /// The other two kinds are the key going down or staying down, and this pins where
-    /// the mapping sends them — not what happens next, which differs by mode: a repeat
-    /// types normally while composing, and resolves to no binding in normal mode (#536).
-    /// Both are moot until nostui asks for the kitty keyboard protocol.
+    /// the mapping sends them — not what happens next, which the three key paths answer
+    /// differently and inconsistently (#536). All of it is moot until nostui asks for the
+    /// kitty keyboard protocol, which is the only thing that reports a repeat.
     #[test]
     fn test_key_press_and_repeat_are_input() {
         for kind in [KeyEventKind::Press, KeyEventKind::Repeat] {
