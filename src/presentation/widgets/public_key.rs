@@ -36,7 +36,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new() -> Result<()> {
+    fn new_keeps_the_key() -> Result<()> {
         let key = NostrPublicKey::from_str(
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )?;
@@ -48,7 +48,7 @@ mod tests {
     }
 
     #[test]
-    fn test_shortened() -> Result<()> {
+    fn shortened_renders_the_npub_head_and_tail() -> Result<()> {
         let key = NostrPublicKey::from_str(
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )?;
@@ -59,7 +59,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_public_key_to_text() -> Result<()> {
+    fn from_public_key_to_text() -> Result<()> {
         let key = NostrPublicKey::from_str(
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )?;
@@ -73,7 +73,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_public_key_widget() -> Result<()> {
+    fn render_public_key_widget() -> Result<()> {
         let key = NostrPublicKey::from_str(
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )?;
@@ -102,7 +102,7 @@ mod tests {
     }
 
     #[test]
-    fn test_shortened_format_consistency() -> Result<()> {
+    fn shortened_format_consistency() -> Result<()> {
         // Test multiple keys to ensure consistent formatting
         let keys = vec![
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",

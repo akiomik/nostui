@@ -332,7 +332,7 @@ mod tests {
     }
 
     #[test]
-    fn test_timeline_default() {
+    fn timeline_default_is_one_empty_tab() {
         let timeline = Timeline::default();
 
         assert_eq!(timeline.tabs().len(), 1);
@@ -344,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn test_active_tab() {
+    fn active_tab_starts_as_an_empty_home_tab() {
         let timeline = Timeline::default();
         let active_tab = timeline.active_tab();
 
@@ -353,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_tab_by_feed() {
+    fn find_tab_by_feed_returns_the_index_or_none() {
         let mut timeline = Timeline::default();
 
         // Home tab should be at index 0
@@ -375,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_added_to_home_tab() {
+    fn note_added_to_home_tab() {
         let mut timeline = Timeline::default();
         let event = create_test_event(1000, 1, "Hello, Nostr!");
         let event_id = event.id;
@@ -392,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_added_to_nonexistent_tab() {
+    fn note_added_to_nonexistent_tab() {
         let mut timeline = Timeline::default();
         let event = create_test_event(1000, 1, "Hello, Nostr!");
 
@@ -408,7 +408,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_empty_reflects_active_tab() {
+    fn is_empty_reflects_active_tab() {
         let mut timeline = Timeline::default();
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
 
@@ -434,7 +434,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_added_shared_storage() {
+    fn note_added_shared_storage() {
         let mut timeline = Timeline::default();
 
         // Add a user timeline tab
@@ -467,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_notes_sorting() {
+    fn multiple_notes_sorting() {
         let mut timeline = Timeline::default();
 
         // Add notes in non-chronological order
@@ -495,7 +495,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reaction_added() {
+    fn reaction_added() {
         let mut timeline = Timeline::default();
 
         // Add a text note first
@@ -522,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reaction_added_to_nonexistent_note() {
+    fn reaction_added_to_nonexistent_note() {
         let mut timeline = Timeline::default();
 
         // Add a reaction to a non-existent note
@@ -538,7 +538,7 @@ mod tests {
     }
 
     #[test]
-    fn test_repost_added() {
+    fn repost_added() {
         let mut timeline = Timeline::default();
 
         // Add a text note first
@@ -565,7 +565,7 @@ mod tests {
     }
 
     #[test]
-    fn test_zap_receipt_added() {
+    fn zap_receipt_added() {
         let mut timeline = Timeline::default();
 
         // Add a text note first
@@ -590,7 +590,7 @@ mod tests {
     }
 
     #[test]
-    fn test_item_selection() {
+    fn item_selection() {
         let mut timeline = Timeline::default();
 
         // Add some notes
@@ -612,7 +612,7 @@ mod tests {
     }
 
     #[test]
-    fn test_navigation_through_items() {
+    fn navigation_through_items() {
         let mut timeline = Timeline::default();
 
         // Add some notes
@@ -642,29 +642,40 @@ mod tests {
     }
 
     #[test]
-    fn test_selected_note() {
+    fn selected_note_follows_the_selection() {
         let mut timeline = Timeline::default();
 
-        let event = create_test_event(1000, 1, "Test note");
-        let event_id = event.id;
+        // Two notes, and both ends of the selection checked. With one note at index 0,
+        // a `selected_note` that ignored the selection and returned the tab's first
+        // note would pass, and the `None` branch would never run.
+        // Newest first, as the tab stores them, so this reads in index order. The
+        // timestamps are what order these; `create_test_event`'s suffix argument looks
+        // like it distinguishes them and does not (#550).
+        let mut ids = Vec::new();
+        for (i, timestamp) in [2000, 1000].into_iter().enumerate() {
+            let event = create_test_event(timestamp, i as u8, "Test note");
+            ids.push(event.id);
+            let _ = timeline.update(Message::NoteAddedToTab {
+                event,
+                feed: FeedKind::Home,
+            });
+        }
 
-        let _ = timeline.update(Message::NoteAddedToTab {
-            event,
-            feed: FeedKind::Home,
-        });
-
-        let _ = timeline.update(Message::ItemSelected { index: 0 });
-
-        let selected = timeline.selected_note();
-        assert!(selected.is_some());
-        assert_eq!(
-            selected.expect("Should have selected note").as_event().id,
-            event_id
+        assert!(
+            timeline.selected_note().is_none(),
+            "nothing is selected yet"
         );
+
+        for (index, id) in ids.iter().enumerate() {
+            let _ = timeline.update(Message::ItemSelected { index });
+
+            let selected = timeline.selected_note().expect("a note is selected");
+            assert_eq!(selected.as_event().id, *id, "index {index}");
+        }
     }
 
     #[test]
-    fn test_note_by_index() {
+    fn note_by_index_finds_a_note_and_is_none_out_of_range() {
         let mut timeline = Timeline::default();
 
         let event = create_test_event(1000, 1, "Test note");
@@ -684,7 +695,7 @@ mod tests {
     }
 
     #[test]
-    fn test_loading_more_started_when_scrolling_to_bottom() {
+    fn loading_more_started_when_scrolling_to_bottom() {
         let mut timeline = Timeline::default();
 
         // Add some notes
@@ -709,7 +720,7 @@ mod tests {
     }
 
     #[test]
-    fn test_loading_more_completes_when_older_event_arrives() {
+    fn loading_more_completes_when_older_event_arrives() {
         let mut timeline = Timeline::default();
 
         // Add initial note
@@ -742,7 +753,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_at_bottom() {
+    fn is_at_bottom_only_on_the_last_note() {
         let mut timeline = Timeline::default();
 
         // Empty timeline is not at bottom
@@ -757,17 +768,27 @@ mod tests {
             });
         }
 
-        // Select first item - not at bottom
-        let _ = timeline.update(Message::FirstItemSelected);
-        assert!(!timeline.is_at_bottom());
+        // Pins what the loop above is assumed to have produced. `notes` is a set, so
+        // events that collided would leave fewer than five, and the loop below would
+        // quietly check fewer indices while still passing — the weakening this catches.
+        assert_eq!(timeline.len(), 5);
 
-        // Select last item - at bottom
-        let _ = timeline.update(Message::LastItemSelected);
+        // Every index but the last, rather than a sample of them: "only" is not earned
+        // by checking the first and one in the middle, since `selected_index >= len - 2`
+        // would pass that and report the bottom a note early, firing the load-more path
+        // before the user reaches it.
+        let last = timeline.len() - 1;
+        for index in 0..last {
+            let _ = timeline.update(Message::ItemSelected { index });
+            assert!(!timeline.is_at_bottom(), "index {index} of {last}");
+        }
+
+        let _ = timeline.update(Message::ItemSelected { index: last });
         assert!(timeline.is_at_bottom());
     }
 
     #[test]
-    fn test_tab_added() {
+    fn tab_added() {
         let mut timeline = Timeline::default();
         assert_eq!(timeline.tabs().len(), 1);
 
@@ -782,7 +803,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_added_duplicate() {
+    fn tab_added_duplicate() {
         let mut timeline = Timeline::default();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
@@ -800,7 +821,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_removed() {
+    fn tab_removed() {
         let mut timeline = Timeline::default();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
@@ -819,7 +840,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_removed_cannot_remove_home() {
+    fn tab_removed_cannot_remove_home() {
         let mut timeline = Timeline::default();
 
         // Try to remove the Home tab
@@ -831,7 +852,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_removed_out_of_bounds() {
+    fn tab_removed_out_of_bounds() {
         let mut timeline = Timeline::default();
 
         // Try to remove a non-existent tab
@@ -842,7 +863,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_removed_adjusts_active_index() {
+    fn tab_removed_adjusts_active_index() {
         let mut timeline = Timeline::default();
 
         let pubkey1 = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
@@ -868,7 +889,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_removed_active_tab() {
+    fn tab_removed_active_tab() {
         let mut timeline = Timeline::default();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
@@ -888,7 +909,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_selected() {
+    fn tab_selected() {
         let mut timeline = Timeline::default();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
@@ -906,7 +927,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_selected_out_of_bounds() {
+    fn tab_selected_out_of_bounds() {
         let mut timeline = Timeline::default();
 
         let _ = timeline.update(Message::TabSelected { index: 10 });
@@ -916,7 +937,7 @@ mod tests {
     }
 
     #[test]
-    fn test_next_tab_selected() {
+    fn next_tab_selected() {
         let mut timeline = Timeline::default();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
@@ -938,7 +959,7 @@ mod tests {
     }
 
     #[test]
-    fn test_previous_tab_selected() {
+    fn previous_tab_selected() {
         let mut timeline = Timeline::default();
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
@@ -959,7 +980,7 @@ mod tests {
     }
 
     #[test]
-    fn test_complex_scenario_multiple_tabs_and_notes() {
+    fn complex_scenario_multiple_tabs_and_notes() {
         let mut timeline = Timeline::default();
 
         // Add a user timeline tab
@@ -1007,7 +1028,7 @@ mod tests {
     }
 
     #[test]
-    fn test_last_tab_index() {
+    fn last_tab_index_follows_the_tab_count() {
         let mut timeline = Timeline::default();
         assert_eq!(timeline.last_tab_index(), 0);
 

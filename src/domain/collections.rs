@@ -208,14 +208,14 @@ mod tests {
     }
 
     #[test]
-    fn test_new_collection_is_empty() {
+    fn new_collection_is_empty() {
         let events = EventSet::new();
         assert!(events.is_empty());
         assert_eq!(events.len(), 0);
     }
 
     #[test]
-    fn test_insert_new_event_returns_true() -> Result<()> {
+    fn insert_new_event_returns_true() -> Result<()> {
         let mut events = EventSet::new();
         let event = create_test_event(1, "test content")?;
 
@@ -229,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_duplicate_event_returns_false() -> Result<()> {
+    fn insert_duplicate_event_returns_false() -> Result<()> {
         let mut events = EventSet::new();
         let event = create_test_event(1, "test content")?;
 
@@ -247,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_different_events_both_added() -> Result<()> {
+    fn insert_different_events_both_added() -> Result<()> {
         let mut events = EventSet::new();
         let event1 = create_test_event(1, "first event")?;
         let event2 = create_test_event(2, "second event")?;
@@ -263,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn test_push_is_alias_for_insert() -> Result<()> {
+    fn push_is_alias_for_insert() -> Result<()> {
         let mut events = EventSet::new();
         let event = create_test_event(1, "test content")?;
 
@@ -275,7 +275,7 @@ mod tests {
     }
 
     #[test]
-    fn test_duplicate_event_with_different_content() -> Result<()> {
+    fn duplicate_event_with_different_content() -> Result<()> {
         let mut events = EventSet::new();
 
         // 同じEventIdで異なるコンテンツのイベントを作成
@@ -311,35 +311,45 @@ mod tests {
 
     #[test]
     #[allow(clippy::unwrap_used)]
-    fn test_iteration() -> Result<()> {
+    fn iteration_yields_every_inserted_event_in_insertion_order() -> Result<()> {
         let mut events_set = EventSet::new();
+        // Suffixes out of order on purpose: with ascending ids, insertion order and id
+        // order coincide, so the assertions below could not tell the two apart and a
+        // reimplementation over any id-ordered container would pass.
         let test_events = [
-            create_test_event(1, "first")?,
-            create_test_event(2, "second")?,
-            create_test_event(3, "third")?,
+            create_test_event(3, "first")?,
+            create_test_event(1, "second")?,
+            create_test_event(2, "third")?,
         ];
 
         for event in test_events.iter() {
             events_set.insert(event.clone());
         }
 
+        // Unsorted, because the type's doc promises insertion order and nothing else in
+        // the crate pins it. No caller observes the order today — `EventSet` holds a
+        // note's reactions, reposts and zap receipts, which are read by two `len()`s and
+        // an order-independent fold — so this guards the documented contract rather than
+        // any behaviour a user could see. Sorting both sides would guard neither.
+        let expected: Vec<_> = test_events.iter().map(|e| e.id).collect();
+
         // Deref経由でスライスメソッドを使用
         assert_eq!(events_set.len(), 3);
         assert_eq!(events_set.first().unwrap().content, "first");
 
         // iter()でのイテレーション（Deref経由）
-        let collected: Vec<_> = events_set.iter().collect();
-        assert_eq!(collected.len(), 3);
+        let collected: Vec<_> = events_set.iter().map(|e| e.id).collect();
+        assert_eq!(collected, expected);
 
         // into_iter()でのイテレーション
         let ids: Vec<_> = events_set.into_iter().map(|e| e.id).collect();
-        assert_eq!(ids.len(), 3);
+        assert_eq!(ids, expected);
 
         Ok(())
     }
 
     #[test]
-    fn test_clear() -> Result<()> {
+    fn clear_empties_the_collection() -> Result<()> {
         let mut events = EventSet::new();
         let event = create_test_event(1, "test")?;
 
@@ -355,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_traits() -> Result<()> {
+    fn standard_traits() -> Result<()> {
         let mut events = EventSet::new();
         let event1 = create_test_event(1, "first")?;
         let event2 = create_test_event(2, "second")?;
@@ -383,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn test_internal_consistency() -> Result<()> {
+    fn internal_consistency() -> Result<()> {
         let mut events = EventSet::new();
 
         // 複数のイベントを追加 (1-10)
@@ -410,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn test_performance_and_capacity() -> Result<()> {
+    fn performance_and_capacity() -> Result<()> {
         let mut events = EventSet::with_capacity(256);
         assert_eq!(events.capacity(), 256);
 

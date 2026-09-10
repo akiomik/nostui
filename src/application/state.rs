@@ -896,7 +896,7 @@ mod tests {
     }
 
     #[test]
-    fn test_app_state_default() {
+    fn app_state_default() {
         let state = AppState::default();
 
         assert_eq!(state.timeline.len(), 0);
@@ -905,7 +905,7 @@ mod tests {
     }
 
     #[test]
-    fn test_startup_mark_completed() {
+    fn startup_mark_completed() {
         let mut startup = Startup::default();
         startup.mark_completed();
         assert!(!startup.is_in_progress());
@@ -916,7 +916,7 @@ mod tests {
     }
 
     #[test]
-    fn test_app_state_new_with_pubkey() {
+    fn app_state_new_with_pubkey() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let state = AppState::new(pubkey);
@@ -926,7 +926,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_nostr_event_for_tab_text_note_routes_to_specified_tab() -> Result<()> {
+    fn process_nostr_event_for_tab_text_note_routes_to_specified_tab() -> Result<()> {
         let current_user_pubkey = Keys::generate().public_key();
         let mut state = AppState::new(current_user_pubkey);
 
@@ -960,7 +960,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_nostr_event_for_tab_propagates_timeline_command() -> Result<()> {
+    fn process_nostr_event_for_tab_propagates_timeline_command() -> Result<()> {
         let mut state = AppState::new(Keys::generate().public_key());
 
         let event = create_text_note(&Keys::generate(), "hello", Timestamp::from(1000))?;
@@ -974,7 +974,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_nostr_event_for_tab_text_note_sets_status_when_load_more_completed_home(
+    fn process_nostr_event_for_tab_text_note_sets_status_when_load_more_completed_home(
     ) -> Result<()> {
         let current_user_pubkey = Keys::generate().public_key();
         let mut state = AppState::new(current_user_pubkey);
@@ -1014,7 +1014,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_nostr_event_for_tab_text_note_sets_status_when_load_more_completed_user_timeline(
+    fn process_nostr_event_for_tab_text_note_sets_status_when_load_more_completed_user_timeline(
     ) -> Result<()> {
         let current_user_pubkey = Keys::generate().public_key();
         let mut state = AppState::new(current_user_pubkey);
@@ -1058,7 +1058,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_nostr_event_for_tab_metadata_inserts_profile_when_valid_json() -> Result<()> {
+    fn process_nostr_event_for_tab_metadata_inserts_profile_when_valid_json() -> Result<()> {
         let current_user_pubkey = Keys::generate().public_key();
         let mut state = AppState::new(current_user_pubkey);
 
@@ -1086,7 +1086,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_nostr_event_for_tab_metadata_ignores_invalid_json() -> Result<()> {
+    fn process_nostr_event_for_tab_metadata_ignores_invalid_json() -> Result<()> {
         let current_user_pubkey = Keys::generate().public_key();
         let mut state = AppState::new(current_user_pubkey);
 
@@ -1106,7 +1106,7 @@ mod tests {
     }
 
     #[test]
-    fn test_open_author_timeline_switches_to_existing_tab() {
+    fn open_author_timeline_switches_to_existing_tab() {
         let mut state = AppState::new(Keys::generate().public_key());
         let author_pubkey = Keys::generate().public_key();
         let feed = FeedKind::Author(author_pubkey);
@@ -1128,7 +1128,7 @@ mod tests {
     }
 
     #[test]
-    fn test_open_author_timeline_creates_new_tab_and_shows_loading() {
+    fn open_author_timeline_creates_new_tab_and_shows_loading() {
         let mut state = AppState::new(Keys::generate().public_key());
         let author_pubkey = Keys::generate().public_key();
         let Ok(author_npub) = author_pubkey.to_bech32();
@@ -1146,7 +1146,7 @@ mod tests {
     }
 
     #[test]
-    fn test_open_mention_tab_switches_to_existing_tab() {
+    fn open_mention_tab_switches_to_existing_tab() {
         let mut state = AppState::new(Keys::generate().public_key());
         let feed = FeedKind::Mention;
 
@@ -1167,7 +1167,7 @@ mod tests {
     }
 
     #[test]
-    fn test_open_mention_tab_creates_new_tab_and_shows_loading() {
+    fn open_mention_tab_creates_new_tab_and_shows_loading() {
         let mut state = AppState::new(Keys::generate().public_key());
         let feed = FeedKind::Mention;
 
@@ -1180,7 +1180,7 @@ mod tests {
     }
 
     #[test]
-    fn test_close_current_tab_removes_active_tab() {
+    fn close_current_tab_removes_active_tab() {
         let mut state = AppState::new(Keys::generate().public_key());
         let author_pubkey = Keys::generate().public_key();
         let feed = FeedKind::Author(author_pubkey);
@@ -1195,7 +1195,7 @@ mod tests {
     }
 
     #[test]
-    fn test_close_current_tab_keeps_home_tab() {
+    fn close_current_tab_keeps_home_tab() {
         let mut state = AppState::new(Keys::generate().public_key());
         assert_eq!(state.timeline.active_tab().feed(), &FeedKind::Home);
 
@@ -1207,7 +1207,7 @@ mod tests {
     }
 
     #[test]
-    fn test_react_to_selected_without_selection_is_noop() {
+    fn react_to_selected_without_selection_is_noop() {
         let mut state = AppState::new(Keys::generate().public_key());
 
         let command = state.react_to_selected();
@@ -1217,7 +1217,7 @@ mod tests {
     }
 
     #[test]
-    fn test_react_to_selected_sets_status() -> Result<()> {
+    fn react_to_selected_sets_status() -> Result<()> {
         let (mut state, _rx) = connected_state();
         let keys = Keys::generate();
 
@@ -1246,7 +1246,7 @@ mod tests {
     }
 
     #[test]
-    fn test_repost_selected_sets_status() -> Result<()> {
+    fn repost_selected_sets_status() -> Result<()> {
         let (mut state, _rx) = connected_state();
         let keys = Keys::generate();
 
@@ -1275,7 +1275,7 @@ mod tests {
     }
 
     #[test]
-    fn test_start_reply_without_selection_is_noop() {
+    fn start_reply_without_selection_is_noop() {
         let mut state = AppState::new(Keys::generate().public_key());
 
         let _ = state.start_reply();
@@ -1285,7 +1285,7 @@ mod tests {
     }
 
     #[test]
-    fn test_start_reply_sets_reply_context() -> Result<()> {
+    fn start_reply_sets_reply_context() -> Result<()> {
         let keys = Keys::generate();
         let mut state = AppState::new(keys.public_key());
 
@@ -1302,7 +1302,7 @@ mod tests {
     }
 
     #[test]
-    fn test_submit_note_posts_content_and_resets_editor() {
+    fn submit_note_posts_content_and_resets_editor() {
         let (mut state, _rx) = connected_state();
 
         // Compose "hi" in the editor.
@@ -1330,7 +1330,7 @@ mod tests {
 
     /// #540: an empty note is an event the relays keep and nobody can read.
     #[test]
-    fn test_submit_note_refuses_an_empty_draft() {
+    fn submit_note_refuses_an_empty_draft() {
         let (mut state, _rx) = connected_state();
 
         state.editor.update(EditorMessage::ComposingStarted);
@@ -1351,7 +1351,7 @@ mod tests {
     /// whitespace; pressing Enter on an untouched composer leaves two empty lines, which
     /// `get_content` joins into a bare `"\n"`. Same answer, different buffer.
     #[test]
-    fn test_submit_note_refuses_a_draft_of_only_whitespace() {
+    fn submit_note_refuses_a_draft_of_only_whitespace() {
         for keys in [
             vec![KeyCode::Char(' '), KeyCode::Char(' ')],
             vec![KeyCode::Enter],
@@ -1393,7 +1393,7 @@ mod tests {
     /// reading that if the builder started trimming — which is the one change this test
     /// exists to catch. The bar is checked too, since it is what the user sees.
     #[test]
-    fn test_submit_note_posts_padded_content_as_typed() {
+    fn submit_note_posts_padded_content_as_typed() {
         let (mut state, mut rx) = connected_state();
 
         state.editor.update(EditorMessage::ComposingStarted);
@@ -1419,7 +1419,7 @@ mod tests {
     /// #538: the buffer outlives the composer, so a submission that arrives after the
     /// editor closed would publish the same note a second time.
     #[test]
-    fn test_submit_note_publishes_once_when_submitted_twice() {
+    fn submit_note_publishes_once_when_submitted_twice() {
         let (mut state, _rx) = connected_state();
 
         state.editor.update(EditorMessage::ComposingStarted);
@@ -1445,7 +1445,7 @@ mod tests {
     }
 
     #[test]
-    fn test_submit_note_as_reply_posts_and_resets_editor() -> Result<()> {
+    fn submit_note_as_reply_posts_and_resets_editor() -> Result<()> {
         let (mut state, _rx) = connected_state();
         let keys = Keys::generate();
 
@@ -1474,7 +1474,7 @@ mod tests {
     }
 
     #[test]
-    fn test_publish_music_status_sets_status() {
+    fn publish_music_status_sets_status() {
         let (mut state, _rx) = connected_state();
 
         let _ = state.publish_music_status(create_track("Song"));
@@ -1549,7 +1549,7 @@ mod tests {
     }
 
     #[test]
-    fn test_publish_music_status_ignores_invalid_track() {
+    fn publish_music_status_ignores_invalid_track() {
         let mut state = AppState::new(Keys::generate().public_key());
 
         // A track with an empty title cannot form a status, so nothing happens.
@@ -1559,7 +1559,7 @@ mod tests {
     }
 
     #[test]
-    fn test_on_connection_ready_marks_ready_and_shows_loading() {
+    fn on_connection_ready_marks_ready_and_shows_loading() {
         let mut state = AppState::new(Keys::generate().public_key());
         let (tx, _rx) = mpsc::unbounded_channel();
 
@@ -1570,7 +1570,7 @@ mod tests {
     }
 
     #[test]
-    fn test_route_relay_event_routes_to_owning_tab() -> Result<()> {
+    fn route_relay_event_routes_to_owning_tab() -> Result<()> {
         let keys = Keys::generate();
         let mut state = AppState::new(keys.public_key());
 
@@ -1593,7 +1593,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_more_timeline_without_events_is_noop() {
+    fn load_more_timeline_without_events_is_noop() {
         let mut state = AppState::new(Keys::generate().public_key());
 
         // No events => no oldest timestamp => nothing to paginate.
@@ -1603,7 +1603,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_more_timeline_sets_loading_status() -> Result<()> {
+    fn load_more_timeline_sets_loading_status() -> Result<()> {
         let keys = Keys::generate();
         let mut state = AppState::new(keys.public_key());
 
@@ -1618,7 +1618,7 @@ mod tests {
     }
 
     #[test]
-    fn test_route_relay_event_ignores_untracked_subscription() -> Result<()> {
+    fn route_relay_event_ignores_untracked_subscription() -> Result<()> {
         let keys = Keys::generate();
         let mut state = AppState::new(keys.public_key());
 
@@ -1905,7 +1905,7 @@ mod tests {
     }
 
     #[test]
-    fn test_on_connection_ready_dispatches_nothing() {
+    fn on_connection_ready_dispatches_nothing() {
         let (_state, mut rx) = connected_state();
 
         // Becoming ready must not, by itself, send any command.
@@ -1913,7 +1913,7 @@ mod tests {
     }
 
     #[test]
-    fn test_open_author_timeline_dispatches_subscribe() {
+    fn open_author_timeline_dispatches_subscribe() {
         let (mut state, mut rx) = connected_state();
         let author_pubkey = Keys::generate().public_key();
 
@@ -1928,7 +1928,7 @@ mod tests {
     }
 
     #[test]
-    fn test_close_current_tab_dispatches_unsubscribe() {
+    fn close_current_tab_dispatches_unsubscribe() {
         let (mut state, mut rx) = connected_state();
         let feed = FeedKind::Author(Keys::generate().public_key());
         let sub_id = SubscriptionId::new("author_sub");
@@ -1951,7 +1951,7 @@ mod tests {
     }
 
     #[test]
-    fn test_react_to_selected_dispatches_send_event() -> Result<()> {
+    fn react_to_selected_dispatches_send_event() -> Result<()> {
         let (mut state, mut rx) = connected_state();
         let keys = Keys::generate();
 
@@ -1970,7 +1970,7 @@ mod tests {
     }
 
     #[test]
-    fn test_repost_selected_dispatches_send_event() -> Result<()> {
+    fn repost_selected_dispatches_send_event() -> Result<()> {
         let (mut state, mut rx) = connected_state();
         let keys = Keys::generate();
 
@@ -1989,7 +1989,7 @@ mod tests {
     }
 
     #[test]
-    fn test_submit_note_dispatches_send_event() {
+    fn submit_note_dispatches_send_event() {
         let (mut state, mut rx) = connected_state();
 
         state.editor.update(EditorMessage::ComposingStarted);
@@ -2006,7 +2006,7 @@ mod tests {
     }
 
     #[test]
-    fn test_publish_music_status_dispatches_send_event() {
+    fn publish_music_status_dispatches_send_event() {
         let (mut state, mut rx) = connected_state();
 
         let _ = state.publish_music_status(create_track("Song"));
@@ -2018,7 +2018,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_more_timeline_dispatches_load_more() -> Result<()> {
+    fn load_more_timeline_dispatches_load_more() -> Result<()> {
         // Regression guard for #458: the status-only test passed while the
         // `LoadMore` dispatch was missing.
         let (mut state, mut rx) = connected_state();
@@ -2041,7 +2041,7 @@ mod tests {
     }
 
     #[test]
-    fn test_close_connection_dispatches_shutdown() {
+    fn close_connection_dispatches_shutdown() {
         let (mut state, mut rx) = connected_state();
 
         let _ = state.close_connection();
@@ -2050,7 +2050,7 @@ mod tests {
     }
 
     #[test]
-    fn test_show_error_sets_error_status() {
+    fn show_error_sets_error_status() {
         let mut state = AppState::new(Keys::generate().public_key());
 
         let _ = state.show_error("boom".to_owned());
@@ -2059,7 +2059,7 @@ mod tests {
     }
 
     #[test]
-    fn test_notify_subscription_error_sets_error_status() {
+    fn notify_subscription_error_sets_error_status() {
         let mut state = AppState::new(Keys::generate().public_key());
 
         let _ = state.notify_subscription_error(CommandError::AddRelayFailed {
@@ -2075,7 +2075,7 @@ mod tests {
     /// `disconntected` — this very comment carries that spelling and still lints
     /// clean. So the spelling is asserted here instead of left to the linter.
     #[test]
-    fn test_notify_subscription_shutdown_says_disconnected() {
+    fn notify_subscription_shutdown_says_disconnected() {
         let mut state = AppState::new(Keys::generate().public_key());
 
         let _ = state.notify_subscription_shutdown();

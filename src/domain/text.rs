@@ -68,84 +68,84 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_wrap_text_no_wrap_alnum() {
+    fn wrap_text_no_wrap_alnum() {
         let actual = wrap_text("hello, world!", 13);
         let expected = "hello, world!";
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn test_wrap_text_wrap_alnum() {
+    fn wrap_text_wrap_alnum() {
         let actual = wrap_text("hello, world!", 4);
         let expected = "hell\no, w\norld\n!";
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn test_wrap_text_no_wrap_double_width() {
+    fn wrap_text_no_wrap_double_width() {
         let actual = wrap_text("こんにちは、世界！", 18);
         let expected = "こんにちは、世界！";
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn test_wrap_text_wrap_double_width() {
+    fn wrap_text_wrap_double_width() {
         let actual = wrap_text("こんにちは、世界！", 7);
         let expected = "こんに\nちは、\n世界！";
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn test_wrap_text_no_wrap_emoji() {
+    fn wrap_text_no_wrap_emoji() {
         let actual = wrap_text("🫲🫱🫲🫱🫲🫱", 12);
         let expected = "🫲🫱🫲🫱🫲🫱";
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn test_wrap_text_wrap_emoji() {
+    fn wrap_text_wrap_emoji() {
         let actual = wrap_text("🫲🫱🫲🫱🫲🫱", 5);
         let expected = "🫲🫱\n🫲🫱\n🫲🫱";
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn test_wrap_text_zero_width() {
+    fn wrap_text_zero_width() {
         let actual = wrap_text("hello, world!", 0);
         let expected = "";
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn test_truncate_text_no_truncate() {
+    fn truncate_text_no_truncate() {
         let actual = truncate_text("foo\nbar\nbaz", 3);
         let expected = "foo\nbar\nbaz";
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn test_truncate_text_truncate() {
+    fn truncate_text_truncate() {
         let actual = truncate_text("foo\nbar\nbaz", 2);
         let expected = "foo\n...";
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn test_truncate_text_single_line() {
+    fn truncate_text_single_line() {
         let actual = truncate_text("foo\nbar", 1);
         let expected = "...";
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn test_truncate_text_zero_height() {
+    fn truncate_text_zero_height() {
         let actual = truncate_text("foo\nbar\nbaz", 0);
         let expected = "";
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn test_shorten_npub() {
+    fn shorten_npub_shortens_an_npub_and_leaves_a_hex_key() {
         assert_eq!(
             shorten_npub("npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug"),
             "f5uuy:mjmug"

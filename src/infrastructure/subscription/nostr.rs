@@ -747,7 +747,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_first_message_is_ready() {
+    async fn first_message_is_ready() {
         let client = Arc::new(Client::default());
         let nostr_events = NostrEvents::new(client, Keys::generate().public_key(), None);
 
@@ -763,7 +763,7 @@ mod tests {
     }
 
     #[test]
-    fn test_subscription_key_uses_arc_pointer() {
+    fn subscription_key_uses_arc_pointer() {
         use tears::SubscriptionSource;
 
         let client = Arc::new(Client::default());
@@ -798,7 +798,7 @@ mod tests {
     }
 
     #[test]
-    fn test_subscription_key_different_clients() {
+    fn subscription_key_different_clients() {
         use tears::SubscriptionSource;
 
         // Create two separate clients with different Arcs
@@ -827,7 +827,7 @@ mod tests {
     }
 
     #[test]
-    fn test_subscription_key_different_arc_instances() {
+    fn subscription_key_different_arc_instances() {
         use tears::SubscriptionSource;
 
         let client = Client::default();

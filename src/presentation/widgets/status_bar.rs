@@ -86,7 +86,7 @@ mod tests {
     }
 
     #[test]
-    fn test_status_bar_widget_new() {
+    fn status_bar_widget_new() {
         let pubkey = create_test_pubkey();
         let status_bar = StatusBar::default();
         let ctx = ViewContext {
@@ -99,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_name_with_display_name() {
+    fn user_name_with_display_name() {
         let pubkey = create_test_pubkey();
         let profile = create_test_profile(pubkey, Some("Alice"), Some("alice"));
         let status_bar = StatusBar::default();
@@ -112,7 +112,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_name_with_handle_only() {
+    fn user_name_with_handle_only() {
         let pubkey = create_test_pubkey();
         let profile = create_test_profile(pubkey, None, Some("alice"));
         let status_bar = StatusBar::default();
@@ -125,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_name_without_profile() {
+    fn user_name_without_profile() {
         let pubkey = create_test_pubkey();
         let status_bar = StatusBar::default();
         let ctx = ViewContext {
@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_name_with_empty_profile_metadata() {
+    fn user_name_with_empty_profile_metadata() {
         let pubkey = create_test_pubkey();
         let profile = create_test_profile(pubkey, None, None);
         let status_bar = StatusBar::default();
@@ -155,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_name_with_empty_string_display_name() {
+    fn user_name_with_empty_string_display_name() {
         let pubkey = create_test_pubkey();
         let profile = create_test_profile(pubkey, Some(""), Some("alice"));
         let status_bar = StatusBar::default();
@@ -169,7 +169,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_name_with_empty_string_name() {
+    fn user_name_with_empty_string_name() {
         let pubkey = create_test_pubkey();
         let profile = create_test_profile(pubkey, Some("Alice"), Some(""));
         let status_bar = StatusBar::default();
@@ -183,7 +183,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_name_priority() {
+    fn user_name_priority() {
         let pubkey = create_test_pubkey();
         // Test priority: display_name > handle > npub
         let profile = create_test_profile(pubkey, Some("Display Name"), Some("handle"));
@@ -197,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_does_not_panic() {
+    fn render_does_not_panic() {
         let pubkey = create_test_pubkey();
         let status_bar = StatusBar::default();
         let ctx = ViewContext {
@@ -213,7 +213,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_with_message() {
+    fn render_with_message() {
         let pubkey = create_test_pubkey();
         let mut status_bar = StatusBar::default();
         status_bar.update(Message::MessageChanged {
@@ -240,7 +240,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_with_error_message() {
+    fn render_with_error_message() {
         let pubkey = create_test_pubkey();
         let mut status_bar = StatusBar::default();
         status_bar.update(Message::ErrorMessageChanged {
@@ -267,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_with_profile() {
+    fn render_with_profile() {
         let pubkey = create_test_pubkey();
         let profile = create_test_profile(pubkey, Some("Alice"), Some("alice"));
         let status_bar = StatusBar::default();
@@ -291,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_empty_message() {
+    fn render_empty_message() {
         let pubkey = create_test_pubkey();
         let status_bar = StatusBar::default();
         let ctx = ViewContext {
@@ -314,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_small_area() {
+    fn render_small_area() {
         let pubkey = create_test_pubkey();
         let status_bar = StatusBar::default();
         let ctx = ViewContext {
@@ -330,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_large_area() {
+    fn render_large_area() {
         let pubkey = create_test_pubkey();
         let mut status_bar = StatusBar::default();
         status_bar.update(Message::MessageChanged {

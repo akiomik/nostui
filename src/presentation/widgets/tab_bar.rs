@@ -74,7 +74,7 @@ mod tests {
     }
 
     #[test]
-    fn test_view_context_clone() {
+    fn view_context_clone() {
         let profiles = HashMap::new();
         let ctx = ViewContext {
             profiles: &profiles,
@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_bar_widget_new() {
+    fn tab_bar_widget_new() {
         let timeline = Timeline::default();
         let profiles = HashMap::new();
         let ctx = ViewContext {
@@ -95,7 +95,7 @@ mod tests {
     }
 
     #[test]
-    fn test_titles_single_home_tab() {
+    fn titles_single_home_tab() {
         let timeline = Timeline::default();
         let profiles = HashMap::new();
         let ctx = ViewContext {
@@ -108,7 +108,7 @@ mod tests {
     }
 
     #[test]
-    fn test_titles_multiple_tabs() {
+    fn titles_multiple_tabs() {
         let mut timeline = Timeline::default();
         let pubkey = create_test_pubkey();
 
@@ -131,7 +131,7 @@ mod tests {
     }
 
     #[test]
-    fn test_titles_with_profile_display_name() {
+    fn titles_with_profile_display_name() {
         let mut timeline = Timeline::default();
         let pubkey = create_test_pubkey();
 
@@ -158,7 +158,7 @@ mod tests {
     }
 
     #[test]
-    fn test_titles_with_profile_handle_only() {
+    fn titles_with_profile_handle_only() {
         let mut timeline = Timeline::default();
         let pubkey = create_test_pubkey();
 
@@ -181,7 +181,7 @@ mod tests {
     }
 
     #[test]
-    fn test_titles_with_empty_profile_metadata() {
+    fn titles_with_empty_profile_metadata() {
         let mut timeline = Timeline::default();
         let pubkey = create_test_pubkey();
 
@@ -206,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn test_titles_multiple_user_tabs() {
+    fn titles_multiple_user_tabs() {
         let mut timeline = Timeline::default();
         let pubkey1 = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let pubkey2 = PublicKey::from_slice(&[2u8; 32]).expect("Valid pubkey");
@@ -242,7 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_does_not_panic() {
+    fn render_does_not_panic() {
         let timeline = Timeline::default();
         let profiles = HashMap::new();
         let ctx = ViewContext {
@@ -257,7 +257,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_with_multiple_tabs() {
+    fn render_with_multiple_tabs() {
         let mut timeline = Timeline::default();
         let pubkey = create_test_pubkey();
 
@@ -290,7 +290,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_with_active_tab() {
+    fn render_with_active_tab() {
         let mut timeline = Timeline::default();
         let pubkey = create_test_pubkey();
 
@@ -315,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_small_area() {
+    fn render_small_area() {
         let timeline = Timeline::default();
         let profiles = HashMap::new();
         let ctx = ViewContext {
@@ -330,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_large_area() {
+    fn render_large_area() {
         let timeline = Timeline::default();
         let profiles = HashMap::new();
         let ctx = ViewContext {
@@ -345,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_zero_height() {
+    fn render_zero_height() {
         let timeline = Timeline::default();
         let profiles = HashMap::new();
         let ctx = ViewContext {
@@ -360,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_switching_tabs() {
+    fn render_switching_tabs() {
         let mut timeline = Timeline::default();
         let pubkey = create_test_pubkey();
 

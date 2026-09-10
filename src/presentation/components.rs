@@ -81,7 +81,7 @@ mod tests {
     /// bar as well, so a test that only looked at the top would not notice the
     /// bottom pane moving.
     #[test]
-    fn test_home_component_starts_at_the_top_row() {
+    fn home_component_starts_at_the_top_row() {
         let mut terminal = Terminal::new(TestBackend::new(40, 8)).expect("test terminal");
         let mut components = Components::new();
         let mut state = AppState::default();

@@ -62,7 +62,7 @@ mod tests {
     use color_eyre::eyre::Result;
 
     #[test]
-    fn test_sortable_event_id_creation() {
+    fn sortable_event_id_creation() {
         let event_id = EventId::from_byte_array([0; EventId::LEN]);
         let timestamp = Timestamp::from(1000);
 
@@ -73,7 +73,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sortable_event_id_from_event() -> Result<()> {
+    fn sortable_event_id_from_event() -> Result<()> {
         let keys = Keys::generate();
         let timestamp = Timestamp::from(1234567890);
 
@@ -90,7 +90,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sortable_event_id_ordering_by_timestamp() {
+    fn sortable_event_id_ordering_by_timestamp() {
         let event_id1 = EventId::from_byte_array([0; EventId::LEN]);
         let event_id2 = EventId::from_slice(&[1u8; 32]).expect("Valid event ID");
 
@@ -103,7 +103,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sortable_event_id_ordering_by_id_when_same_timestamp() {
+    fn sortable_event_id_ordering_by_id_when_same_timestamp() {
         let timestamp = Timestamp::from(1000);
         let event_id1 = EventId::from_slice(&[0u8; 32]).expect("Valid event ID");
         let event_id2 = EventId::from_slice(&[1u8; 32]).expect("Valid event ID");
@@ -117,7 +117,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sortable_event_id_equality() {
+    fn sortable_event_id_equality() {
         let event_id = EventId::from_byte_array([0; EventId::LEN]);
         let timestamp = Timestamp::from(1000);
 
@@ -128,7 +128,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sortable_event_id_in_reverse_sorted_set() {
+    fn sortable_event_id_in_reverse_sorted_set() {
         use sorted_vec::ReverseSortedSet;
         use std::cmp::Reverse;
 
@@ -158,7 +158,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_event_id_from_last_e_tag() {
+    fn find_event_id_from_last_e_tag_finds_the_only_one() {
         let keys = Keys::generate();
         let target_id = EventId::from_byte_array([0; EventId::LEN]);
 
@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_event_id_from_last_e_tag_multiple_tags() {
+    fn find_event_id_from_last_e_tag_takes_the_last_of_several() {
         let keys = Keys::generate();
         let first_id = EventId::from_byte_array([0; EventId::LEN]);
         let last_id = EventId::from_slice(&[1u8; 32]).expect("Valid event ID");
@@ -188,7 +188,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_event_id_from_last_e_tag_no_tags() {
+    fn find_event_id_from_last_e_tag_is_none_without_one() {
         let keys = Keys::generate();
 
         let event = EventBuilder::new(Kind::Reaction, "+")

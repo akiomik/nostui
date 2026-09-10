@@ -204,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn test_formatted_created_at_produces_wall_clock() -> Result<(), Box<dyn Error>> {
+    fn formatted_created_at_produces_wall_clock() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Test")?;
         let text_note = TextNote::new(event);
 
@@ -227,7 +227,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mentioned_names_with_profiles() -> Result<(), Box<dyn Error>> {
+    fn mentioned_names_with_profiles() -> Result<(), Box<dyn Error>> {
         let mentioned_keys = Keys::generate();
         let p_tag = Tag::public_key(mentioned_keys.public_key());
         let event = create_test_event_with_tags("Mentioning someone", vec![p_tag])?;
@@ -255,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mentioned_names_without_profiles() -> Result<(), Box<dyn Error>> {
+    fn mentioned_names_without_profiles() -> Result<(), Box<dyn Error>> {
         let mentioned_keys = Keys::generate();
         let p_tag = Tag::public_key(mentioned_keys.public_key());
         let event = create_test_event_with_tags("Mentioning someone", vec![p_tag])?;
@@ -279,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mentioned_names_multiple_mentions() -> Result<(), Box<dyn Error>> {
+    fn mentioned_names_multiple_mentions() -> Result<(), Box<dyn Error>> {
         let keys1 = Keys::generate();
         let keys2 = Keys::generate();
         let keys3 = Keys::generate();
@@ -318,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mentioned_names_empty() -> Result<(), Box<dyn Error>> {
+    fn mentioned_names_empty() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("No mentions")?;
         let text_note = TextNote::new(event);
 
@@ -338,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fixed_lines_without_reply() -> Result<(), Box<dyn Error>> {
+    fn fixed_lines_without_reply() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Not a reply")?;
         let text_note = TextNote::new(event);
 
@@ -358,7 +358,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fixed_lines_with_reply() -> Result<(), Box<dyn Error>> {
+    fn fixed_lines_with_reply() -> Result<(), Box<dyn Error>> {
         let original_event = create_test_event("Original")?;
         let reply_event =
             create_test_event_with_tags("Reply", vec![Tag::event(original_event.id)])?;
@@ -380,7 +380,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_height_without_reply() -> Result<(), Box<dyn Error>> {
+    fn calculate_height_without_reply() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Short content")?;
         let text_note = TextNote::new(event);
 
@@ -405,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_height_with_reply() -> Result<(), Box<dyn Error>> {
+    fn calculate_height_with_reply() -> Result<(), Box<dyn Error>> {
         let original_event = create_test_event("Original")?;
         let reply_event =
             create_test_event_with_tags("Reply", vec![Tag::event(original_event.id)])?;
@@ -432,7 +432,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_height_with_padding() -> Result<(), Box<dyn Error>> {
+    fn calculate_height_with_padding() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Test")?;
         let text_note = TextNote::new(event);
 
@@ -461,7 +461,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_height_long_content() -> Result<(), Box<dyn Error>> {
+    fn calculate_height_long_content() -> Result<(), Box<dyn Error>> {
         let long_content = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(10);
         let event = create_test_event(&long_content)?;
         let text_note = TextNote::new(event);
@@ -486,7 +486,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_truncates_content_taller_than_area() -> Result<(), Box<dyn Error>> {
+    fn render_truncates_content_taller_than_area() -> Result<(), Box<dyn Error>> {
         // Content that wraps to more lines than (area.height - fixed_lines)
         // should be truncated with "..." in the rendered output.
         let long_content = "x ".repeat(400); // many words that wrap to many lines
@@ -513,7 +513,7 @@ mod tests {
     }
 
     #[test]
-    fn test_widget_new() -> Result<(), Box<dyn Error>> {
+    fn widget_new_keeps_the_note_it_renders() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Test content")?;
         let text_note = TextNote::new(event);
 
@@ -534,7 +534,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_does_not_panic() -> Result<(), Box<dyn Error>> {
+    fn render_does_not_panic() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Test render")?;
         let text_note = TextNote::new(event);
 
@@ -556,7 +556,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_with_reply_tag() -> Result<(), Box<dyn Error>> {
+    fn render_with_reply_tag() -> Result<(), Box<dyn Error>> {
         let original_event = create_test_event("Original")?;
         let reply_event =
             create_test_event_with_tags("Reply content", vec![Tag::event(original_event.id)])?;
@@ -580,7 +580,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_with_client_tag() -> Result<(), Box<dyn Error>> {
+    fn render_with_client_tag() -> Result<(), Box<dyn Error>> {
         let client_tag = Tag::from(Nip89Tag::Client {
             name: String::from("TestClient"),
             address: None,

@@ -86,7 +86,10 @@ mod tests {
             )
         ])
     ]
-    fn test_parse(#[case] content: &str, #[case] expected: Vec<Reference>) {
+    fn find_extracts_recognised_references_in_order_and_rejects_the_rest(
+        #[case] content: &str,
+        #[case] expected: Vec<Reference>,
+    ) {
         assert_eq!(Reference::find(content), expected);
     }
 }

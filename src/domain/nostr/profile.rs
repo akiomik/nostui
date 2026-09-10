@@ -58,7 +58,7 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn test_profile_new() {
+    fn profile_new_keeps_what_it_was_built_from() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -78,7 +78,7 @@ mod tests {
     #[case(Metadata::new().display_name(""), None)]
     #[case(Metadata::new().display_name("").name(""), None)]
     #[case(Metadata::new().display_name("").name("hoge"), None)]
-    fn test_display_name(
+    fn display_name_is_only_the_display_name_and_never_empty(
         #[case] metadata: Metadata,
         #[case] expected: Option<&String>,
     ) -> Result<()> {
@@ -98,7 +98,10 @@ mod tests {
     #[case(Metadata::new().display_name("foo"), None)]
     #[case(Metadata::new().name(""), None)]
     #[case(Metadata::new().name("foo").display_name("foo"), Some("@foo".to_owned()))]
-    fn test_name(#[case] metadata: Metadata, #[case] expected: Option<String>) -> Result<()> {
+    fn handle_prefixes_the_name_and_ignores_the_display_name(
+        #[case] metadata: Metadata,
+        #[case] expected: Option<String>,
+    ) -> Result<()> {
         let key = PublicKey::from_str(
             "4d39c23b3b03bf99494df5f3a149c7908ae1bc7416807fdd6b34a31886eaae25",
         )?;
@@ -110,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    fn test_name_returns_display_name_when_set() {
+    fn name_returns_display_name_when_set() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -124,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn test_name_returns_name_with_at_when_display_name_empty() {
+    fn name_returns_name_with_at_when_display_name_empty() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -138,7 +141,7 @@ mod tests {
     }
 
     #[test]
-    fn test_name_returns_name_with_at_when_display_name_none() {
+    fn name_returns_name_with_at_when_display_name_none() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -152,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn test_name_returns_npub_when_both_names_empty() {
+    fn name_returns_npub_when_both_names_empty() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -170,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    fn test_name_returns_npub_when_both_names_none() {
+    fn name_returns_npub_when_both_names_none() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -186,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn test_name_empty_string_display_name_is_skipped() {
+    fn name_keeps_a_whitespace_only_display_name() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -202,7 +205,7 @@ mod tests {
     }
 
     #[test]
-    fn test_profile_clone() {
+    fn profile_clone() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -217,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn test_profile_serialization() {
+    fn profile_serialization() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();

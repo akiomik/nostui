@@ -164,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn test_new_text_note() -> Result<(), Box<dyn Error>> {
+    fn new_text_note() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Hello, Nostr!")?;
         let text_note = TextNote::new(event.clone());
 
@@ -180,7 +180,7 @@ mod tests {
     }
 
     #[test]
-    fn test_bech32_id() -> Result<(), Box<dyn Error>> {
+    fn bech32_id_is_a_note1_identifier() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Test")?;
         let text_note = TextNote::new(event);
 
@@ -191,7 +191,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_with_reaction() -> Result<(), Box<dyn Error>> {
+    fn update_with_reaction() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Original post")?;
         let mut text_note = TextNote::new(event.clone());
 
@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_with_multiple_reactions() -> Result<(), Box<dyn Error>> {
+    fn update_with_multiple_reactions() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Original post")?;
         let mut text_note = TextNote::new(event.clone());
 
@@ -223,7 +223,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_with_repost() -> Result<(), Box<dyn Error>> {
+    fn update_with_repost() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Original post")?;
         let mut text_note = TextNote::new(event.clone());
 
@@ -238,7 +238,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_with_zap_receipt() -> Result<(), Box<dyn Error>> {
+    fn update_with_zap_receipt() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Original post")?;
         let mut text_note = TextNote::new(event.clone());
 
@@ -251,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reaction_builder() -> Result<(), Box<dyn Error>> {
+    fn reaction_builder_builds_a_plus_reaction() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Original post")?;
         let text_note = TextNote::new(event.clone());
 
@@ -269,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    fn test_repost_builder() -> Result<(), Box<dyn Error>> {
+    fn repost_builder_tags_the_reposted_event() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Original post")?;
         let text_note = TextNote::new(event.clone());
 
@@ -283,7 +283,7 @@ mod tests {
     }
 
     #[test]
-    fn test_zap_amount_with_multiple_receipts() -> Result<(), Box<dyn Error>> {
+    fn zap_amount_with_multiple_receipts() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Original post")?;
         let mut text_note = TextNote::new(event.clone());
 
@@ -300,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_reply_event_id() -> Result<(), Box<dyn Error>> {
+    fn find_reply_event_id_finds_the_answered_event() -> Result<(), Box<dyn Error>> {
         let original_event = create_test_event("Original")?;
         let reply_event = create_test_event_with_tags(
             "Reply",
@@ -316,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_reply_event_id_none() -> Result<(), Box<dyn Error>> {
+    fn find_reply_event_id_none() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Not a reply")?;
         let text_note = TextNote::new(event);
 
@@ -326,7 +326,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_client_name() -> Result<(), Box<dyn Error>> {
+    fn find_client_name_reads_the_client_tag() -> Result<(), Box<dyn Error>> {
         let client_tag = Tag::from(Nip89Tag::Client {
             name: String::from("TestClient"),
             address: None,
@@ -340,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mentioned_pubkeys() -> Result<(), Box<dyn Error>> {
+    fn mentioned_pubkeys_lists_the_p_tags() -> Result<(), Box<dyn Error>> {
         let mentioned_keys = Keys::generate();
         let p_tag = Tag::public_key(mentioned_keys.public_key());
 
@@ -356,7 +356,7 @@ mod tests {
     }
 
     #[test]
-    fn test_combined_updates() -> Result<(), Box<dyn Error>> {
+    fn combined_updates() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Popular post")?;
         let mut text_note = TextNote::new(event.clone());
 
@@ -387,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn test_as_event() -> Result<(), Box<dyn Error>> {
+    fn as_event_returns_the_event_it_wraps() -> Result<(), Box<dyn Error>> {
         let event = create_test_event("Test")?;
         let text_note = TextNote::new(event.clone());
 

@@ -248,7 +248,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_simple_keys() -> Result<()> {
+    fn simple_keys() -> Result<()> {
         assert_eq!(
             parse_key_event("a")?,
             KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty())
@@ -268,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn test_with_modifiers() -> Result<()> {
+    fn with_modifiers() -> Result<()> {
         assert_eq!(
             parse_key_event("ctrl-a")?,
             KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL)
@@ -288,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_modifiers() -> Result<()> {
+    fn multiple_modifiers() -> Result<()> {
         assert_eq!(
             parse_key_event("ctrl-alt-a")?,
             KeyEvent::new(
@@ -306,7 +306,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reverse_multiple_modifiers() {
+    fn reverse_multiple_modifiers() {
         assert_eq!(
             key_event_to_string(&KeyEvent::new(
                 KeyCode::Char('a'),
@@ -317,13 +317,13 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_keys() {
+    fn invalid_keys() {
         assert!(parse_key_event("invalid-key").is_err());
         assert!(parse_key_event("ctrl-invalid-key").is_err());
     }
 
     #[test]
-    fn test_case_insensitivity() -> Result<()> {
+    fn case_insensitivity() -> Result<()> {
         assert_eq!(
             parse_key_event("CTRL-a")?,
             KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL)
