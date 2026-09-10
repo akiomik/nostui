@@ -4,7 +4,6 @@
 //! across different components.
 
 pub mod editor;
-pub mod fps;
 pub mod name_with_handle;
 pub mod public_key;
 pub mod shrink_text;

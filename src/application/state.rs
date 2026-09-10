@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::time::Instant;
 
 use crossterm::event::KeyEvent;
 use nostr_sdk::prelude::*;
@@ -13,7 +12,6 @@ use crate::{
     domain::nostr::{nip10::ReplyTagsBuilder, nip38::MusicStatus, FeedKind, Profile},
     model::{
         editor::{Editor, Message as EditorMessage},
-        fps::{Fps, FpsOutcome, Message as FpsMessage},
         nostr::{Message as NostrMessage, Nostr, NostrOutcome},
         nostr_gateway::{CommandError, NostrCommand, PublishId},
         status_bar::{Message, StatusBar},
@@ -58,7 +56,6 @@ pub struct AppState<'a> {
     pub user: UserState,
     pub nostr: Nostr,
     pub config: ConfigState,
-    pub fps: Fps,
     pub status_bar: StatusBar,
     pub startup: Startup,
     /// Sender for dispatching commands to the Nostr subscription worker.
@@ -331,6 +328,9 @@ impl<'a> AppState<'a> {
         build: fn(&TextNote) -> EventBuilder,
     ) -> Command<AppMsg> {
         let Some(note) = self.timeline.selected_note() else {
+            // Redrawing, despite this arm doing nothing itself: `handle_timeline_msg`
+            // clears the status bar before dispatching here, so by the time there is
+            // nothing to submit the pass has already changed what is on screen.
             return Command::none();
         };
 
@@ -401,8 +401,17 @@ impl<'a> AppState<'a> {
     /// would take the indicator away from anyone in read-only mode, and from anyone
     /// whose track changes before the worker is ready.
     pub fn publish_music_status(&mut self, track: Track) -> Command<AppMsg> {
+        // Nothing was shown and nothing was sent, so this event needs no repaint. Not a
+        // claim that the bar is then right: a rejected track arriving after a valid one
+        // leaves the earlier `NOW_PLAYING_LABEL` line standing, along with the relay
+        // status it published. Repainting would only draw that same stale text again — what to
+        // do about superseding it is #521's.
+        //
+        // Not a rare path either: `MusicStatus::new` also rejects a track with no
+        // duration, and radio and live streams routinely report none while changing
+        // metadata as they play.
         let Some(status) = MusicStatus::new(track) else {
-            return Command::none();
+            return Command::none().without_redraw();
         };
 
         self.set_status(NOW_PLAYING_LABEL, status.content());
@@ -701,19 +710,6 @@ impl<'a> AppState<'a> {
         log::error!("{error}");
         self.set_status_error("System", error);
         Command::none()
-    }
-
-    /// Record a frame tick for FPS tracking.
-    ///
-    /// The rate on screen is recomputed once a second, so the ticks in between
-    /// leave every displayed value exactly as it was and decline the redraw they
-    /// would otherwise cost. Without that an idle nostui would re-render the whole
-    /// timeline at the tick rate to refresh a counter that did not change (#510).
-    pub fn record_tick(&mut self, now: Instant) -> Command<AppMsg> {
-        match self.fps.update(FpsMessage::FrameRecorded { now }) {
-            Some(FpsOutcome::DisplayUpdated) => Command::none(),
-            None => Command::none().without_redraw(),
-        }
     }
 
     /// Move the selection to the previous timeline item.

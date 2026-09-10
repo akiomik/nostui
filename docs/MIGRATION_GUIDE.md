@@ -71,33 +71,47 @@ If you need to temporarily background the application:
 
 ---
 
-#### Changed: FPS display now shows only ticks per second
+#### Removed: FPS counter
 
 **What changed:**
-- The FPS counter now displays only "X.XX ticks per sec" instead of "X.XX ticks per sec (app) X.XX frames per sec (render)"
-- The `Fps` struct no longer contains `render_fps` and `render_frames` fields
-- Only `app_fps` and `app_frames` remain in `Fps`
+- The row that displayed "X.XX ticks per sec (app) X.XX frames per sec (render)" at the top of the screen is gone, and the line it occupied belongs to the timeline
+- `model::fps` and `presentation::widgets::fps` have been removed, along with `AppState::fps` and `AppState::record_tick`
+- With them go the application tick they measured: `SystemMsg::Tick`, the `Timer` subscription, `InitFlags::tick_timer`, and `--tick-rate` (see *Removed: `--tick-rate` command line option* below)
+- `infrastructure::cli::Cli` loses its `tick_rate` field and now has none
+- `SystemMsg` gains `TerminalEventIgnored` in the same change. A terminal event nostui does not act on used to be reported as a tick; it now has its own variant, which is handled by doing nothing
 
 **Reason:**
-The Tears framework handles frame rendering internally, making accurate frame-level FPS measurement impossible from the application layer. The render FPS value was never accurate because the `Terminal` is owned by the `Runtime`, not the `Application`. Therefore, we removed the misleading "frames per sec" display and the associated unused fields.
+The counter was a debugging aid and a study of what the framework offers; it never drove a decision a user makes. What it did do was keep the process awake.
+
+Tears 0.11 parks the render loop when an update pass leaves it with nothing to do, and a tick is something to do: the timer fires, a pass runs, the counter is bumped. So an idle nostui woke up 16 times a second forever in order to refresh a number nobody was reading. Removing the counter removes its tick, which is the only periodic wakeup nostui had — everything else it listens to is event-driven.
+
+The render half of this was already addressed: nostui stopped redrawing for ticks that changed no displayed value. That took idle renders from 16 a second to one. This takes them, and the passes, to none.
 
 **Impact:**
 
-This is primarily an internal change. If you were:
+1. **As a user**: the counter is gone from the screen, and an idle nostui now genuinely idles — with one `nip-38` exception, below. If you were watching it to see whether the application was keeping up, there is no replacement; the logs are the remaining diagnostic.
 
-1. **Using the FPS display as a user**: You will now see a simpler display showing only tick rate, which accurately reflects the application's update frequency.
+   **If you use `nip-38`**, one thing to know: the tick used to re-check nostui's subscriptions sixteen times a second, so a media source that had stopped was picked back up within 62 ms whatever else was going on. That re-check now happens whenever any other message arrives — a note from a relay, a keypress. On a feed with traffic it is no different in practice. On a nostui sitting with nothing to do, a media source that dies stays dead until something else happens, and "now playing" stops with it. Touching any key is enough.
 
-2. **Accessing `Fps` in custom code**: Remove any references to `render_fps` and `render_frames`:
+   The other `nip-38` case is unchanged and worth knowing separately: on a host where the media source cannot be started at all, nostui retries it as fast as it fails, with no backoff. Both are [#529](https://github.com/akiomik/nostui/issues/529).
+
+2. **In custom code**: remove references to `state.fps`. There is no equivalent to read.
+
+3. **Using `Cli`**: `cli.tick_rate` no longer exists, and neither does a `Cli { tick_rate }` literal. The struct is now empty.
+
+4. **Matching on `SystemMsg`**: an exhaustive `match` needs an arm for `TerminalEventIgnored` as well as the removal of the `Tick` one, or it stops compiling. There is nothing to do in it.
+
+5. **Constructing `InitFlags`**: drop the `tick_timer` field. A struct literal that still sets it no longer compiles.
 
    ```diff
-   let fps = &state.fps;
-   - println!("Render FPS: {}", fps.render_fps);
-   + // Only the app tick rate is available now, via the getter
-   println!("App FPS: {:?}", fps.app_fps());
+   let init_flags = InitFlags {
+       pubkey,
+       keys,
+       config,
+       nostr_client: client,
+   -   tick_timer: tick_timer_from_rate(args.tick_rate)?,
+   };
    ```
-
-**Note:**
-The "ticks per sec" value still provides useful performance information, representing how frequently the application processes events and updates state.
 
 ---
 
@@ -115,18 +129,39 @@ The Tears framework removed its frame rate in 0.11.0. Render cadence is now boun
 Drop the option wherever nostui is launched — a shell alias, a `.desktop` entry, a systemd unit, or a wrapper script:
 
 ```diff
-- nostui --frame-rate 30 --tick-rate 16
-+ nostui --tick-rate 16
+- nostui --frame-rate 30
++ nostui
 ```
 
-`--tick-rate` is unaffected. It controls how often the application processes a tick, which is also what the FPS display measures.
+`--tick-rate` went the same way; see the next entry.
 
 **Note:**
-There is no direct replacement, and no remaining option that behaves like the old throttle.
+There is no direct replacement, and no remaining option that behaves like the old throttle — nostui takes no options at all now beyond `--help` and `--version`.
 
-`--tick-rate` is not one, despite the way it reads. An idle nostui repaints at most about once a second: the tick refreshes the "ticks per sec" counter on that cadence and declines the redraw on every tick in between, so the tick rate sets how often the application wakes up, not how often it draws. Raising it costs update passes rather than frames. (Below one tick per second there are no ticks in between, so each one redraws — but that is fewer repaints, not more.)
+Nothing is needed in the idle direction: with the FPS counter and its tick gone, an idle nostui neither renders nor runs an update pass — barring the `nip-38` cases in the impact list above. What has no ceiling any more is relay traffic. Redraws follow inbound events instead of being clamped to 16 fps, so a busy home feed can redraw more often than it used to.
 
-What has no ceiling any more is relay traffic. Redraws follow inbound events instead of being clamped to 16 fps, so a busy home feed can redraw more often than it used to.
+---
+
+#### Removed: `--tick-rate` command line option
+
+**What changed:**
+- The `-t` / `--tick-rate` option has been removed. Passing it now fails argument parsing with `error: unexpected argument '-t' found`
+- There is no replacement option
+
+**Reason:**
+It configured the interval of the application tick, and the tick existed only to feed the FPS counter (see above). With nothing left to drive, an option that accepted a value and changed nothing would be worse than none — the same reasoning that removed `--frame-rate`.
+
+**Migration steps:**
+
+Drop the option wherever nostui is launched — a shell alias, a `.desktop` entry, a systemd unit, or a wrapper script:
+
+```diff
+- nostui --tick-rate 16
++ nostui
+```
+
+**Note:**
+Nothing about nostui's responsiveness depended on this value. Input, relay events, and media events were never delivered on the tick; they have always arrived on their own subscriptions.
 
 ### Deprecations
 

@@ -2,7 +2,6 @@
 
 use std::cell::RefCell;
 use std::sync::Arc;
-use std::time::Instant;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use nostr_sdk::prelude::*;
@@ -10,7 +9,6 @@ use nowhear::{MediaEvent, MediaSourceError};
 use ratatui::prelude::*;
 use tears::prelude::*;
 use tears::subscription::terminal::TerminalEvents;
-use tears::subscription::time::{Timer, TimerEvent};
 
 use crate::application::config::keybindings::Action as KeyAction;
 use crate::application::config::Config;
@@ -28,7 +26,6 @@ pub struct InitFlags {
     pub keys: Option<Keys>,
     pub config: Config,
     pub nostr_client: Client,
-    pub tick_timer: Timer,
 }
 
 /// Main Tears application structure
@@ -49,8 +46,6 @@ pub struct TearsApp<'a> {
     keys: Option<Keys>,
     /// Configuration (including keybindings)
     config: Config,
-    /// Timer subscription source for application ticks
-    tick_timer: Timer,
 }
 
 impl<'a> Application for TearsApp<'a> {
@@ -81,7 +76,6 @@ impl<'a> Application for TearsApp<'a> {
             pubkey: flags.pubkey,
             config,
             keys: flags.keys,
-            tick_timer: flags.tick_timer,
         };
 
         // Return initial commands if needed
@@ -128,10 +122,6 @@ impl<'a> Application for TearsApp<'a> {
                 self.keys.clone(),
             ))
             .map(|msg| AppMsg::Nostr(NostrMsg::SubscriptionMessage(msg))),
-            // Timer subscription - interval validated during initialization
-            Subscription::new(self.tick_timer.clone()).map(|msg| match msg {
-                TimerEvent::Tick => AppMsg::System(SystemMsg::Tick),
-            }),
             Subscription::new(TerminalEvents::new()).map(|result| match result {
                 Ok(event) => {
                     // Handle different terminal event types
@@ -140,9 +130,7 @@ impl<'a> Application for TearsApp<'a> {
                         Event::Resize(width, height) => {
                             AppMsg::System(SystemMsg::Resize(width, height))
                         }
-                        // Ignore other events for now. The FPS display counts them as
-                        // ticks all the same — noted in #525.
-                        _ => AppMsg::System(SystemMsg::Tick),
+                        _ => AppMsg::System(SystemMsg::TerminalEventIgnored),
                     }
                 }
                 Err(e) => AppMsg::System(SystemMsg::ShowError(e.to_string())),
@@ -227,20 +215,9 @@ impl<'a> TearsApp<'a> {
                 // Terminal resize is handled automatically by ratatui
                 Command::none()
             }
-            // Count ticks for the FPS display. The instant is read here, as the tick is
-            // handled, rather than travelling on the message from the subscription task
-            // that produced it: the counter is meant to fall behind when the update loop
-            // does, and a production stamp would keep reading `--tick-rate` no matter how
-            // long a tick waited in the queue.
-            //
-            // What it measures is therefore how often the application processes a tick,
-            // which is not how often it renders: the runtime renders once per pass that
-            // leaves the view dirty, and a tick only dirties it on the pass that recomputes
-            // the displayed rate. So an idle nostui repaints at most once a second while
-            // ticking at `--tick-rate` — a rate below 1/s has no ticks in between to
-            // decline, and every one of them redraws — and under relay traffic the renders
-            // the events add are ones the counter knows nothing about.
-            SystemMsg::Tick => self.state.record_tick(Instant::now()),
+            // A terminal event with no handler. Nothing to do and nothing to show, so
+            // the pass ends without a render.
+            SystemMsg::TerminalEventIgnored => Command::none().without_redraw(),
             SystemMsg::ShowError(error) => self.state.show_error(error),
             SystemMsg::KeyInput(key) => self.handle_key_input(key),
         }
@@ -421,10 +398,38 @@ impl<'a> TearsApp<'a> {
         }
     }
 
+    /// Handle media messages
+    ///
+    /// A track change is the only thing here that can reach the screen, via the NIP-38
+    /// status line — and only if `MusicStatus` accepts it, which `publish_music_status`
+    /// decides. The other events nowhear reports — pausing, seeking, changing the
+    /// volume, a player coming or going — are displayed nowhere at all, so they decline
+    /// the redraw they would otherwise cost. Without that, nudging the volume of a
+    /// player nostui is watching repaints the whole timeline.
+    ///
+    /// The undisplayed events are listed rather than caught by a wildcard. Declining the
+    /// redraw is an assertion that they change nothing visible, and a wildcard would
+    /// extend that assertion to whatever nowhear adds next — silently, and with no
+    /// periodic repaint left to mask it. `MediaEvent` is not `#[non_exhaustive]`, so
+    /// naming them makes the next variant a compile error instead.
+    ///
+    /// A media source error reaches the screen no more than they do, and on that
+    /// reasoning would decline the redraw with them. It keeps one, deliberately,
+    /// because it is the one message here that can repeat: a source that cannot be built
+    /// reports, and the report is what restarts it, so it fails and reports again with
+    /// no backoff (#529). The repaint is the only thing left costing that loop anything
+    /// per iteration. Keeping it is a brake nobody designed, held until #529 fits a real
+    /// one — a wasted render on the rare genuine error is the cheaper mistake.
     fn handle_media_msg(&mut self, msg: Result<MediaEvent, MediaSourceError>) -> Command<AppMsg> {
         match msg {
             Ok(MediaEvent::TrackChanged { track, .. }) => self.state.publish_music_status(track),
-            Ok(_) => Command::none(),
+            Ok(
+                MediaEvent::StateChanged { .. }
+                | MediaEvent::PositionChanged { .. }
+                | MediaEvent::VolumeChanged { .. }
+                | MediaEvent::PlayerAdded { .. }
+                | MediaEvent::PlayerRemoved { .. },
+            ) => Command::none().without_redraw(),
             Err(e) => {
                 log::error!("media source error: {e}");
                 Command::none()
@@ -512,9 +517,10 @@ impl<'a> TearsApp<'a> {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
-    use std::num::NonZeroU64;
+    use std::time::Duration;
 
     use nostr_sdk::prelude::Event as NostrEvent;
+    use nowhear::Track;
     use tears::testing::TestStore;
 
     use super::*;
@@ -533,7 +539,6 @@ mod tests {
             keys: Some(keys),
             config: Config::default(),
             nostr_client: Client::default(),
-            tick_timer: Timer::new(NonZeroU64::new(62).expect("non-zero")),
         }
     }
 
@@ -906,29 +911,137 @@ mod tests {
         store.finish();
     }
 
-    /// #510(b): an idle nostui ticks at `--tick-rate` but the rate it displays is
-    /// only recomputed once a second, so a tick that recomputed nothing must not
-    /// repaint the whole timeline to refresh a counter that did not change.
-    ///
-    /// One tick, because the first is the only one whose outcome does not depend on
-    /// the clock: it opens the measurement interval and returns before any interval
-    /// is measured, so no amount of scheduling delay can turn it into a recompute.
-    /// Later ticks reach `record_tick` through the same `None` arm, and which of
-    /// `Fps::update`'s two `None` paths produced it is pinned in `model::fps`.
-    ///
-    /// The tick that does recompute cannot be driven from here at all: it is stamped
-    /// as it is handled, so reaching it would mean waiting a real second. That
-    /// direction is likewise covered where the decision is made — `Fps::update`
-    /// reporting `DisplayUpdated`. An inverted mapping in `record_tick` fails this
-    /// test.
+    /// A terminal event nostui does not act on changes nothing, so it must not
+    /// render. Before #527 this arm produced a tick, which the FPS display counted
+    /// as one and redrew for.
     #[test]
-    fn test_tick_that_changes_no_displayed_value_does_not_redraw() {
+    fn test_ignored_terminal_event_does_not_redraw() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
-        store.send(AppMsg::System(SystemMsg::Tick));
+        store.send(AppMsg::System(SystemMsg::TerminalEventIgnored));
 
         assert!(!store.redraw_requested());
-        assert_eq!(store.state().state.fps.app_fps(), None);
+        store.finish();
+    }
+
+    /// The positive control for the two below it: a track the NIP-38 line *can*
+    /// describe is put on the status bar, so that pass has to redraw. Without this,
+    /// swapping the arms in `publish_music_status` would leave both of them passing
+    /// and the now-playing line invisible on a client with nothing else going on.
+    #[test]
+    fn test_track_the_status_line_shows_redraws() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(AppMsg::Media(Ok(MediaEvent::TrackChanged {
+            // Not "Music": that is `NOW_PLAYING_LABEL`, and the assertion below could
+            // not tell the label from an echoed player name.
+            player_name: "Spotify".to_owned(),
+            track: Track {
+                title: "Song".to_owned(),
+                artist: vec!["Artist".to_owned()],
+                duration: Some(Duration::from_secs(180)),
+                album: None,
+                album_artist: vec![],
+                track_number: None,
+                artwork: None,
+            },
+        })));
+
+        assert!(store.redraw_requested());
+        assert_eq!(
+            store.state().state.status_bar.message(),
+            Some("[Music] Song - Artist")
+        );
+        store.finish();
+    }
+
+    /// The media events nostui does not display — pausing, seeking, volume — must not
+    /// repaint either. With the tick gone these are the remaining messages that arrive
+    /// without the user touching nostui at all.
+    #[test]
+    fn test_undisplayed_media_event_does_not_redraw() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(AppMsg::Media(Ok(MediaEvent::VolumeChanged {
+            player_name: "Music".to_owned(),
+            volume: 0.5,
+        })));
+
+        assert!(!store.redraw_requested());
+        store.finish();
+    }
+
+    /// `handle_timeline_msg` clears the status bar before it dispatches, so a timeline
+    /// message that then finds nothing to do has still changed the screen and must
+    /// redraw. Declining it leaves the cleared line standing — which the tick used to
+    /// hide within a second, and #527 removed the tick.
+    #[test]
+    fn test_timeline_message_that_does_nothing_still_clears_the_status_bar_on_screen() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let subscription_id = SubscriptionId::new("home");
+
+        // Complete startup: until an event arrives, timeline messages are ignored.
+        store.send(AppMsg::Nostr(NostrMsg::SubscriptionMessage(
+            NostrSubscriptionMessage::SubscriptionCreated {
+                feed: FeedKind::Home,
+                subscription_id: subscription_id.clone(),
+            },
+        )));
+        store.send(notification(ClientNotification::Message {
+            relay_url: test_relay_url(),
+            message: Box::new(RelayMessage::Event {
+                subscription_id: Cow::Owned(subscription_id),
+                event: Cow::Owned(test_note()),
+            }),
+        }));
+        store.send(AppMsg::System(SystemMsg::ShowError("boom".to_owned())));
+        assert!(store.state().state.status_bar.message().is_some());
+
+        // Nothing is selected, so reacting has nothing to submit — but the bar was
+        // cleared on the way in.
+        store.send(AppMsg::Timeline(TimelineMsg::ReactToSelected));
+
+        assert_eq!(store.state().state.status_bar.message(), None);
+        assert!(store.redraw_requested());
+        store.finish();
+    }
+
+    /// A track the NIP-38 status cannot describe is not shown and not sent, so it must
+    /// not repaint either. `MusicStatus::new` rejects a track with no duration, which
+    /// radio and live streams report routinely while their metadata keeps changing.
+    #[test]
+    fn test_track_the_status_line_rejects_does_not_redraw() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(AppMsg::Media(Ok(MediaEvent::TrackChanged {
+            player_name: "Radio".to_owned(),
+            track: Track {
+                title: "Some Stream".to_owned(),
+                artist: vec!["Station".to_owned()],
+                duration: None,
+                album: None,
+                album_artist: vec![],
+                track_number: None,
+                artwork: None,
+            },
+        })));
+
+        assert!(!store.redraw_requested());
+        assert_eq!(store.state().state.status_bar.message(), None);
+        store.finish();
+    }
+
+    /// A media source error shows nothing, so on its own merits it would decline the
+    /// redraw like its neighbours. It keeps one because the error is what restarts the
+    /// source that produced it, and the repaint is the only per-iteration cost left in
+    /// that loop until #529 bounds it. Pinned so the brake is not removed by tidying.
+    #[test]
+    fn test_media_source_error_keeps_its_redraw_as_a_brake() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(AppMsg::Media(Err(MediaSourceError::UnsupportedPlatform)));
+
+        assert!(store.redraw_requested());
         store.finish();
     }
 }

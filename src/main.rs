@@ -1,12 +1,10 @@
 #![deny(warnings)]
 
-use std::num::NonZeroU64;
-
 use clap::Parser;
-use color_eyre::eyre::{eyre, Result};
+use color_eyre::eyre::Result;
 use nostr_sdk::prelude::*;
 use secrecy::ExposeSecret;
-use tears::{subscription::time::Timer, Runtime};
+use tears::Runtime;
 
 use nostui::{
     application::config::Config,
@@ -14,25 +12,6 @@ use nostui::{
     runtime::{InitFlags, TearsApp},
     utils::{initialize_logging, initialize_panic_handler},
 };
-
-fn tick_timer_from_rate(tick_rate: f64) -> Result<Timer> {
-    if !tick_rate.is_finite() || tick_rate <= 0.0 {
-        return Err(eyre!("tick rate must be a positive finite number"));
-    }
-
-    let interval_ms = 1000.0 / tick_rate;
-    if interval_ms > u64::MAX as f64 {
-        return Err(eyre!(
-            "tick rate is too low to convert to a timer interval: {tick_rate}"
-        ));
-    }
-
-    let interval_ms = NonZeroU64::new(interval_ms as u64).ok_or_else(|| {
-        eyre!("tick rate is too high to produce a non-zero millisecond timer interval: {tick_rate}")
-    })?;
-
-    Ok(Timer::new(interval_ms))
-}
 
 /// Take over the terminal, run the application on it, and restore it on every path out —
 /// including a failure to clear it, which used to leave the caller on the alternate
@@ -58,7 +37,9 @@ async fn tokio_main() -> Result<()> {
     initialize_logging()?;
     initialize_panic_handler()?;
 
-    let args = <Cli as Parser>::parse();
+    // Parsed for `--help`, `--version`, and to reject anything else; nostui takes no
+    // options of its own since #527 removed `--tick-rate`.
+    let _ = <Cli as Parser>::parse();
 
     // Load configuration
     let config = Config::new()?;
@@ -91,7 +72,6 @@ async fn tokio_main() -> Result<()> {
         keys,
         config,
         nostr_client: client,
-        tick_timer: tick_timer_from_rate(args.tick_rate)?,
     };
 
     run_on_terminal(init_flags).await
@@ -104,43 +84,5 @@ async fn main() -> Result<()> {
         Err(e)
     } else {
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tick_timer_from_rate_accepts_positive_tick_rate() {
-        assert_eq!(
-            tick_timer_from_rate(16.0).expect("tick rate should be valid"),
-            Timer::new(NonZeroU64::new(62).expect("non-zero"))
-        );
-        assert_eq!(
-            tick_timer_from_rate(1000.0).expect("tick rate should be valid"),
-            Timer::new(NonZeroU64::new(1).expect("non-zero"))
-        );
-    }
-
-    #[test]
-    fn tick_timer_from_rate_rejects_invalid_tick_rate() {
-        assert!(tick_timer_from_rate(0.0).is_err());
-        assert!(tick_timer_from_rate(-1.0).is_err());
-        assert!(tick_timer_from_rate(f64::NAN).is_err());
-        assert!(tick_timer_from_rate(f64::INFINITY).is_err());
-        assert!(tick_timer_from_rate(1000.1).is_err());
-    }
-
-    #[test]
-    fn tick_timer_from_rate_rejects_a_rate_whose_interval_overflows_u64_millis() {
-        // Positive and finite, so it clears the first guard, but 1000 / 1e-20 is far past
-        // `u64::MAX` milliseconds. Pin the message so this asserts the overflow guard
-        // rather than passing on whichever guard happens to fire.
-        let error = tick_timer_from_rate(1e-20).expect_err("tick rate should be rejected");
-        assert!(
-            error.to_string().contains("too low to convert"),
-            "expected the interval-overflow guard, got: {error}"
-        );
     }
 }

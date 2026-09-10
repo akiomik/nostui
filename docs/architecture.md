@@ -145,7 +145,7 @@ side-effect-free `update`. Key modules/types:
   attempted and abandoned: faithfully reconstructing the `TextArea` (history
   included) would mean replaying every keystroke on each render, so the coupling
   is a deliberate, contained exception rather than a layering bug.
-- `model::status_bar`, `model::fps`.
+- `model::status_bar`.
 - `model::nostr` — connection state: tracks the per-feed subscriptions and
   whether the worker is ready. It does **not** hold the command sender (the
   application does); its `update` reports an `Option<NostrOutcome>` instead of
@@ -159,7 +159,7 @@ effect. `TimelineTab::update` / `Timeline::update` return
 `Nostr::update` returns `Option<NostrOutcome>` (`Some(Send(NostrCommand))` or
 `None`); the outcome enums hold only real follow-ups, with absence modelled by
 `Option`. The `update` methods are `#[must_use]`, so the application cannot
-silently drop an outcome. `status_bar` and `fps` are likewise pure; `editor`'s
+silently drop an outcome. `status_bar` is likewise pure; `editor`'s
 `update` is side-effect free too, but it is the one component coupled to UI/input
 crates (see above).
 
@@ -215,8 +215,32 @@ composition driver and the only place that bridges the framework:
 
 - `new` bootstraps `AppState` and components from `InitFlags`.
 - `update` routes an `AppMsg` to the matching `AppState` use case.
-- `subscriptions` wires `NostrEvents`, the timer, terminal events, media, and
-  OS signals.
+- `subscriptions` wires `NostrEvents`, terminal events, media, and OS signals.
+  All of them are event-driven: nostui declares no periodic source, so an idle
+  application runs no update passes.
+
+  That also decides when a subscription that ended is restarted. tears marks the
+  declared set dirty on any pass where `update` ran and re-admits whatever is
+  declared but not running (`kernel/pass.rs`); a source that merely *finishes*
+  marks nothing by itself, and `reconcile` skips a run whose exit has not been
+  reflected yet. So a restart takes a message from somewhere else, and may take
+  more than one.
+
+  `media` is the only source that ends on its own in practice: its stream ends
+  when the build fails, and on Linux when nowhear's D-Bus task dies afterwards.
+  (`NostrEvents` ends too, but only when its command channel closes, which
+  `close_connection` does at quit, or on a `ClientNotification::Shutdown` that
+  nostui never asks for; neither leaves an application running without it.) On a
+  live feed the next message is immediate, so neither media failure is visible;
+  on a nostui with no traffic and no input there is no next message, and it stays
+  stopped. The tick used to supply one every 62 ms, which is what made both
+  cases self-healing.
+
+  Both are tracked in [#529](https://github.com/akiomik/nostui/issues/529). The
+  unbuildable case has a second face: its error *is* a message, so it can drive
+  its own restart and fail again with no backoff — whether it does is the race
+  above. The error is the one media message that still redraws, which is the only
+  thing costing that loop anything per iteration until #529 bounds it properly.
 - `view` renders the components against `&AppState`.
 - input handling maps key events to a configured `Action` and then to an `AppMsg`.
 

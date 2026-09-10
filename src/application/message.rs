@@ -30,8 +30,23 @@ pub enum SystemMsg {
     Quit,
     /// Terminal resize event
     Resize(u16, u16),
-    /// Tick for FPS calculation
-    Tick,
+    /// A terminal event nostui does not act on
+    ///
+    /// The mapping from `crossterm::event::Event` has to be total and a subscription
+    /// cannot decline to produce a message, so an event with no handler becomes this
+    /// and is dropped where it is handled.
+    ///
+    /// How much reaches it depends on the platform. On unix a mouse, paste or focus
+    /// event is delivered only if the application asks for it, and nostui asks for
+    /// none of them. A Windows console reports mouse and focus records whether or not
+    /// anyone asked — crossterm parses them unconditionally, and `enable_raw_mode`
+    /// does not clear `ENABLE_MOUSE_INPUT`, which is on by default — so there they do
+    /// arrive. Before #527 they became ticks, which the FPS display counted as such.
+    ///
+    /// That is about the events routed *here*. A Windows console also reports key
+    /// releases, and the `Event::Key` arm in `TearsApp::subscriptions` turns those into
+    /// `KeyInput` like any press — #531.
+    TerminalEventIgnored,
     /// Show an error message
     ShowError(String),
     /// Key input event
