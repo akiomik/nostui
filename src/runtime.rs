@@ -198,12 +198,15 @@ impl<'a> Application for TearsApp<'a> {
 ///
 /// It does mean nothing downstream can tell a held key from a fresh one, or a numpad key
 /// from its counterpart on the main row. That is the point, and this is where to come
-/// back if anything ever needs to. One thing already does: holding a key now fires its
-/// binding once per repeat, and some of them publish or close things (#543). Refusing
-/// that means the kind has to survive as far as whoever decides, so part of this has to
-/// move rather than be added to.
-/// Nothing reports a repeat today in any case: nostui never asks for the protocol, so
-/// none of this has bitten anyone yet.
+/// back if anything ever needs to. One thing already does — holding a key fires its
+/// binding once per repeat, and some of them publish or close things (#543) — though
+/// not because of anything here: ordinary auto-repeat has always arrived as a run of
+/// plain presses, and this only adds the protocol's repeats to what already resolves.
+/// Refusing them means the kind has to survive as far as whoever decides, so part of
+/// this would have to move rather than be added to.
+///
+/// The protocol's repeats do not arrive today in any case: nostui never asks for it, so
+/// this half of the normalisation is a correctness fix nobody has hit.
 ///
 /// Not every release is a key coming up. crossterm reports a Windows Alt code as a
 /// `Release` carrying the composed character, so the arm below drops it; it never typed
