@@ -86,7 +86,10 @@ mod tests {
             )
         ])
     ]
-    fn parse_finds_every_reference(#[case] content: &str, #[case] expected: Vec<Reference>) {
+    fn find_matches_only_delimited_nostr_uris(
+        #[case] content: &str,
+        #[case] expected: Vec<Reference>,
+    ) {
         assert_eq!(Reference::find(content), expected);
     }
 }

@@ -314,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn textarea_exposes_the_buffer_it_holds() {
+    fn a_new_editor_has_one_empty_line() {
         let editor = Editor::new();
         let textarea = editor.textarea();
         assert_eq!(textarea.lines().len(), 1);
