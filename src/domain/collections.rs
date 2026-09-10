@@ -193,7 +193,8 @@ mod tests {
 
     fn create_test_event(id_suffix: u8, content: &str) -> Result<Event> {
         let mut id_bytes = [0u8; 32];
-        id_bytes[31] = id_suffix; // 最後のバイトを変えて異なるIDを作成
+        // Only the last byte varies, so every suffix gives a distinct id.
+        id_bytes[31] = id_suffix;
 
         let keys = Keys::generate();
         Ok(Event::new(
@@ -233,15 +234,13 @@ mod tests {
         let mut events = EventSet::new();
         let event = create_test_event(1, "test content")?;
 
-        // 最初の挿入
         let first_add = events.insert(event.clone());
         assert!(first_add);
         assert_eq!(events.len(), 1);
 
-        // 重複挿入
         let second_add = events.insert(event);
         assert!(!second_add);
-        assert_eq!(events.len(), 1); // サイズは変わらない
+        assert_eq!(events.len(), 1);
 
         Ok(())
     }
@@ -268,7 +267,7 @@ mod tests {
         let event = create_test_event(1, "test content")?;
 
         assert!(events.push(event.clone()));
-        assert!(!events.push(event)); // 重複
+        assert!(!events.push(event));
         assert_eq!(events.len(), 1);
 
         Ok(())
@@ -278,7 +277,6 @@ mod tests {
     fn duplicate_event_with_different_content() -> Result<()> {
         let mut events = EventSet::new();
 
-        // 同じEventIdで異なるコンテンツのイベントを作成
         let id = EventId::from_byte_array([1u8; 32]);
         let keys = Keys::generate();
 
@@ -293,17 +291,18 @@ mod tests {
         );
 
         let event2 = Event::new(
-            id, // 同じID
+            id,
             keys.public_key(),
             Timestamp::now(),
             Kind::TextNote,
             vec![],
-            "second content".to_string(), // 異なるコンテンツ
+            "second content".to_string(),
             Signature::from_slice(&[0u8; 64])?,
         );
 
         assert!(events.insert(event1));
-        assert!(!events.insert(event2)); // IDが同じなので拒否される
+        // Rejected on the id alone; the differing content does not make it a new event.
+        assert!(!events.insert(event2));
         assert_eq!(events.len(), 1);
 
         Ok(())
@@ -333,15 +332,15 @@ mod tests {
         // any behaviour a user could see. Sorting both sides would guard neither.
         let expected: Vec<_> = test_events.iter().map(|e| e.id).collect();
 
-        // Deref経由でスライスメソッドを使用
+        // len() reaches the slice through Deref, EventSet defining none of its own;
+        // first() on the line below is EventSet's own method, not the slice's.
         assert_eq!(events_set.len(), 3);
         assert_eq!(events_set.first().unwrap().content, "first");
 
-        // iter()でのイテレーション（Deref経由）
+        // iter() the same way, rather than the IntoIterator impl on &EventSet.
         let collected: Vec<_> = events_set.iter().map(|e| e.id).collect();
         assert_eq!(collected, expected);
 
-        // into_iter()でのイテレーション
         let ids: Vec<_> = events_set.into_iter().map(|e| e.id).collect();
         assert_eq!(ids, expected);
 
@@ -396,22 +395,19 @@ mod tests {
     fn internal_consistency() -> Result<()> {
         let mut events = EventSet::new();
 
-        // 複数のイベントを追加 (1-10)
         for i in 1..=10 {
             events.insert(create_test_event(i, &format!("event {i}"))?);
         }
 
-        // いくつか重複を試行 (5-15で5-10は重複)
+        // 5-15, so 5-10 repeat what is already there and 11-15 are new.
         for i in 5..=15 {
             events.insert(create_test_event(i, &format!("duplicate attempt {i}"))?);
         }
 
-        // 内部の一貫性をチェック
         assert_eq!(events.events.len(), events.event_ids.len());
-        // 1-10の最初の追加 + 11-15の新規追加 = 15個のユニークなイベント
+        // 1-10 from the first loop plus 11-15 from the second.
         assert_eq!(events.len(), 15);
 
-        // 全てのイベントIDがHashSetに存在することを確認
         for event in events.iter() {
             assert!(events.event_ids.contains(&event.id));
         }
@@ -424,22 +420,21 @@ mod tests {
         let mut events = EventSet::with_capacity(256);
         assert_eq!(events.capacity(), 256);
 
-        // 大量のイベントを追加（パフォーマンステスト）
         for i in 0..1000 {
             let event = create_test_event((i % 256) as u8, &format!("event {i}"))?;
             events.insert(event);
         }
 
-        // 256個のユニークなイベントのみが保存されるはず
+        // 1000 inserts drawn from 256 distinct suffixes leave 256 unique events.
         assert_eq!(events.len(), 256);
 
-        // contains()の動作確認
+        // A fresh event carrying an id already present: contains() reads the id, not
+        // the content, so the differing content does not matter.
         let test_event = create_test_event(100, "test")?;
         assert!(events.contains(&test_event.id));
 
-        // retain機能のテスト
         events.retain(|e| e.content.starts_with("event 1"));
-        assert!(events.len() < 256); // いくつかのイベントが削除される
+        assert!(events.len() < 256);
 
         Ok(())
     }
