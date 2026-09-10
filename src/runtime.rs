@@ -603,6 +603,16 @@ mod tests {
         app
     }
 
+    /// A store whose only keybinding is `key` -> `action`.
+    ///
+    /// Put there rather than taken from `.config/config.json5`, so a test pins the
+    /// lookup and not what the shipped defaults happen to say.
+    fn store_with_binding(key: KeyEvent, action: KeyAction) -> TestStore<TearsApp<'static>> {
+        let mut flags = test_flags();
+        flags.config.keybindings.home.insert(vec![key], action);
+        TestStore::new(flags)
+    }
+
     /// Wrap a relay pool notification the way the subscription delivers it.
     fn notification(notif: ClientNotification) -> AppMsg {
         AppMsg::Nostr(NostrMsg::SubscriptionMessage(
@@ -1018,12 +1028,10 @@ mod tests {
     /// pins the lookup rather than what `.config/config.json5` happens to say.
     #[test]
     fn test_a_held_key_reaches_its_binding() {
-        let mut flags = test_flags();
-        flags.config.keybindings.home.insert(
-            vec![KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE)],
+        let mut store = store_with_binding(
+            KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
             KeyAction::ScrollDown,
         );
-        let mut store = TestStore::<TearsApp<'static>>::new(flags);
 
         // A held key on a keyboard with the numpad lit: both of the fields the map
         // compares are decorated, and both have to be normalised for this to resolve.
@@ -1044,19 +1052,22 @@ mod tests {
     /// normal mode too — so holding it there would repaint per repeat for nothing. Same
     /// reasoning as the unbound fallback; the fallback's test cannot reach it, because
     /// this key *is* bound.
+    ///
+    /// Which is why the control comes first. Both paths return the same command, and a
+    /// store built from `Config::default()` has no bindings at all, so without proving
+    /// this key resolves, the assertion would hold just as well if the lookup missed and
+    /// the fallback answered — and would keep holding if resolution broke later.
     #[test]
     fn test_a_bound_key_that_does_nothing_does_not_redraw() {
-        let mut flags = test_flags();
-        flags.config.keybindings.home.insert(
-            vec![KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL)],
-            KeyAction::SubmitTextNote,
-        );
-        let mut store = TestStore::<TearsApp<'static>>::new(flags);
+        let ctrl_p = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
 
-        store.send(AppMsg::System(SystemMsg::KeyInput(KeyEvent::new(
-            KeyCode::Char('p'),
-            KeyModifiers::CONTROL,
-        ))));
+        let mut resolves = store_with_binding(ctrl_p, KeyAction::ScrollDown);
+        resolves.send(AppMsg::System(SystemMsg::KeyInput(ctrl_p)));
+        resolves.receive_matching(|msg| matches!(msg, AppMsg::Timeline(TimelineMsg::ScrollDown)));
+        resolves.finish();
+
+        let mut store = store_with_binding(ctrl_p, KeyAction::SubmitTextNote);
+        store.send(AppMsg::System(SystemMsg::KeyInput(ctrl_p)));
 
         assert!(!store.redraw_requested());
         store.finish();
