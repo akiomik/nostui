@@ -621,7 +621,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unselect_action_delegates_to_deselect() {
+    fn unselect_action_delegates_to_deselect() {
         let mut app = create_test_app();
 
         // Add a test note to allow selection
@@ -655,7 +655,7 @@ mod tests {
     }
 
     #[test]
-    fn test_escape_key_triggers_deselect() {
+    fn escape_key_triggers_deselect() {
         let mut app = create_test_app();
 
         // Add a test note to allow selection
@@ -688,7 +688,7 @@ mod tests {
     }
 
     #[test]
-    fn test_timeline_ops_ignored_during_startup() {
+    fn timeline_ops_ignored_during_startup() {
         let mut app = create_test_app();
         assert!(app.state.startup.is_in_progress());
 
@@ -713,7 +713,7 @@ mod tests {
     }
 
     #[test]
-    fn test_select_first_with_notes() {
+    fn select_first_with_notes() {
         let mut app = create_test_app();
 
         // Add test notes to timeline
@@ -745,7 +745,7 @@ mod tests {
     }
 
     #[test]
-    fn test_select_last_with_notes() {
+    fn select_last_with_notes() {
         let mut app = create_test_app();
 
         // Add test notes to timeline
@@ -778,7 +778,7 @@ mod tests {
     }
 
     #[test]
-    fn test_scroll_to_top_delegates() {
+    fn scroll_to_top_delegates() {
         let mut app = create_test_app();
 
         // Add a test note
@@ -798,7 +798,7 @@ mod tests {
     }
 
     #[test]
-    fn test_scroll_to_bottom_delegates() {
+    fn scroll_to_bottom_delegates() {
         let mut app = create_test_app();
 
         // Add test notes
@@ -825,7 +825,7 @@ mod tests {
     }
 
     #[test]
-    fn test_quit_key_works_in_normal_mode() {
+    fn quit_key_works_in_normal_mode() {
         let mut app = create_test_app();
 
         // In normal mode, 'q' key should trigger quit via keybinding
@@ -845,7 +845,7 @@ mod tests {
     }
 
     #[test]
-    fn test_q_key_does_not_quit_in_composing_mode() {
+    fn q_key_does_not_quit_in_composing_mode() {
         let mut app = create_test_app();
 
         // Start composing mode
@@ -865,7 +865,7 @@ mod tests {
     }
 
     #[test]
-    fn test_escape_cancels_composing_mode() {
+    fn escape_cancels_composing_mode() {
         let mut app = create_test_app();
 
         // Start composing mode with some content
@@ -886,7 +886,7 @@ mod tests {
     }
 
     #[test]
-    fn test_select_tab() {
+    fn select_tab() {
         let mut app = create_test_app();
 
         // Default tab should be 0
@@ -905,7 +905,7 @@ mod tests {
     /// `Message` — and nostui reads only the `Message`. Redrawing for the arm it
     /// ignores would spend a full render on nothing, so that arm declines it (#510).
     #[test]
-    fn test_ignored_event_notification_does_not_redraw() {
+    fn ignored_event_notification_does_not_redraw() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
         store.send(notification(ClientNotification::Event {
@@ -921,7 +921,7 @@ mod tests {
     /// A relay message that is not an `EVENT` — an `EOSE`, here — is only logged,
     /// so it changes nothing the view shows and declines the redraw too (#510).
     #[test]
-    fn test_non_event_relay_message_does_not_redraw() {
+    fn non_event_relay_message_does_not_redraw() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
         store.send(notification(ClientNotification::Message {
@@ -943,7 +943,7 @@ mod tests {
     /// subscription matches no tab is dropped by `route_relay_event` and today redraws
     /// anyway, so asserting the directive alone would hold either way.
     #[test]
-    fn test_routed_event_message_still_redraws() {
+    fn routed_event_message_still_redraws() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
         let subscription_id = SubscriptionId::new("home");
 
@@ -973,7 +973,7 @@ mod tests {
     /// and routing every key to `TerminalEventIgnored` would leave the suite green. The
     /// work this branch points at next edits exactly this match (#537, #543).
     #[test]
-    fn test_a_key_going_down_is_input() {
+    fn a_key_going_down_is_input() {
         for kind in [KeyEventKind::Press, KeyEventKind::Repeat] {
             let key = KeyEvent::new_with_kind(KeyCode::Char('j'), KeyModifiers::NONE, kind);
 
@@ -992,7 +992,7 @@ mod tests {
     /// into a press before the lookup — `f`'s release publishing a reaction, which is
     /// worse than what #531 fixed.
     #[test]
-    fn test_the_handler_refuses_a_release_of_its_own_accord() {
+    fn the_handler_refuses_a_release_of_its_own_accord() {
         let f = KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE);
         let mut store = store_with_binding(f, KeyAction::React);
 
@@ -1014,7 +1014,7 @@ mod tests {
     /// a release of `Esc` reached normal mode's fallback and deselected the timeline
     /// behind a draft the press had just cancelled.
     #[test]
-    fn test_key_release_is_not_input() {
+    fn key_release_is_not_input() {
         let release = KeyEvent::new_with_kind(
             KeyCode::Char('j'),
             KeyModifiers::NONE,
@@ -1035,7 +1035,7 @@ mod tests {
     /// Sent as a `KeyInput` rather than through `terminal_event_to_msg`, because the
     /// guarantee is the handler's: it holds for whatever produces the message.
     #[test]
-    fn test_a_decorated_key_reaches_its_binding() {
+    fn a_decorated_key_reaches_its_binding() {
         let mut store = store_with_binding(
             KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
             KeyAction::ScrollDown,
@@ -1065,7 +1065,7 @@ mod tests {
     /// this key resolves, the assertion would hold just as well if the lookup missed and
     /// the fallback answered — and would keep holding if resolution broke later.
     #[test]
-    fn test_a_bound_key_that_does_nothing_does_not_redraw() {
+    fn a_bound_key_that_does_nothing_does_not_redraw() {
         let ctrl_p = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
 
         let mut resolves = store_with_binding(ctrl_p, KeyAction::ScrollDown);
@@ -1083,7 +1083,7 @@ mod tests {
     /// A key bound to nothing changes nothing, so it must not repaint — which matters
     /// now that a held key produces one of these per repeat rather than none (#536).
     #[test]
-    fn test_a_key_bound_to_nothing_does_not_redraw() {
+    fn a_key_bound_to_nothing_does_not_redraw() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
         store.send(AppMsg::System(SystemMsg::KeyInput(KeyEvent::new(
@@ -1098,7 +1098,7 @@ mod tests {
     /// Resizes still route to their own message, and everything else nostui does not
     /// act on to the one that does nothing.
     #[test]
-    fn test_other_terminal_events_keep_their_routing() {
+    fn other_terminal_events_keep_their_routing() {
         assert!(matches!(
             terminal_event_to_msg(Event::Resize(80, 24)),
             AppMsg::System(SystemMsg::Resize(80, 24))
@@ -1114,7 +1114,7 @@ mod tests {
     /// which is the whole of what the refusal is for. Asserted here because this is
     /// where the directive is observable.
     #[test]
-    fn test_refusing_a_blank_draft_redraws() {
+    fn refusing_a_blank_draft_redraws() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
         store.send(AppMsg::Editor(EditorMsg::StartComposing));
@@ -1132,7 +1132,7 @@ mod tests {
     /// render. Before #527 this arm produced a tick, which the FPS display counted
     /// as one and redrew for.
     #[test]
-    fn test_ignored_terminal_event_does_not_redraw() {
+    fn ignored_terminal_event_does_not_redraw() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
         store.send(AppMsg::System(SystemMsg::TerminalEventIgnored));
@@ -1146,7 +1146,7 @@ mod tests {
     /// swapping the arms in `publish_music_status` would leave both of them passing
     /// and the now-playing line invisible on a client with nothing else going on.
     #[test]
-    fn test_track_the_status_line_shows_redraws() {
+    fn track_the_status_line_shows_redraws() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
         store.send(AppMsg::Media(Ok(MediaEvent::TrackChanged {
@@ -1176,7 +1176,7 @@ mod tests {
     /// repaint either. With the tick gone these are the remaining messages that arrive
     /// without the user touching nostui at all.
     #[test]
-    fn test_undisplayed_media_event_does_not_redraw() {
+    fn undisplayed_media_event_does_not_redraw() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
         store.send(AppMsg::Media(Ok(MediaEvent::VolumeChanged {
@@ -1193,7 +1193,7 @@ mod tests {
     /// redraw. Declining it leaves the cleared line standing — which the tick used to
     /// hide within a second, and #527 removed the tick.
     #[test]
-    fn test_timeline_message_that_does_nothing_still_clears_the_status_bar_on_screen() {
+    fn timeline_message_that_does_nothing_still_clears_the_status_bar_on_screen() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
         let subscription_id = SubscriptionId::new("home");
 
@@ -1227,7 +1227,7 @@ mod tests {
     /// not repaint either. `MusicStatus::new` rejects a track with no duration, which
     /// radio and live streams report routinely while their metadata keeps changing.
     #[test]
-    fn test_track_the_status_line_rejects_does_not_redraw() {
+    fn track_the_status_line_rejects_does_not_redraw() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
         store.send(AppMsg::Media(Ok(MediaEvent::TrackChanged {
@@ -1253,7 +1253,7 @@ mod tests {
     /// source that produced it, and the repaint is the only per-iteration cost left in
     /// that loop until #529 bounds it. Pinned so the brake is not removed by tidying.
     #[test]
-    fn test_media_source_error_keeps_its_redraw_as_a_brake() {
+    fn media_source_error_keeps_its_redraw_as_a_brake() {
         let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
 
         store.send(AppMsg::Media(Err(MediaSourceError::UnsupportedPlatform)));

@@ -135,7 +135,7 @@ mod tests {
     }
 
     #[test]
-    fn test_with_own_pubkey_appends_when_absent() {
+    fn with_own_pubkey_appends_when_absent() {
         let own = pubkey(1);
         let authors = vec![pubkey(2), pubkey(3)];
 
@@ -146,7 +146,7 @@ mod tests {
     }
 
     #[test]
-    fn test_with_own_pubkey_keeps_unchanged_when_present() {
+    fn with_own_pubkey_keeps_unchanged_when_present() {
         let own = pubkey(1);
         let authors = vec![pubkey(2), own, pubkey(3)];
 
@@ -157,14 +157,14 @@ mod tests {
     }
 
     #[test]
-    fn test_with_own_pubkey_on_empty_authors() {
+    fn with_own_pubkey_on_empty_authors() {
         let own = pubkey(1);
 
         assert_eq!(with_own_pubkey(Vec::new(), own), vec![own]);
     }
 
     #[test]
-    fn test_home_feed_filters_cover_backward_forward_and_profiles() {
+    fn home_feed_filters_cover_backward_forward_and_profiles() {
         let authors = vec![pubkey(1), pubkey(2)];
         let now = Timestamp::from(1000);
 
@@ -192,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_feed_filters_cover_backward_and_forward() {
+    fn user_feed_filters_cover_backward_and_forward() {
         let author = pubkey(7);
         let now = Timestamp::from(2000);
 
@@ -216,7 +216,7 @@ mod tests {
     }
 
     #[test]
-    fn test_home_load_more_filter_pages_before_its_timestamp() {
+    fn home_load_more_filter_pages_before_its_timestamp() {
         let authors = vec![pubkey(1), pubkey(2)];
         let since = Timestamp::from(500);
 
@@ -231,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_load_more_filter_pages_before_its_timestamp() {
+    fn user_load_more_filter_pages_before_its_timestamp() {
         let author = pubkey(9);
         let since = Timestamp::from(500);
 
@@ -246,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mention_feed_filters_match_on_the_p_tag() {
+    fn mention_feed_filters_match_on_the_p_tag() {
         let own = pubkey(3);
         let now = Timestamp::from(2000);
 
@@ -270,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mention_load_more_filter_pages_before_its_timestamp() {
+    fn mention_load_more_filter_pages_before_its_timestamp() {
         let own = pubkey(3);
         let since = Timestamp::from(500);
 

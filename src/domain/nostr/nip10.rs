@@ -352,7 +352,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reply_tags_builder_does_not_duplicate_author_ptag() -> Result<()> {
+    fn reply_tags_builder_does_not_duplicate_author_ptag() -> Result<()> {
         // Create an event that already has a p-tag for the author
         let event = Event::from_json(
             r#"{
@@ -393,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reply_tags_builder_adds_missing_author_ptag() -> Result<()> {
+    fn reply_tags_builder_adds_missing_author_ptag() -> Result<()> {
         // Create an event without p-tag for the author
         let event = Event::from_json(
             r#"{
@@ -429,7 +429,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reply_tags_builder_with_relay_url() -> Result<()> {
+    fn reply_tags_builder_with_relay_url() -> Result<()> {
         // Create an event with relay URLs in tags
         let event = Event::from_json(
             r#"{
@@ -479,7 +479,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reply_tags_builder_preserves_non_reply_etags() -> Result<()> {
+    fn reply_tags_builder_preserves_non_reply_etags() -> Result<()> {
         // Create an event with various e-tags including non-reply markers
         let event = Event::from_json(
             r#"{
@@ -543,7 +543,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reply_tags_builder_removes_reply_marker_from_previous_reply() -> Result<()> {
+    fn reply_tags_builder_removes_reply_marker_from_previous_reply() -> Result<()> {
         // This tests the key behavior: when replying to a reply,
         // the previous "reply" marker should be removed
         let event = Event::from_json(

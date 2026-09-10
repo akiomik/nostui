@@ -58,7 +58,7 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn test_profile_new() {
+    fn profile_new() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -110,7 +110,7 @@ mod tests {
     }
 
     #[test]
-    fn test_name_returns_display_name_when_set() {
+    fn name_returns_display_name_when_set() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -124,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn test_name_returns_name_with_at_when_display_name_empty() {
+    fn name_returns_name_with_at_when_display_name_empty() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -138,7 +138,7 @@ mod tests {
     }
 
     #[test]
-    fn test_name_returns_name_with_at_when_display_name_none() {
+    fn name_returns_name_with_at_when_display_name_none() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -152,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn test_name_returns_npub_when_both_names_empty() {
+    fn name_returns_npub_when_both_names_empty() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -170,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn test_name_returns_npub_when_both_names_none() {
+    fn name_returns_npub_when_both_names_none() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -186,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    fn test_name_empty_string_display_name_is_skipped() {
+    fn name_empty_string_display_name_is_skipped() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -202,7 +202,7 @@ mod tests {
     }
 
     #[test]
-    fn test_profile_clone() {
+    fn profile_clone() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -217,7 +217,7 @@ mod tests {
     }
 
     #[test]
-    fn test_profile_serialization() {
+    fn profile_serialization() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();

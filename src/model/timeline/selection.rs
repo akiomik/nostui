@@ -93,14 +93,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_selection_state_default() {
+    fn selection_state_default() {
         let state = Selection::new();
         assert_eq!(state.selected_index(), None);
         assert!(!state.is_selected());
     }
 
     #[test]
-    fn test_select_and_deselect() {
+    fn select_and_deselect() {
         let mut state = Selection::new();
         state.update(Message::ItemSelected(5));
         assert_eq!(state.selected_index(), Some(5));
@@ -112,7 +112,7 @@ mod tests {
     }
 
     #[test]
-    fn test_scroll_up() {
+    fn scroll_up() {
         let mut state = Selection::new();
         state.update(Message::ItemSelected(5));
 
@@ -126,7 +126,7 @@ mod tests {
     }
 
     #[test]
-    fn test_scroll_down() {
+    fn scroll_down() {
         let mut state = Selection::new();
 
         // Initial scroll down selects first item
@@ -143,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn test_select_first_and_last() {
+    fn select_first_and_last() {
         let mut state = Selection::new();
 
         state.update(Message::FirstItemSelected);
@@ -154,7 +154,7 @@ mod tests {
     }
 
     #[test]
-    fn test_previous_item_selected_when_nothing_selected() {
+    fn previous_item_selected_when_nothing_selected() {
         let mut state = Selection::new();
         assert_eq!(state.selected_index(), None);
 
@@ -163,7 +163,7 @@ mod tests {
     }
 
     #[test]
-    fn test_next_item_selected_with_empty_list() {
+    fn next_item_selected_with_empty_list() {
         let mut state = Selection::new();
 
         // Should do nothing when max_index is 0 (empty list)
@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn test_next_item_selected_boundary() {
+    fn next_item_selected_boundary() {
         let mut state = Selection::new();
 
         // With max_index = 0, only one item exists

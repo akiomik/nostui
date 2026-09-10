@@ -81,7 +81,7 @@ mod tests {
     use ratatui::prelude::{Color, Modifier, Rect};
 
     #[test]
-    fn test_from_no_profile() {
+    fn from_no_profile() {
         // Test From trait with no profile
         let keys = Keys::generate();
         let widget = NameWithHandle::new(keys.public_key(), None, false);
@@ -95,7 +95,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_display_name_only() {
+    fn from_display_name_only() {
         // Test From trait with display_name only
         let keys = Keys::generate();
         let metadata = Metadata::new().display_name("Alice");
@@ -109,7 +109,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_display_name_and_handle() {
+    fn from_display_name_and_handle() {
         // Test From trait with both display_name and handle
         let keys = Keys::generate();
         let metadata = Metadata::new().display_name("Alice Smith").name("alice");
@@ -125,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_preserves_styles() {
+    fn from_preserves_styles() {
         // Test that From preserves style information
         let keys = Keys::generate();
         let metadata = Metadata::new().display_name("Alice");
@@ -155,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn test_no_profile_shows_hex() {
+    fn no_profile_shows_hex() {
         // No profile - should show shortened hex public key
         let keys = Keys::generate();
         let widget = NameWithHandle::new(keys.public_key(), None, false);
@@ -177,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn test_display_name_only() {
+    fn display_name_only() {
         // Profile with display_name but no name (no handle)
         let keys = Keys::generate();
         let metadata = Metadata::new().display_name("Alice");
@@ -204,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_only() {
+    fn handle_only() {
         // Profile with name (handle) but no display_name
         let keys = Keys::generate();
         let metadata = Metadata::new().name("alice");
@@ -232,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn test_display_name_and_handle_different() {
+    fn display_name_and_handle_different() {
         // Profile with both display_name and handle, and they're different
         let keys = Keys::generate();
         let metadata = Metadata::new().display_name("Alice Smith").name("alice");
@@ -263,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn test_display_name_and_handle_same() {
+    fn display_name_and_handle_same() {
         // Profile where display_name equals handle (without @)
         // Should only show display_name
         let keys = Keys::generate();
@@ -292,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn test_highlighted_with_profile() {
+    fn highlighted_with_profile() {
         // Test highlighting when profile exists
         let keys = Keys::generate();
         let metadata = Metadata::new().display_name("Alice");
@@ -317,7 +317,7 @@ mod tests {
     }
 
     #[test]
-    fn test_highlighted_without_profile() {
+    fn highlighted_without_profile() {
         // Test highlighting when no profile (hex display)
         let keys = Keys::generate();
         let widget = NameWithHandle::new(keys.public_key(), None, true);
@@ -339,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn test_highlighted_handle_only() {
+    fn highlighted_handle_only() {
         // Test highlighting when only handle exists (no display_name)
         let keys = Keys::generate();
         let metadata = Metadata::new().name("alice");

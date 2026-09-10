@@ -135,7 +135,7 @@ mod tests {
     }
 
     #[test]
-    fn test_new_editor_default_state() {
+    fn new_editor_default_state() {
         let editor = Editor::new();
         assert!(!editor.is_active());
         assert!(!editor.is_reply());
@@ -144,7 +144,7 @@ mod tests {
     }
 
     #[test]
-    fn test_composing_started() {
+    fn composing_started() {
         let mut editor = Editor::new();
         editor.update(Message::ComposingStarted);
 
@@ -155,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reply_started_with_profile() {
+    fn reply_started_with_profile() {
         let mut editor = Editor::new();
         let event = create_test_event();
         let profile = create_test_profile();
@@ -171,7 +171,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reply_started_without_profile() {
+    fn reply_started_without_profile() {
         let mut editor = Editor::new();
         let event = create_test_event();
 
@@ -186,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    fn test_composing_canceled() {
+    fn composing_canceled() {
         let mut editor = Editor::new();
         editor.update(Message::ComposingStarted);
         assert!(editor.is_active());
@@ -196,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn test_composing_started_clears_reply_state() {
+    fn composing_started_clears_reply_state() {
         let mut editor = Editor::new();
         let event = create_test_event();
 
@@ -214,7 +214,7 @@ mod tests {
     }
 
     #[test]
-    fn test_key_event_received_when_active() {
+    fn key_event_received_when_active() {
         let mut editor = Editor::new();
         editor.update(Message::ComposingStarted);
 
@@ -225,7 +225,7 @@ mod tests {
     }
 
     #[test]
-    fn test_key_event_received_when_inactive() {
+    fn key_event_received_when_inactive() {
         let mut editor = Editor::new();
         // Editor is inactive by default
 
@@ -237,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_key_events() {
+    fn multiple_key_events() {
         let mut editor = Editor::new();
         editor.update(Message::ComposingStarted);
 
@@ -252,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_content_empties_the_buffer() {
+    fn clear_content_empties_the_buffer() {
         let mut editor = Editor::new();
         editor.update(Message::ComposingStarted);
 
@@ -278,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn test_composing_started_clears_previous_content() {
+    fn composing_started_clears_previous_content() {
         let mut editor = Editor::new();
         editor.update(Message::ComposingStarted);
 
@@ -294,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reply_started_clears_previous_content() {
+    fn reply_started_clears_previous_content() {
         let mut editor = Editor::new();
         editor.update(Message::ComposingStarted);
 
@@ -314,14 +314,14 @@ mod tests {
     }
 
     #[test]
-    fn test_textarea_reference() {
+    fn textarea_reference() {
         let editor = Editor::new();
         let textarea = editor.textarea();
         assert_eq!(textarea.lines().len(), 1);
     }
 
     #[test]
-    fn test_cancel_preserves_content() {
+    fn cancel_preserves_content() {
         let mut editor = Editor::new();
         editor.update(Message::ComposingStarted);
 
@@ -340,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reply_target_after_multiple_replies() {
+    fn reply_target_after_multiple_replies() {
         let mut editor = Editor::new();
         let event1 = create_test_event();
         let event2 = create_test_event();
@@ -361,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ctrl_u_as_first_key_event_when_active() {
+    fn ctrl_u_as_first_key_event_when_active() {
         // NOTE: This is a regression test for a tui-textarea bug that occurred
         // when using select_all() + delete_str() to clear content.
         // Ctrl+U (undo) would panic with "cursor (1, 0) exceeds max lines 1".

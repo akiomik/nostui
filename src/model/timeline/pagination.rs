@@ -85,14 +85,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_pagination_state_default() {
+    fn pagination_state_default() {
         let state = Pagination::new();
         assert_eq!(state.oldest_timestamp(), None);
         assert!(!state.is_loading_more());
     }
 
     #[test]
-    fn test_update_oldest() {
+    fn update_oldest() {
         let mut state = Pagination::new();
 
         let ts1 = Timestamp::from(1000);
@@ -112,7 +112,7 @@ mod tests {
     }
 
     #[test]
-    fn test_loading_more() {
+    fn loading_more() {
         let mut state = Pagination::new();
         let since = Timestamp::from(1000);
 

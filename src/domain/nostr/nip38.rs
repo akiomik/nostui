@@ -68,7 +68,7 @@ mod tests {
     }
 
     #[test]
-    fn test_new_with_valid_track() {
+    fn new_with_valid_track() {
         let track = create_valid_track();
         let status = MusicStatus::new(track);
 
@@ -76,7 +76,7 @@ mod tests {
     }
 
     #[test]
-    fn test_new_with_empty_title() {
+    fn new_with_empty_title() {
         let track = Track {
             title: "".to_string(),
             artist: vec!["Test Artist".to_string()],
@@ -92,7 +92,7 @@ mod tests {
     }
 
     #[test]
-    fn test_new_with_empty_artist() {
+    fn new_with_empty_artist() {
         let track = Track {
             title: "Test Song".to_string(),
             artist: vec![],
@@ -108,7 +108,7 @@ mod tests {
     }
 
     #[test]
-    fn test_new_with_none_duration() {
+    fn new_with_none_duration() {
         let track = Track {
             title: "Test Song".to_string(),
             artist: vec!["Test Artist".to_string()],
@@ -124,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn test_content_single_artist() {
+    fn content_single_artist() {
         let track = create_valid_track();
         let status = MusicStatus::new(track).expect("Failed to create MusicStatus");
 
@@ -132,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    fn test_content_multiple_artists() {
+    fn content_multiple_artists() {
         let track = Track {
             title: "Collaboration".to_string(),
             artist: vec![
@@ -155,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reference_encodes_special_characters() {
+    fn reference_encodes_special_characters() {
         let track = Track {
             title: "Song & Title".to_string(),
             artist: vec!["Artist/Name".to_string()],
@@ -176,7 +176,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reference_encodes_spaces() {
+    fn reference_encodes_spaces() {
         let track = create_valid_track();
         let status = MusicStatus::new(track).expect("Failed to create MusicStatus");
         let reference = status.reference();
@@ -187,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn test_expiration_returns_some() {
+    fn expiration_returns_some() {
         let track = create_valid_track();
         let status = MusicStatus::new(track).expect("Failed to create MusicStatus");
         let expiration = status.expiration();
@@ -196,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn test_expiration_is_in_future() {
+    fn expiration_is_in_future() {
         let track = create_valid_track();
         let status = MusicStatus::new(track).expect("Failed to create MusicStatus");
         let expiration = status.expiration().expect("Expiration should be Some");
@@ -206,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_music_status_to_live_status() {
+    fn from_music_status_to_live_status() {
         let track = create_valid_track();
         let music_status = MusicStatus::new(track).expect("Failed to create MusicStatus");
         let live_status: LiveStatus = music_status.into();
@@ -217,7 +217,7 @@ mod tests {
     }
 
     #[test]
-    fn test_live_status_builder_builds_a_user_status_event() {
+    fn live_status_builder_builds_a_user_status_event() {
         let track = create_valid_track();
         let status = MusicStatus::new(track).expect("Failed to create MusicStatus");
         let expected_content = status.content();
@@ -233,7 +233,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_music_status_preserves_reference() {
+    fn from_music_status_preserves_reference() {
         let track = Track {
             title: "Test & Song".to_string(),
             artist: vec!["Test Artist".to_string()],

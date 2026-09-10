@@ -159,7 +159,7 @@ mod tests {
     }
 
     #[test]
-    fn test_new_creates_default_instance() {
+    fn new_creates_default_instance() {
         let nostr = Nostr::new();
 
         assert!(!nostr.is_ready());
@@ -167,14 +167,14 @@ mod tests {
     }
 
     #[test]
-    fn test_is_ready_returns_false_when_not_connected() {
+    fn is_ready_returns_false_when_not_connected() {
         let nostr = Nostr::new();
 
         assert!(!nostr.is_ready());
     }
 
     #[test]
-    fn test_is_ready_returns_true_after_connection_ready() {
+    fn is_ready_returns_true_after_connection_ready() {
         let mut nostr = Nostr::new();
 
         assert_eq!(nostr.update(Message::ConnectionReady), None);
@@ -183,7 +183,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_subscribed_returns_false_when_no_subscription() {
+    fn is_subscribed_returns_false_when_no_subscription() {
         let nostr = Nostr::new();
         let feed = create_test_feed();
 
@@ -191,7 +191,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_subscribed_returns_false_when_subscription_list_is_empty() {
+    fn is_subscribed_returns_false_when_subscription_list_is_empty() {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
 
@@ -201,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_subscribed_returns_true_when_subscription_exists() {
+    fn is_subscribed_returns_true_when_subscription_exists() {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
@@ -215,7 +215,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_tab_by_subscription_returns_none_when_not_found() {
+    fn find_tab_by_subscription_returns_none_when_not_found() {
         let nostr = Nostr::new();
         let sub_id = SubscriptionId::new("test_sub");
 
@@ -223,7 +223,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_tab_by_subscription_returns_feed_when_found() {
+    fn find_tab_by_subscription_returns_feed_when_found() {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
@@ -237,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_connection_ready_sets_connected() {
+    fn update_connection_ready_sets_connected() {
         let mut nostr = Nostr::new();
 
         let outcome = nostr.update(Message::ConnectionReady);
@@ -247,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_event_submitted_returns_send_when_ready() {
+    fn update_event_submitted_returns_send_when_ready() {
         let mut nostr = Nostr::new();
         let event_builder = EventBuilder::new(Kind::TextNote, "test");
 
@@ -268,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_event_submitted_returns_none_when_not_ready() {
+    fn update_event_submitted_returns_none_when_not_ready() {
         let mut nostr = Nostr::new();
         let event_builder = EventBuilder::new(Kind::TextNote, "test");
 
@@ -281,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_subscription_requested_ignores_home_tab() {
+    fn update_subscription_requested_ignores_home_tab() {
         let mut nostr = Nostr::new();
 
         let _ = nostr.update(Message::ConnectionReady);
@@ -295,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_subscription_requested_creates_subscription() {
+    fn update_subscription_requested_creates_subscription() {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
 
@@ -321,7 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_subscription_requested_ignores_request_when_not_connected() {
+    fn update_subscription_requested_ignores_request_when_not_connected() {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
 
@@ -333,7 +333,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_subscription_requested_ignores_duplicate_request() {
+    fn update_subscription_requested_ignores_duplicate_request() {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
 
@@ -353,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_subscription_created_adds_subscription_id() {
+    fn update_subscription_created_adds_subscription_id() {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
@@ -371,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_subscription_created_appends_to_existing_subscriptions() {
+    fn update_subscription_created_appends_to_existing_subscriptions() {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
         let sub_id1 = SubscriptionId::new("test_sub1");
@@ -395,7 +395,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_subscription_closed_removes_subscription_and_returns_unsubscribe() {
+    fn update_subscription_closed_removes_subscription_and_returns_unsubscribe() {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
@@ -422,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_subscription_closed_handles_non_existent_subscription() {
+    fn update_subscription_closed_handles_non_existent_subscription() {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
 
@@ -435,7 +435,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_history_requested_returns_load_more_command() {
+    fn update_history_requested_returns_load_more_command() {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
         let since = Timestamp::from(1234567890);
@@ -454,7 +454,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_connection_closed_clears_state_and_returns_shutdown() {
+    fn update_connection_closed_clears_state_and_returns_shutdown() {
         let mut nostr = Nostr::new();
         let feed = create_test_feed();
         let sub_id = SubscriptionId::new("test_sub");
@@ -474,7 +474,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_connection_closed_returns_none_when_not_connected() {
+    fn update_connection_closed_returns_none_when_not_connected() {
         let mut nostr = Nostr::new();
 
         let outcome = nostr.update(Message::ConnectionClosed);

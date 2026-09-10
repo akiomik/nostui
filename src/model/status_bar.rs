@@ -38,7 +38,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_message_getter() {
+    fn message_getter() {
         let status_bar = StatusBar {
             message: Some("test message".to_string()),
         };
@@ -46,13 +46,13 @@ mod tests {
     }
 
     #[test]
-    fn test_message_getter_none() {
+    fn message_getter_none() {
         let status_bar = StatusBar::default();
         assert_eq!(status_bar.message(), None);
     }
 
     #[test]
-    fn test_update_message_changed() {
+    fn update_message_changed() {
         let mut status_bar = StatusBar::default();
         status_bar.update(Message::MessageChanged {
             label: "Info".to_string(),
@@ -67,7 +67,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_error_message_changed() {
+    fn update_error_message_changed() {
         let mut status_bar = StatusBar::default();
         status_bar.update(Message::ErrorMessageChanged {
             label: "Network".to_string(),
@@ -82,7 +82,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_message_cleared() {
+    fn update_message_cleared() {
         let mut status_bar = StatusBar {
             message: Some("[Info] Test message".to_string()),
         };
@@ -91,7 +91,7 @@ mod tests {
     }
 
     #[test]
-    fn test_newline_normalization() {
+    fn newline_normalization() {
         let mut status_bar = StatusBar::default();
         status_bar.update(Message::MessageChanged {
             label: "MultiLine".to_string(),
@@ -106,7 +106,7 @@ mod tests {
     }
 
     #[test]
-    fn test_newline_normalization_in_error_message() {
+    fn newline_normalization_in_error_message() {
         let mut status_bar = StatusBar::default();
         status_bar.update(Message::ErrorMessageChanged {
             label: "Error".to_string(),
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn test_message_overwrite() {
+    fn message_overwrite() {
         let mut status_bar = StatusBar::default();
         status_bar.update(Message::MessageChanged {
             label: "First".to_string(),
@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_label_and_message() {
+    fn empty_label_and_message() {
         let mut status_bar = StatusBar::default();
         status_bar.update(Message::MessageChanged {
             label: "".to_string(),

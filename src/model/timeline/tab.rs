@@ -279,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn test_timeline_tab_default() {
+    fn timeline_tab_default() {
         let tab = TimelineTab::new_home();
         assert_eq!(tab.len(), 0);
         assert!(tab.is_empty());
@@ -289,7 +289,7 @@ mod tests {
     }
 
     #[test]
-    fn test_timeline_feed() {
+    fn timeline_feed() {
         let home_tab = TimelineTab::new_home();
         assert_eq!(home_tab.feed, FeedKind::Home);
 
@@ -299,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn test_selection_message_delegation() {
+    fn selection_message_delegation() {
         let mut tab = TimelineTab::new_home();
 
         // Test ItemSelected - no command should be issued for selection changes
@@ -341,7 +341,7 @@ mod tests {
     }
 
     #[test]
-    fn test_loading_more_triggered_at_bottom() {
+    fn loading_more_triggered_at_bottom() {
         let mut tab = TimelineTab::new_home();
 
         // Add notes
@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn test_loading_more_not_retriggered_while_in_flight() {
+    fn loading_more_not_retriggered_while_in_flight() {
         let mut tab = TimelineTab::new_home();
 
         // Add notes and move to the bottom
@@ -384,7 +384,7 @@ mod tests {
     }
 
     #[test]
-    fn test_loading_more_not_triggered_without_notes() {
+    fn loading_more_not_triggered_without_notes() {
         let mut tab = TimelineTab::new_home();
         assert_eq!(tab.oldest_timestamp(), None);
 
@@ -395,7 +395,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_added_basic() {
+    fn note_added_basic() {
         let mut tab = TimelineTab::new_home();
 
         let event_id = create_test_event_id(1000, 1);
@@ -408,7 +408,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_added_updates_oldest_timestamp() {
+    fn note_added_updates_oldest_timestamp() {
         let mut tab = TimelineTab::new_home();
 
         let event1 = create_test_event_id(1000, 1);
@@ -428,7 +428,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_added_sorting() {
+    fn note_added_sorting() {
         let mut tab = TimelineTab::new_home();
 
         // Add notes in random order
@@ -446,7 +446,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_added_duplicate() {
+    fn note_added_duplicate() {
         let mut tab = TimelineTab::new_home();
 
         let event_id = create_test_event_id(1000, 1);
@@ -459,7 +459,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_added_adjusts_selection_when_inserted_before() {
+    fn note_added_adjusts_selection_when_inserted_before() {
         let mut tab = TimelineTab::new_home();
 
         // Add initial notes
@@ -483,7 +483,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_added_does_not_adjust_selection_when_inserted_after() {
+    fn note_added_does_not_adjust_selection_when_inserted_after() {
         let mut tab = TimelineTab::new_home();
 
         // Add initial notes
@@ -507,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_added_does_not_adjust_when_nothing_selected() {
+    fn note_added_does_not_adjust_when_nothing_selected() {
         let mut tab = TimelineTab::new_home();
 
         let event1 = create_test_event_id(1000, 1);
@@ -520,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_added_does_not_adjust_when_duplicate() {
+    fn note_added_does_not_adjust_when_duplicate() {
         let mut tab = TimelineTab::new_home();
 
         let event1 = create_test_event_id(1000, 1);
@@ -538,7 +538,7 @@ mod tests {
     }
 
     #[test]
-    fn test_complex_scenario() {
+    fn complex_scenario() {
         let mut tab = TimelineTab::new_home();
 
         // Add some initial notes
@@ -588,7 +588,7 @@ mod tests {
     }
 
     #[test]
-    fn test_next_and_last_item_with_empty_timeline() {
+    fn next_and_last_item_with_empty_timeline() {
         let mut tab = TimelineTab::new_home();
         assert_eq!(tab.len(), 0);
 
@@ -604,7 +604,7 @@ mod tests {
     }
 
     #[test]
-    fn test_next_and_last_item_with_single_item() {
+    fn next_and_last_item_with_single_item() {
         let mut tab = TimelineTab::new_home();
         let event = create_test_event_id(1000, 1);
         let _ = tab.update(Message::NoteAdded(event));
@@ -634,7 +634,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_title_home() {
+    fn tab_title_home() {
         let tab = TimelineTab::new_home();
         let profiles = HashMap::new();
 
@@ -642,7 +642,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_title_mention() {
+    fn tab_title_mention() {
         let tab = TimelineTab::new(FeedKind::Mention);
         let profiles = HashMap::new();
 
@@ -650,7 +650,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_title_user_timeline_with_handle() {
+    fn tab_title_user_timeline_with_handle() {
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let tab = TimelineTab::new(FeedKind::Author(pubkey));
 
@@ -665,7 +665,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_title_user_timeline_with_empty_name() {
+    fn tab_title_user_timeline_with_empty_name() {
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let tab = TimelineTab::new(FeedKind::Author(pubkey));
 
@@ -682,7 +682,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tab_title_user_timeline_without_profile() {
+    fn tab_title_user_timeline_without_profile() {
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let tab = TimelineTab::new(FeedKind::Author(pubkey));
 

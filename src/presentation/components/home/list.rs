@@ -93,7 +93,7 @@ mod tests {
     use nostr_sdk::prelude::*;
 
     #[test]
-    fn test_multibyte_character_rendering() -> Result<()> {
+    fn multibyte_character_rendering() -> Result<()> {
         use ratatui::backend::TestBackend;
         use ratatui::Terminal;
 
