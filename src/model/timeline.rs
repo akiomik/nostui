@@ -768,6 +768,11 @@ mod tests {
             });
         }
 
+        // Guards the subtraction below and pins what the loop above is assumed to have
+        // produced: `notes` is a set, so events colliding would silently leave it empty
+        // and `len() - 1` would panic about arithmetic rather than about the timeline.
+        assert_eq!(timeline.len(), 5);
+
         // Every index but the last, rather than a sample of them: "only" is not earned
         // by checking the first and one in the middle, since `selected_index >= len - 2`
         // would pass that and report the bottom a note early, firing the load-more path

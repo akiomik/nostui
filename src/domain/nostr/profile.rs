@@ -78,7 +78,7 @@ mod tests {
     #[case(Metadata::new().display_name(""), None)]
     #[case(Metadata::new().display_name("").name(""), None)]
     #[case(Metadata::new().display_name("").name("hoge"), None)]
-    fn display_name_is_only_the_display_name_and_never_blank(
+    fn display_name_is_only_the_display_name_and_never_empty(
         #[case] metadata: Metadata,
         #[case] expected: Option<&String>,
     ) -> Result<()> {
