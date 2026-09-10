@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 use nostr_sdk::prelude::*;
 use nowhear::{MediaEvent, MediaSourceError};
 use ratatui::prelude::*;
@@ -176,24 +176,19 @@ impl<'a> Application for TearsApp<'a> {
 /// Map one terminal event to the message it should become.
 ///
 /// A key event is input when the key is going down. A Windows console reports releases
-/// too — crossterm takes the kind from the record's `key_down` flag — and nostui acted
-/// on some of them. Not the configured bindings, whose map is keyed by `KeyEvent` and so
-/// compares the kind; the two paths that read the key's code alone. Cancelling a draft
-/// with `Esc` closed the composer on the press, and the release then landed in normal
-/// mode, whose fallback reads `code` and fires `Deselect` (#531).
+/// too, and nostui acted on them: not through the binding map, which compares the kind,
+/// but through the paths that read the key's code — so cancelling a draft with `Esc`
+/// closed the composer on the press and then deselected the timeline on the release
+/// (#531). A repeat is the key still down, so that is input.
 ///
-/// `Repeat` counts as input, because a repeat is the key still being down. What each
-/// path does with one after that differs, and inconsistently — that is #536, which this
-/// function cannot settle. Nothing reports a repeat today in any case: only the kitty
-/// keyboard protocol does, and nostui never asks for it.
+/// Not every release is a key coming up: crossterm reports a Windows Alt code as a
+/// `Release` carrying the composed character, so this drops it — and so does
+/// `handle_key_input`, which refuses releases on its own account. Making it work is
+/// #537, and it has both of those to get past. It never typed anything before either;
+/// `tui-textarea` discarded it further down.
 ///
-/// Not every release is a key coming up. crossterm reports a Windows Alt code as a
-/// `Release` carrying the composed character, so the arm below drops it; it never typed
-/// anything before either, since `tui-textarea` discarded it further down. Making it
-/// work is #537, and it starts here.
-///
-/// A free function rather than the closure it replaces: the closure lived inside
-/// `subscriptions`, which no test drives.
+/// A free function rather than the closure it replaces, which lived inside
+/// `subscriptions` where no test could drive it.
 fn terminal_event_to_msg(event: Event) -> AppMsg {
     match event {
         Event::Key(key) => match key.kind {
@@ -252,6 +247,28 @@ impl<'a> TearsApp<'a> {
         // This ensures it works reliably across different terminal emulators and
         // properly separates OS signals from application keybindings
 
+        // A release is not someone pressing a key (#531). `terminal_event_to_msg` routes
+        // those away before they reach here, but refusing them here too is the
+        // difference between a guarantee and a habit — and the normalisation below would
+        // otherwise launder one into a press, which is worse than the bug #531 fixed:
+        // the binding map used to reject a release on its kind, so only the paths
+        // reading the code alone misfired.
+        if key.kind == KeyEventKind::Release {
+            return Command::none().without_redraw();
+        }
+
+        // Reduce the key to what `KeyEvent::new` would have built, which is what the
+        // keybinding map was parsed from. It compares `kind` and `state` as well as the
+        // code and modifiers, and the two paths below compare various subsets, so a key
+        // the terminal decorated — a repeat, or anything with Num Lock lit — used to
+        // resolve differently in each of them (#536). Here rather than where the event
+        // is mapped, so it holds for every producer of `KeyInput` rather than one.
+        let key = KeyEvent {
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+            ..key
+        };
+
         // Mode-specific keybindings
         if self.state.editor.is_active() {
             self.handle_composing_mode_key(key)
@@ -271,7 +288,10 @@ impl<'a> TearsApp<'a> {
         match key.code {
             // Escape key - unselect/cancel (delegates to TimelineMsg::Deselect)
             KeyCode::Esc => Command::message(AppMsg::Timeline(TimelineMsg::Deselect)).into(),
-            _ => Command::none(),
+            // A key bound to nothing changes nothing, so it should not cost a render —
+            // and with no tick left to repaint anyway, holding one would otherwise be a
+            // render per repeat for no reason (#536).
+            _ => Command::none().without_redraw(),
         }
     }
 
@@ -345,8 +365,10 @@ impl<'a> TearsApp<'a> {
             // System
             KeyAction::Quit => Command::message(AppMsg::System(SystemMsg::Quit)).into(),
             KeyAction::SubmitTextNote => {
-                // Only valid in composing mode, handled separately
-                Command::none()
+                // Only valid in composing mode, handled separately. Declining the redraw
+                // for the same reason the unbound fallback does: this changes nothing,
+                // and the key it is bound to is one somebody can hold down (#536).
+                Command::none().without_redraw()
             }
         }
     }
@@ -569,6 +591,16 @@ mod tests {
     fn create_test_app() -> TearsApp<'static> {
         let (app, _) = TearsApp::new(test_flags());
         app
+    }
+
+    /// A store whose only keybinding is `key` -> `action`.
+    ///
+    /// Put there rather than taken from `.config/config.json5`, so a test pins the
+    /// lookup and not what the shipped defaults happen to say.
+    fn store_with_binding(key: KeyEvent, action: KeyAction) -> TestStore<TearsApp<'static>> {
+        let mut flags = test_flags();
+        flags.config.keybindings.home.insert(vec![key], action);
+        TestStore::new(flags)
     }
 
     /// Wrap a relay pool notification the way the subscription delivers it.
@@ -934,6 +966,48 @@ mod tests {
         store.finish();
     }
 
+    /// The mapping's own half of #531: a press and a repeat both become `KeyInput`.
+    ///
+    /// One line, and load-bearing out of proportion to it — every other test here sends
+    /// a `KeyInput` directly, so without this the whole terminal-key route is unguarded
+    /// and routing every key to `TerminalEventIgnored` would leave the suite green. The
+    /// work this branch points at next edits exactly this match (#537, #543).
+    #[test]
+    fn test_a_key_going_down_is_input() {
+        for kind in [KeyEventKind::Press, KeyEventKind::Repeat] {
+            let key = KeyEvent::new_with_kind(KeyCode::Char('j'), KeyModifiers::NONE, kind);
+
+            assert!(
+                matches!(
+                    terminal_event_to_msg(Event::Key(key)),
+                    AppMsg::System(SystemMsg::KeyInput(got)) if got == key
+                ),
+                "{kind:?} should reach `KeyInput`"
+            );
+        }
+    }
+
+    /// The consumer refuses a release too, rather than trusting the mapping to have
+    /// dropped it. A producer that forwarded one raw would otherwise have it normalised
+    /// into a press before the lookup — `f`'s release publishing a reaction, which is
+    /// worse than what #531 fixed.
+    #[test]
+    fn test_the_handler_refuses_a_release_of_its_own_accord() {
+        let f = KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE);
+        let mut store = store_with_binding(f, KeyAction::React);
+
+        store.send(AppMsg::System(SystemMsg::KeyInput(
+            KeyEvent::new_with_kind(
+                KeyCode::Char('f'),
+                KeyModifiers::NONE,
+                KeyEventKind::Release,
+            ),
+        )));
+
+        assert!(!store.redraw_requested());
+        store.finish();
+    }
+
     /// #531: a Windows console reports a release for every press, and a release is not
     /// someone pressing a key. Configured bindings were safe — the map they live in
     /// compares the kind — but the paths matching on the key's code alone were not:
@@ -953,23 +1027,72 @@ mod tests {
         ));
     }
 
-    /// The other two kinds are the key going down or staying down, and this pins where
-    /// the mapping sends them — not what happens next, which the three key paths answer
-    /// differently and inconsistently (#536). All of it is moot until nostui asks for the
-    /// kitty keyboard protocol, which is the only thing that reports a repeat.
+    /// A key the terminal decorated still reaches the binding it is configured for. The
+    /// map compares `kind` and `state` as well as the code, and the config is parsed
+    /// into neither — so without the normalisation this misses and falls through to a
+    /// fallback that does nothing.
+    ///
+    /// Sent as a `KeyInput` rather than through `terminal_event_to_msg`, because the
+    /// guarantee is the handler's: it holds for whatever produces the message.
     #[test]
-    fn test_key_press_and_repeat_are_input() {
-        for kind in [KeyEventKind::Press, KeyEventKind::Repeat] {
-            let key = KeyEvent::new_with_kind(KeyCode::Char('j'), KeyModifiers::NONE, kind);
+    fn test_a_decorated_key_reaches_its_binding() {
+        let mut store = store_with_binding(
+            KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+            KeyAction::ScrollDown,
+        );
 
-            assert!(
-                matches!(
-                    terminal_event_to_msg(Event::Key(key)),
-                    AppMsg::System(SystemMsg::KeyInput(got)) if got == key
-                ),
-                "{kind:?} should reach `KeyInput`"
-            );
-        }
+        // A held key on a keyboard with the numpad lit: both decorated fields at once.
+        store.send(AppMsg::System(SystemMsg::KeyInput(
+            KeyEvent::new_with_kind_and_state(
+                KeyCode::Char('j'),
+                KeyModifiers::NONE,
+                KeyEventKind::Repeat,
+                KeyEventState::NUM_LOCK,
+            ),
+        )));
+
+        store.receive_matching(|msg| matches!(msg, AppMsg::Timeline(TimelineMsg::ScrollDown)));
+        store.finish();
+    }
+
+    /// `SubmitTextNote` is a no-op outside the composer, and `Ctrl+P` is bound to it in
+    /// normal mode too — so holding it there would repaint per repeat for nothing. Same
+    /// reasoning as the unbound fallback; the fallback's test cannot reach it, because
+    /// this key *is* bound.
+    ///
+    /// Which is why the control comes first. Both paths return the same command, and a
+    /// store built from `Config::default()` has no bindings at all, so without proving
+    /// this key resolves, the assertion would hold just as well if the lookup missed and
+    /// the fallback answered — and would keep holding if resolution broke later.
+    #[test]
+    fn test_a_bound_key_that_does_nothing_does_not_redraw() {
+        let ctrl_p = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
+
+        let mut resolves = store_with_binding(ctrl_p, KeyAction::ScrollDown);
+        resolves.send(AppMsg::System(SystemMsg::KeyInput(ctrl_p)));
+        resolves.receive_matching(|msg| matches!(msg, AppMsg::Timeline(TimelineMsg::ScrollDown)));
+        resolves.finish();
+
+        let mut store = store_with_binding(ctrl_p, KeyAction::SubmitTextNote);
+        store.send(AppMsg::System(SystemMsg::KeyInput(ctrl_p)));
+
+        assert!(!store.redraw_requested());
+        store.finish();
+    }
+
+    /// A key bound to nothing changes nothing, so it must not repaint — which matters
+    /// now that a held key produces one of these per repeat rather than none (#536).
+    #[test]
+    fn test_a_key_bound_to_nothing_does_not_redraw() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(AppMsg::System(SystemMsg::KeyInput(KeyEvent::new(
+            KeyCode::F(12),
+            KeyModifiers::NONE,
+        ))));
+
+        assert!(!store.redraw_requested());
+        store.finish();
     }
 
     /// Resizes still route to their own message, and everything else nostui does not

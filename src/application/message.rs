@@ -51,7 +51,11 @@ pub enum SystemMsg {
     TerminalEventIgnored,
     /// Show an error message
     ShowError(String),
-    /// Key input event
+    /// Key input event, as the terminal reported it
+    ///
+    /// `handle_key_input` refuses a release and reduces everything else to what
+    /// `KeyEvent::new` would build, before anything resolves it — so a producer may send
+    /// the key exactly as it arrived (#531, #536).
     KeyInput(KeyEvent),
 }
 
