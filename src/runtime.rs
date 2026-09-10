@@ -182,9 +182,17 @@ impl<'a> Application for TearsApp<'a> {
 /// with `Esc` closed the composer on the press, and the release then landed in normal
 /// mode, whose fallback reads `code` and fires `Deselect` (#531).
 ///
-/// `Repeat` counts as input, because a repeat is the key still being down. What each
-/// path does with one after that differs, and inconsistently — that is #536, which this
-/// function cannot settle. Nothing reports a repeat today in any case: only the kitty
+/// A repeat is the key still being down, so it becomes input too — and becomes a press
+/// on the way, because none of the three paths downstream has any use for the
+/// difference and each of them handled it differently before (#536). The binding map
+/// compares the kind and its entries are all `Press`, so a repeat used to match nothing
+/// and holding a key did nothing; the composer and normal mode's fallback read the code
+/// alone and so were already treating the two alike. Normalising here is what makes all
+/// three agree, rather than three separate opinions about a distinction nobody wants.
+///
+/// It does mean nothing downstream can tell a held key from a fresh press. That is the
+/// point, and it is where to come back if anything ever needs to — refusing to repeat a
+/// destructive action, say. Nothing reports a repeat today in any case: only the kitty
 /// keyboard protocol does, and nostui never asks for it.
 ///
 /// Not every release is a key coming up. crossterm reports a Windows Alt code as a
@@ -197,7 +205,12 @@ impl<'a> Application for TearsApp<'a> {
 fn terminal_event_to_msg(event: Event) -> AppMsg {
     match event {
         Event::Key(key) => match key.kind {
-            KeyEventKind::Press | KeyEventKind::Repeat => AppMsg::System(SystemMsg::KeyInput(key)),
+            KeyEventKind::Press | KeyEventKind::Repeat => {
+                AppMsg::System(SystemMsg::KeyInput(KeyEvent {
+                    kind: KeyEventKind::Press,
+                    ..key
+                }))
+            }
             KeyEventKind::Release => AppMsg::System(SystemMsg::TerminalEventIgnored),
         },
         Event::Resize(width, height) => AppMsg::System(SystemMsg::Resize(width, height)),
@@ -271,7 +284,10 @@ impl<'a> TearsApp<'a> {
         match key.code {
             // Escape key - unselect/cancel (delegates to TimelineMsg::Deselect)
             KeyCode::Esc => Command::message(AppMsg::Timeline(TimelineMsg::Deselect)).into(),
-            _ => Command::none(),
+            // A key bound to nothing changes nothing, so it should not cost a render —
+            // and with no tick left to repaint anyway, holding one would otherwise be a
+            // render per repeat for no reason (#536).
+            _ => Command::none().without_redraw(),
         }
     }
 
@@ -953,23 +969,67 @@ mod tests {
         ));
     }
 
-    /// The other two kinds are the key going down or staying down, and this pins where
-    /// the mapping sends them — not what happens next, which the three key paths answer
-    /// differently and inconsistently (#536). All of it is moot until nostui asks for the
-    /// kitty keyboard protocol, which is the only thing that reports a repeat.
+    /// The other two kinds are the key going down or staying down, and both arrive as a
+    /// press. Nothing downstream wants the difference, and #536 is what came of three
+    /// paths each deciding that for themselves — so this pins that a repeat is
+    /// indistinguishable from a press by the time anything acts on it.
     #[test]
-    fn test_key_press_and_repeat_are_input() {
-        for kind in [KeyEventKind::Press, KeyEventKind::Repeat] {
-            let key = KeyEvent::new_with_kind(KeyCode::Char('j'), KeyModifiers::NONE, kind);
+    fn test_press_and_repeat_both_arrive_as_a_press() {
+        let press =
+            KeyEvent::new_with_kind(KeyCode::Char('j'), KeyModifiers::NONE, KeyEventKind::Press);
+        let repeat =
+            KeyEvent::new_with_kind(KeyCode::Char('j'), KeyModifiers::NONE, KeyEventKind::Repeat);
 
+        for key in [press, repeat] {
             assert!(
                 matches!(
                     terminal_event_to_msg(Event::Key(key)),
-                    AppMsg::System(SystemMsg::KeyInput(got)) if got == key
+                    AppMsg::System(SystemMsg::KeyInput(got)) if got == press
                 ),
-                "{kind:?} should reach `KeyInput`"
+                "{:?} should arrive as the press",
+                key.kind
             );
         }
+    }
+
+    /// What that buys: holding a key reaches the binding it is configured for. Before
+    /// #536 a repeat hashed differently from the `Press` the config was parsed into, so
+    /// it matched nothing and holding `j` did not scroll.
+    ///
+    /// The binding is put there rather than taken from the shipped defaults, so the test
+    /// pins the lookup rather than what `.config/config.json5` happens to say.
+    #[test]
+    fn test_a_held_key_reaches_its_binding() {
+        let mut flags = test_flags();
+        flags.config.keybindings.home.insert(
+            vec![KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE)],
+            KeyAction::ScrollDown,
+        );
+        let mut store = TestStore::<TearsApp<'static>>::new(flags);
+
+        store.send(terminal_event_to_msg(Event::Key(KeyEvent::new_with_kind(
+            KeyCode::Char('j'),
+            KeyModifiers::NONE,
+            KeyEventKind::Repeat,
+        ))));
+
+        store.receive_matching(|msg| matches!(msg, AppMsg::Timeline(TimelineMsg::ScrollDown)));
+        store.finish();
+    }
+
+    /// A key bound to nothing changes nothing, so it must not repaint — which matters
+    /// now that a held key produces one of these per repeat rather than none (#536).
+    #[test]
+    fn test_a_key_bound_to_nothing_does_not_redraw() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+
+        store.send(AppMsg::System(SystemMsg::KeyInput(KeyEvent::new(
+            KeyCode::F(12),
+            KeyModifiers::NONE,
+        ))));
+
+        assert!(!store.redraw_requested());
+        store.finish();
     }
 
     /// Resizes still route to their own message, and everything else nostui does not
