@@ -327,8 +327,11 @@ impl<'a> AppState<'a> {
         kind: PublishKind,
         build: fn(&TextNote) -> EventBuilder,
     ) -> Command<AppMsg> {
+        // Redrawing, despite doing nothing itself: `handle_timeline_msg` clears the
+        // status bar before dispatching here, so by this point the pass has already
+        // changed what is on screen.
         let Some(note) = self.timeline.selected_note() else {
-            return Command::none().without_redraw();
+            return Command::none();
         };
 
         let note_id = note.bech32_id();

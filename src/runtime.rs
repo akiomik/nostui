@@ -918,6 +918,41 @@ mod tests {
         store.finish();
     }
 
+    /// `handle_timeline_msg` clears the status bar before it dispatches, so a timeline
+    /// message that then finds nothing to do has still changed the screen and must
+    /// redraw. Declining it leaves the cleared line standing — which the tick used to
+    /// hide within a second, and #527 removed the tick.
+    #[test]
+    fn test_timeline_message_that_does_nothing_still_clears_the_status_bar_on_screen() {
+        let mut store = TestStore::<TearsApp<'static>>::new(test_flags());
+        let subscription_id = SubscriptionId::new("home");
+
+        // Complete startup: until an event arrives, timeline messages are ignored.
+        store.send(AppMsg::Nostr(NostrMsg::SubscriptionMessage(
+            NostrSubscriptionMessage::SubscriptionCreated {
+                feed: FeedKind::Home,
+                subscription_id: subscription_id.clone(),
+            },
+        )));
+        store.send(notification(ClientNotification::Message {
+            relay_url: test_relay_url(),
+            message: Box::new(RelayMessage::Event {
+                subscription_id: Cow::Owned(subscription_id),
+                event: Cow::Owned(test_note()),
+            }),
+        }));
+        store.send(AppMsg::System(SystemMsg::ShowError("boom".to_owned())));
+        assert!(store.state().state.status_bar.message().is_some());
+
+        // Nothing is selected, so reacting has nothing to submit — but the bar was
+        // cleared on the way in.
+        store.send(AppMsg::Timeline(TimelineMsg::ReactToSelected));
+
+        assert_eq!(store.state().state.status_bar.message(), None);
+        assert!(store.redraw_requested());
+        store.finish();
+    }
+
     /// A track the NIP-38 status cannot describe is not shown and not sent, so it must
     /// not repaint either. `MusicStatus::new` rejects a track with no duration, which
     /// radio and live streams report routinely while their metadata keeps changing.
