@@ -401,10 +401,15 @@ impl<'a> AppState<'a> {
     /// would take the indicator away from anyone in read-only mode, and from anyone
     /// whose track changes before the worker is ready.
     pub fn publish_music_status(&mut self, track: Track) -> Command<AppMsg> {
-        // Nothing was shown and nothing was sent, so nothing needs repainting. This is
-        // not a rare path: `MusicStatus::new` also rejects a track with no duration, and
-        // radio and live streams routinely report none while changing metadata as they
-        // play.
+        // Nothing was shown and nothing was sent, so this event needs no repaint. Not a
+        // claim that the bar is then right: a rejected track arriving after a valid one
+        // leaves the earlier `[Now Playing]` line standing, along with the relay status
+        // it published. Repainting would only draw that same stale text again — what to
+        // do about superseding it is #521's.
+        //
+        // Not a rare path either: `MusicStatus::new` also rejects a track with no
+        // duration, and radio and live streams routinely report none while changing
+        // metadata as they play.
         let Some(status) = MusicStatus::new(track) else {
             return Command::none().without_redraw();
         };
