@@ -215,8 +215,9 @@ composition driver and the only place that bridges the framework:
 
 - `new` bootstraps `AppState` and components from `InitFlags`.
 - `update` routes an `AppMsg` to the matching `AppState` use case.
-- `subscriptions` wires `NostrEvents`, the timer, terminal events, media, and
-  OS signals.
+- `subscriptions` wires `NostrEvents`, terminal events, media, and OS signals.
+  All of them are event-driven: nostui declares no periodic source, so an idle
+  application runs no update passes.
 - `view` renders the components against `&AppState`.
 - input handling maps key events to a configured `Action` and then to an `AppMsg`.
 
