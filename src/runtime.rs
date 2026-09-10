@@ -176,55 +176,21 @@ impl<'a> Application for TearsApp<'a> {
 /// Map one terminal event to the message it should become.
 ///
 /// A key event is input when the key is going down. A Windows console reports releases
-/// too — crossterm takes the kind from the record's `key_down` flag — and nostui acted
-/// on some of them. Not the configured bindings, whose map is keyed by `KeyEvent` and so
-/// compares the kind; the two paths that read the key's code alone. Cancelling a draft
-/// with `Esc` closed the composer on the press, and the release then landed in normal
-/// mode, whose fallback reads `code` and fires `Deselect` (#531).
+/// too, and nostui acted on them: not through the binding map, which compares the kind,
+/// but through the paths that read the key's code — so cancelling a draft with `Esc`
+/// closed the composer on the press and then deselected the timeline on the release
+/// (#531). A repeat is the key still down, so that is input.
 ///
-/// A repeat is the key still being down, so it becomes input too — and arrives as a
-/// plain press, because none of the three paths downstream has any use for the
-/// difference and each of them handled it differently (#536). The binding map compares
-/// the whole `KeyEvent`, and every entry in it comes from `KeyEvent::new`; the composer
-/// reads `(code, modifiers)`, and normal mode's fallback the code alone. So a key the
-/// map should have matched would miss it and fall through to a fallback that does
-/// nothing, while the other two paths carried on as if it were a press.
+/// One release is not a key coming up: crossterm reports a Windows Alt code as a
+/// `Release` carrying the composed character, so this drops it. It never typed anything
+/// before either — `tui-textarea` discarded it — and making it work is #537.
 ///
-/// Both of the fields `KeyEvent::new` fixes are reset here, not just the kind. The
-/// kitty keyboard protocol is what reports a repeat, and the same parser fills `state`
-/// from the same modifier mask — `NUM_LOCK` is on by default on most keyboards with a
-/// numpad — so leaving `state` alone would reproduce the miss on the very day repeats
-/// start arriving. Normalising both is what lets the three paths agree by construction.
-///
-/// It does mean nothing downstream can tell a held key from a fresh one, or a numpad key
-/// from its counterpart on the main row. That is the point, and this is where to come
-/// back if anything ever needs to. One thing already does — holding a key fires its
-/// binding once per repeat, and some of them publish or close things (#543) — though
-/// not because of anything here: ordinary auto-repeat has always arrived as a run of
-/// plain presses, and this only adds the protocol's repeats to what already resolves.
-/// Refusing them means the kind has to survive as far as whoever decides, so part of
-/// this would have to move rather than be added to.
-///
-/// The protocol's repeats do not arrive today in any case: nostui never asks for it, so
-/// this half of the normalisation is a correctness fix nobody has hit.
-///
-/// Not every release is a key coming up. crossterm reports a Windows Alt code as a
-/// `Release` carrying the composed character, so the arm below drops it; it never typed
-/// anything before either, since `tui-textarea` discarded it further down. Making it
-/// work is #537, and it starts here.
-///
-/// A free function rather than the closure it replaces: the closure lived inside
-/// `subscriptions`, which no test drives.
+/// A free function rather than the closure it replaces, which lived inside
+/// `subscriptions` where no test could drive it.
 fn terminal_event_to_msg(event: Event) -> AppMsg {
     match event {
         Event::Key(key) => match key.kind {
-            KeyEventKind::Press | KeyEventKind::Repeat => {
-                AppMsg::System(SystemMsg::KeyInput(KeyEvent {
-                    kind: KeyEventKind::Press,
-                    state: KeyEventState::NONE,
-                    ..key
-                }))
-            }
+            KeyEventKind::Press | KeyEventKind::Repeat => AppMsg::System(SystemMsg::KeyInput(key)),
             KeyEventKind::Release => AppMsg::System(SystemMsg::TerminalEventIgnored),
         },
         Event::Resize(width, height) => AppMsg::System(SystemMsg::Resize(width, height)),
@@ -278,6 +244,20 @@ impl<'a> TearsApp<'a> {
         // Note: Ctrl+C is now handled by signal subscription, not as keyboard input
         // This ensures it works reliably across different terminal emulators and
         // properly separates OS signals from application keybindings
+
+        // Reduce the key to what `KeyEvent::new` would have built, which is what the
+        // keybinding map was parsed from. It compares `kind` and `state` as well as the
+        // code and modifiers, and the two paths below compare various subsets, so a key
+        // the terminal decorated — a repeat, or anything with Num Lock lit — used to
+        // resolve differently in each of them (#536). Normalised here rather than where
+        // the event is mapped, so it holds for every producer of `KeyInput` rather than
+        // one of them.
+
+        let key = KeyEvent {
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+            ..key
+        };
 
         // Mode-specific keybindings
         if self.state.editor.is_active() {
@@ -995,47 +975,22 @@ mod tests {
         ));
     }
 
-    /// The other two kinds are the key going down or staying down, and both arrive as a
-    /// press. Nothing downstream wants the difference, and #536 is what came of three
-    /// paths each deciding that for themselves — so this pins that a repeat is
-    /// indistinguishable from a press by the time anything acts on it.
-    #[test]
-    fn test_press_and_repeat_both_arrive_as_a_press() {
-        let press =
-            KeyEvent::new_with_kind(KeyCode::Char('j'), KeyModifiers::NONE, KeyEventKind::Press);
-        let repeat =
-            KeyEvent::new_with_kind(KeyCode::Char('j'), KeyModifiers::NONE, KeyEventKind::Repeat);
-
-        for key in [press, repeat] {
-            assert!(
-                matches!(
-                    terminal_event_to_msg(Event::Key(key)),
-                    AppMsg::System(SystemMsg::KeyInput(got)) if got == press
-                ),
-                "{:?} should arrive as the press",
-                key.kind
-            );
-        }
-    }
-
-    /// What that buys: a key the enhanced protocol decorates still reaches the binding
-    /// it is configured for. Without the normalisation a repeat, or a press carrying
-    /// `NUM_LOCK`, would hash differently from the plain `Press` the config is parsed
-    /// into, match nothing, and fall through to a fallback that does nothing — holding
-    /// `j` would not scroll.
+    /// A key the terminal decorated still reaches the binding it is configured for. The
+    /// map compares `kind` and `state` as well as the code, and the config is parsed
+    /// into neither — so without the normalisation this misses and falls through to a
+    /// fallback that does nothing.
     ///
-    /// The binding is put there rather than taken from the shipped defaults, so the test
-    /// pins the lookup rather than what `.config/config.json5` happens to say.
+    /// Sent as a `KeyInput` rather than through `terminal_event_to_msg`, because the
+    /// guarantee is the handler's: it holds for whatever produces the message.
     #[test]
-    fn test_a_held_key_reaches_its_binding() {
+    fn test_a_decorated_key_reaches_its_binding() {
         let mut store = store_with_binding(
             KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
             KeyAction::ScrollDown,
         );
 
-        // A held key on a keyboard with the numpad lit: both of the fields the map
-        // compares are decorated, and both have to be normalised for this to resolve.
-        store.send(terminal_event_to_msg(Event::Key(
+        // A held key on a keyboard with the numpad lit: both decorated fields at once.
+        store.send(AppMsg::System(SystemMsg::KeyInput(
             KeyEvent::new_with_kind_and_state(
                 KeyCode::Char('j'),
                 KeyModifiers::NONE,

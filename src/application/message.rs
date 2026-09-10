@@ -51,14 +51,10 @@ pub enum SystemMsg {
     TerminalEventIgnored,
     /// Show an error message
     ShowError(String),
-    /// Key input event
+    /// Key input event, as the terminal reported it
     ///
-    /// The key arrives normalised to what `KeyEvent::new` would build: `kind` is always
-    /// `Press` and `state` is always `NONE`, whatever the terminal reported. Three
-    /// consumers rely on that — the binding map compares both fields, and the composer
-    /// and normal mode's fallback compare neither — so a handler that reads `kind` here
-    /// to tell a held key from a fresh one will see `Press` every time and never fire.
-    /// `terminal_event_to_msg` is where the normalisation happens and why (#536).
+    /// `handle_key_input` reduces it to what `KeyEvent::new` would build before anything
+    /// resolves it, so a decorated key does not have to be one here (#536).
     KeyInput(KeyEvent),
 }
 
