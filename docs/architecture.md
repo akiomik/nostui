@@ -217,21 +217,19 @@ composition driver and the only place that bridges the framework:
 - `update` routes an `AppMsg` to the matching `AppState` use case.
 - `subscriptions` wires `NostrEvents`, terminal events, media, and OS signals.
   All of them are event-driven: nostui declares no periodic source, so an idle
-  application runs no update passes. Declaring no periodic source also means
-  nothing re-evaluates the subscription set on its own — tears does that when a
-  message arrives, and a source that merely finishes marks nothing — so `media`
-  falls short at both ends, tracked together in
-  [#529](https://github.com/akiomik/nostui/issues/529):
-  - with `nip-38` enabled on a host where the media source cannot be built, the
-    error it reports is the only thing that re-evaluates the set — and whether
-    that re-evaluation restarts anything is a race, since `reconcile` skips a
-    subscription whose run has not been reflected as finished yet. Win the race
-    and it is an unbounded retry with no backoff; lose it and "now playing" is
-    dead for the session after one log line. Neither outcome is new, but the tick
-    used to make the second one temporary.
-  - when the source is built and then dies, the stream ends having reported
-    nothing at all, so there is no re-evaluation to race: nothing restarts it.
-    This one *is* new; the tick used to re-evaluate within 62 ms.
+  application runs no update passes.
+  That also decides when a subscription that ended is restarted. tears marks the
+  declared set dirty on any pass where `update` ran and re-admits whatever is
+  declared but not running (`kernel/pass.rs`); a source that merely *finishes*
+  marks nothing by itself. `media` is the one source that can end on its own —
+  its stream ends when the build fails, and on Linux when nowhear's D-Bus task
+  dies afterwards — so it comes back on the next message from anything else. On a
+  live feed that is immediate; on a nostui with no traffic and no input there is
+  no next message, and it stays stopped. The tick used to make it at most 62 ms
+  in both cases. Tracked in
+  [#529](https://github.com/akiomik/nostui/issues/529), along with the other end
+  of the same gap: when the source cannot be built at all, its error is itself a
+  message, so the restart it triggers fails and retries with no backoff.
 - `view` renders the components against `&AppState`.
 - input handling maps key events to a configured `Action` and then to an `AppMsg`.
 

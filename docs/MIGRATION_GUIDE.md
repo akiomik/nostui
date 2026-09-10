@@ -91,7 +91,9 @@ The render half of this was already addressed: nostui stopped redrawing for tick
 
 1. **As a user**: the counter is gone from the screen, and an idle nostui now genuinely idles. If you were watching it to see whether the application was keeping up, there is no replacement; the logs are the remaining diagnostic.
 
-   **If you use `nip-38`**, one thing to know: the tick used to re-check nostui's subscriptions sixteen times a second, which quietly restarted a media source that had stopped. Nothing does that now. A media source that starts and later dies — a session bus restarting, say — stops reporting, and "now playing" stays stopped for the rest of the run rather than coming back on its own. Restart nostui to get it back. A source that cannot be started at all was never reliably restarted either, and is unchanged. Both are [#529](https://github.com/akiomik/nostui/issues/529).
+   **If you use `nip-38`**, one thing to know: the tick used to re-check nostui's subscriptions sixteen times a second, so a media source that had stopped was picked back up within 62 ms whatever else was going on. That re-check now happens whenever any other message arrives — a note from a relay, a keypress. On a feed with traffic it is no different in practice. On a nostui sitting with nothing to do, a media source that dies stays dead until something else happens, and "now playing" stops with it. Touching any key is enough.
+
+   The other `nip-38` case is unchanged and worth knowing separately: on a host where the media source cannot be started at all, nostui retries it as fast as it fails, with no backoff. Both are [#529](https://github.com/akiomik/nostui/issues/529).
 
 2. **In custom code**: remove references to `state.fps`. There is no equivalent to read.
 
