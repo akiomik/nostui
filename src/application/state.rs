@@ -369,6 +369,7 @@ impl<'a> AppState<'a> {
 
     /// Publish the editor's current content as a text note, or as a NIP-10 reply
     /// when a reply target is set, then reset the editor.
+    /// No-op when the composer is closed.
     pub fn submit_note(&mut self) -> Command<AppMsg> {
         // A composer that is not open has nothing to submit, and trying costs more than
         // nothing: `ComposingCanceled` leaves the buffer alone — the next
