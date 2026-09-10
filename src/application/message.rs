@@ -30,8 +30,12 @@ pub enum SystemMsg {
     Quit,
     /// Terminal resize event
     Resize(u16, u16),
-    /// Tick for FPS calculation
-    Tick,
+    /// A terminal event nostui does not act on
+    ///
+    /// The subscription cannot decline to produce a message, so an event with no
+    /// handler becomes this and is dropped here instead. Before #527 it became a
+    /// tick, which counted it as one in the FPS display and redrew for it.
+    TerminalEventIgnored,
     /// Show an error message
     ShowError(String),
     /// Key input event

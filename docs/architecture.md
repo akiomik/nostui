@@ -145,7 +145,7 @@ side-effect-free `update`. Key modules/types:
   attempted and abandoned: faithfully reconstructing the `TextArea` (history
   included) would mean replaying every keystroke on each render, so the coupling
   is a deliberate, contained exception rather than a layering bug.
-- `model::status_bar`, `model::fps`.
+- `model::status_bar`.
 - `model::nostr` — connection state: tracks the per-feed subscriptions and
   whether the worker is ready. It does **not** hold the command sender (the
   application does); its `update` reports an `Option<NostrOutcome>` instead of
@@ -159,7 +159,7 @@ effect. `TimelineTab::update` / `Timeline::update` return
 `Nostr::update` returns `Option<NostrOutcome>` (`Some(Send(NostrCommand))` or
 `None`); the outcome enums hold only real follow-ups, with absence modelled by
 `Option`. The `update` methods are `#[must_use]`, so the application cannot
-silently drop an outcome. `status_bar` and `fps` are likewise pure; `editor`'s
+silently drop an outcome. `status_bar` is likewise pure; `editor`'s
 `update` is side-effect free too, but it is the one component coupled to UI/input
 crates (see above).
 

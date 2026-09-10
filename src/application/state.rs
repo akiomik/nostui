@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::time::Instant;
 
 use crossterm::event::KeyEvent;
 use nostr_sdk::prelude::*;
@@ -13,7 +12,6 @@ use crate::{
     domain::nostr::{nip10::ReplyTagsBuilder, nip38::MusicStatus, FeedKind, Profile},
     model::{
         editor::{Editor, Message as EditorMessage},
-        fps::{Fps, FpsOutcome, Message as FpsMessage},
         nostr::{Message as NostrMessage, Nostr, NostrOutcome},
         nostr_gateway::{CommandError, NostrCommand, PublishId},
         status_bar::{Message, StatusBar},
@@ -58,7 +56,6 @@ pub struct AppState<'a> {
     pub user: UserState,
     pub nostr: Nostr,
     pub config: ConfigState,
-    pub fps: Fps,
     pub status_bar: StatusBar,
     pub startup: Startup,
     /// Sender for dispatching commands to the Nostr subscription worker.
@@ -701,19 +698,6 @@ impl<'a> AppState<'a> {
         log::error!("{error}");
         self.set_status_error("System", error);
         Command::none()
-    }
-
-    /// Record a frame tick for FPS tracking.
-    ///
-    /// The rate on screen is recomputed once a second, so the ticks in between
-    /// leave every displayed value exactly as it was and decline the redraw they
-    /// would otherwise cost. Without that an idle nostui would re-render the whole
-    /// timeline at the tick rate to refresh a counter that did not change (#510).
-    pub fn record_tick(&mut self, now: Instant) -> Command<AppMsg> {
-        match self.fps.update(FpsMessage::FrameRecorded { now }) {
-            Some(FpsOutcome::DisplayUpdated) => Command::none(),
-            None => Command::none().without_redraw(),
-        }
     }
 
     /// Move the selection to the previous timeline item.

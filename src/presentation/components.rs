@@ -7,10 +7,7 @@ use ratatui::prelude::*;
 
 use crate::{
     application::state::AppState,
-    presentation::widgets::{
-        fps::FpsWidget,
-        status_bar::{StatusBarWidget, ViewContext as StatusBarViewContext},
-    },
+    presentation::widgets::status_bar::{StatusBarWidget, ViewContext as StatusBarViewContext},
 };
 
 pub mod home;
@@ -39,22 +36,17 @@ impl Components {
     pub fn render(&mut self, frame: &mut Frame, state: &AppState) {
         let area = frame.area();
 
-        // Create layout: [FPS row, main area, status bar (2 rows)]
+        // Create layout: [main area, status bar (2 rows)]
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
-                Constraint::Length(1), // FPS counter
                 Constraint::Min(0),    // Main area (home)
                 Constraint::Length(2), // Status bar (2 rows)
             ])
             .split(area);
 
-        // Render FPS counter in top row
-        let fps = FpsWidget::new(state.fps.clone());
-        frame.render_widget(fps, layout[0]);
-
         // Render home component in main area
-        self.home.view(state, frame, layout[1]);
+        self.home.view(state, frame, layout[0]);
 
         // Render status bar at bottom
         let status_bar_ctx = StatusBarViewContext {
@@ -62,12 +54,48 @@ impl Components {
             user_profile: state.user.current_user(),
         };
         let status_bar = StatusBarWidget::new(state.status_bar.clone(), status_bar_ctx);
-        frame.render_widget(status_bar, layout[2]);
+        frame.render_widget(status_bar, layout[1]);
     }
 }
 
 impl Default for Components {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    use super::*;
+
+    /// #527 removed the FPS counter, and with it the one-line row it was given at
+    /// the top of the screen. That line belongs to the timeline now, so the home
+    /// component starts at row 0 and the status bar still ends at the bottom.
+    #[test]
+    fn test_home_component_starts_at_the_top_row() {
+        let mut terminal = Terminal::new(TestBackend::new(40, 8)).expect("test terminal");
+        let mut components = Components::new();
+        let state = AppState::default();
+
+        terminal
+            .draw(|frame| components.render(frame, &state))
+            .expect("draw should not fail");
+
+        let buffer = terminal.backend().buffer().clone();
+        let row = |y: u16| -> String { (0..40).map(|x| buffer[(x, y)].symbol()).collect() };
+
+        assert!(
+            row(0).contains("Home"),
+            "expected the tab bar on the top row, got: {}",
+            row(0)
+        );
+        assert!(
+            row(2).contains("No notes to display"),
+            "expected the timeline below it, got: {}",
+            row(2)
+        );
     }
 }

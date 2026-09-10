@@ -58,12 +58,11 @@ pkgin install nostui
 ### Commands
 
 ```shell
-nostui [OPTIONS]
+nostui
 
 Options:
-  -t, --tick-rate <FLOAT>  Tick rate, i.e. number of ticks per second [default: 16]
-  -h, --help               Print help
-  -V, --version            Print version
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
 ### Default Keybindings
