@@ -187,11 +187,17 @@ impl<'a> Application for TearsApp<'a> {
 /// mode's fallback to `Deselect` — one keystroke also clearing a timeline selection
 /// nobody asked it to. Typing was safe: `tui-textarea` discards releases itself.
 ///
-/// "Going down" is the rule rather than the whole story. The same parser deliberately
-/// reports an Alt code — Alt held over a numpad sequence — as a `Release` carrying the
-/// composed character, so that it cannot be discarded as a release. nostui never
-/// received those anyway, since `tui-textarea` dropped them; supporting Alt codes on
-/// Windows means coming back here first.
+/// "Going down" is the rule rather than the whole story, and the exception is worth
+/// knowing before someone goes looking for it. The same parser reports an Alt code —
+/// Alt held over a numpad sequence — as a `KeyCode::Char` carrying the composed
+/// character, with the kind still taken from `key_down`, so it arrives here as a
+/// `Release`. crossterm's exception is only to its own discarding of releases; the arm
+/// below is a separate filter and does drop it.
+///
+/// Nothing changes today: before this, an Alt code reached `tui-textarea` and was
+/// discarded there for the same reason, so it never typed anything either way. What
+/// changes is where it stops. Adding Alt-code support on Windows (#537) starts here
+/// rather than ends here.
 ///
 /// `Repeat` is treated as input for the same reason: it means the key is still down.
 /// What comes of that depends on the mode. Composing reads `(code, modifiers)` and never
