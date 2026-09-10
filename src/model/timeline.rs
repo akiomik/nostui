@@ -645,22 +645,31 @@ mod tests {
     fn selected_note_follows_the_selection() {
         let mut timeline = Timeline::default();
 
-        let event = create_test_event(1000, 1, "Test note");
-        let event_id = event.id;
+        // Two notes, and both ends of the selection checked. With one note at index 0,
+        // a `selected_note` that ignored the selection and returned the tab's first
+        // note would pass, and the `None` branch would never run.
+        // Newest first, as the tab stores them, so this reads in index order.
+        let mut ids = Vec::new();
+        for (i, timestamp) in [2000, 1000].into_iter().enumerate() {
+            let event = create_test_event(timestamp, i as u8, "Test note");
+            ids.push(event.id);
+            let _ = timeline.update(Message::NoteAddedToTab {
+                event,
+                feed: FeedKind::Home,
+            });
+        }
 
-        let _ = timeline.update(Message::NoteAddedToTab {
-            event,
-            feed: FeedKind::Home,
-        });
-
-        let _ = timeline.update(Message::ItemSelected { index: 0 });
-
-        let selected = timeline.selected_note();
-        assert!(selected.is_some());
-        assert_eq!(
-            selected.expect("Should have selected note").as_event().id,
-            event_id
+        assert!(
+            timeline.selected_note().is_none(),
+            "nothing is selected yet"
         );
+
+        for (index, id) in ids.iter().enumerate() {
+            let _ = timeline.update(Message::ItemSelected { index });
+
+            let selected = timeline.selected_note().expect("a note is selected");
+            assert_eq!(selected.as_event().id, *id, "index {index}");
+        }
     }
 
     #[test]
