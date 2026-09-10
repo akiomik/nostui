@@ -145,7 +145,7 @@ mod tests {
     }
 
     #[test]
-    fn test_shorten_npub() {
+    fn test_shorten_npub_shortens_an_npub_and_leaves_a_hex_key() {
         assert_eq!(
             shorten_npub("npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug"),
             "f5uuy:mjmug"

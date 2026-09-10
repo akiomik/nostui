@@ -160,7 +160,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_color_string() {
+    fn test_process_color_string_splits_the_colour_from_its_modifiers() {
         let (color, modifiers) = process_color_string("underline bold inverse gray");
         assert_eq!(color, "gray");
         assert!(modifiers.contains(Modifier::UNDERLINED));

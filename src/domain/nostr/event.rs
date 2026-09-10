@@ -158,7 +158,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_event_id_from_last_e_tag() {
+    fn test_find_event_id_from_last_e_tag_reads_the_e_tag() {
         let keys = Keys::generate();
         let target_id = EventId::from_byte_array([0; EventId::LEN]);
 

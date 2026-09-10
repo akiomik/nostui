@@ -217,7 +217,7 @@ mod tests {
     }
 
     #[test]
-    fn test_live_status_builder() {
+    fn test_live_status_builder_builds_a_user_status_event() {
         let track = create_valid_track();
         let status = MusicStatus::new(track).expect("Failed to create MusicStatus");
         let expected_content = status.content();

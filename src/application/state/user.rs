@@ -106,13 +106,13 @@ mod tests {
     }
 
     #[test]
-    fn test_new() {
+    fn test_new_holds_no_profiles() {
         let state = UserState::new();
         assert_eq!(state.profile_count(), 0);
     }
 
     #[test]
-    fn test_new_with_pubkey() {
+    fn test_new_with_pubkey_records_the_current_user() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let state = UserState::new_with_pubkey(pubkey);
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn test_current_user_pubkey() {
+    fn test_current_user_pubkey_returns_the_configured_key() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let state = UserState::new_with_pubkey(pubkey);
@@ -129,7 +129,7 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_newer_profile() {
+    fn test_insert_newer_profile_keeps_only_the_latest() {
         let mut state = UserState::new();
         let keys = Keys::generate();
         let pubkey = keys.public_key();
@@ -152,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_profile() {
+    fn test_get_profile_returns_none_until_one_is_inserted() {
         let mut state = UserState::new();
         let keys = Keys::generate();
         let pubkey = keys.public_key();
@@ -165,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn test_current_user() {
+    fn test_current_user_is_none_until_their_profile_arrives() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let mut state = UserState::new_with_pubkey(pubkey);
@@ -178,7 +178,7 @@ mod tests {
     }
 
     #[test]
-    fn test_has_profile() {
+    fn test_has_profile_follows_insertion() {
         let mut state = UserState::new();
         let keys = Keys::generate();
         let pubkey = keys.public_key();
@@ -191,7 +191,7 @@ mod tests {
     }
 
     #[test]
-    fn test_profile_count() {
+    fn test_profile_count_counts_distinct_pubkeys() {
         let mut state = UserState::new();
         assert_eq!(state.profile_count(), 0);
 
@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn test_all_pubkeys() {
+    fn test_all_pubkeys_lists_every_profile() {
         let mut state = UserState::new();
         let keys1 = Keys::generate();
         let keys2 = Keys::generate();
@@ -226,7 +226,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_profiles() {
+    fn test_clear_profiles_empties_the_state() {
         let mut state = UserState::new();
         let keys = Keys::generate();
         let profile = create_test_profile(keys.public_key(), Timestamp::now());
@@ -238,7 +238,7 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_profile() {
+    fn test_remove_profile_returns_and_drops_it() {
         let mut state = UserState::new();
         let keys = Keys::generate();
         let pubkey = keys.public_key();

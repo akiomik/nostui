@@ -344,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn test_active_tab() {
+    fn test_active_tab_starts_as_an_empty_home_tab() {
         let timeline = Timeline::default();
         let active_tab = timeline.active_tab();
 
@@ -353,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_tab_by_feed() {
+    fn test_find_tab_by_feed_returns_the_index_or_none() {
         let mut timeline = Timeline::default();
 
         // Home tab should be at index 0
@@ -642,7 +642,7 @@ mod tests {
     }
 
     #[test]
-    fn test_selected_note() {
+    fn test_selected_note_follows_the_selection() {
         let mut timeline = Timeline::default();
 
         let event = create_test_event(1000, 1, "Test note");
@@ -664,7 +664,7 @@ mod tests {
     }
 
     #[test]
-    fn test_note_by_index() {
+    fn test_note_by_index_returns_none_out_of_range() {
         let mut timeline = Timeline::default();
 
         let event = create_test_event(1000, 1, "Test note");
@@ -742,7 +742,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_at_bottom() {
+    fn test_is_at_bottom_only_on_the_last_note() {
         let mut timeline = Timeline::default();
 
         // Empty timeline is not at bottom
@@ -1007,7 +1007,7 @@ mod tests {
     }
 
     #[test]
-    fn test_last_tab_index() {
+    fn test_last_tab_index_follows_the_tab_count() {
         let mut timeline = Timeline::default();
         assert_eq!(timeline.last_tab_index(), 0);
 

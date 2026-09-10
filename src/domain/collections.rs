@@ -339,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clear() -> Result<()> {
+    fn test_clear_empties_the_collection() -> Result<()> {
         let mut events = EventSet::new();
         let event = create_test_event(1, "test")?;
 

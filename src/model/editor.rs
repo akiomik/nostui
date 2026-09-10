@@ -252,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_content() {
+    fn test_clear_content_empties_the_buffer() {
         let mut editor = Editor::new();
         editor.update(Message::ComposingStarted);
 

@@ -164,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn test_home_feed_filters() {
+    fn test_home_feed_filters_cover_backward_forward_and_profiles() {
         let authors = vec![pubkey(1), pubkey(2)];
         let now = Timestamp::from(1000);
 
@@ -192,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_feed_filters() {
+    fn test_user_feed_filters_cover_backward_and_forward() {
         let author = pubkey(7);
         let now = Timestamp::from(2000);
 
@@ -216,7 +216,7 @@ mod tests {
     }
 
     #[test]
-    fn test_home_load_more_filter() {
+    fn test_home_load_more_filter_pages_before_its_timestamp() {
         let authors = vec![pubkey(1), pubkey(2)];
         let since = Timestamp::from(500);
 
@@ -231,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_load_more_filter() {
+    fn test_user_load_more_filter_pages_before_its_timestamp() {
         let author = pubkey(9);
         let since = Timestamp::from(500);
 
@@ -246,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mention_feed_filters() {
+    fn test_mention_feed_filters_match_on_the_p_tag() {
         let own = pubkey(3);
         let now = Timestamp::from(2000);
 
@@ -270,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mention_load_more_filter() {
+    fn test_mention_load_more_filter_pages_before_its_timestamp() {
         let own = pubkey(3);
         let since = Timestamp::from(500);
 
