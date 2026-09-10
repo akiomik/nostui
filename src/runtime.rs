@@ -401,14 +401,26 @@ impl<'a> TearsApp<'a> {
     /// Handle media messages
     ///
     /// Only a track change reaches the screen, via the NIP-38 status line. The other
-    /// events nowhear reports — pausing, seeking, changing the volume — are not
-    /// displayed anywhere, and neither is a media source error beyond the log, so both
-    /// decline the redraw they would otherwise cost. Without that, nudging the volume
-    /// of a player nostui is watching repaints the whole timeline.
+    /// events nowhear reports — pausing, seeking, changing the volume, a player coming
+    /// or going — are not displayed anywhere, and neither is a media source error beyond
+    /// the log, so both decline the redraw they would otherwise cost. Without that,
+    /// nudging the volume of a player nostui is watching repaints the whole timeline.
+    ///
+    /// The undisplayed events are listed rather than caught by a wildcard. Declining the
+    /// redraw is an assertion that they change nothing visible, and a wildcard would
+    /// extend that assertion to whatever nowhear adds next — silently, and with no
+    /// periodic repaint left to mask it. `MediaEvent` is not `#[non_exhaustive]`, so
+    /// naming them makes the next variant a compile error instead.
     fn handle_media_msg(&mut self, msg: Result<MediaEvent, MediaSourceError>) -> Command<AppMsg> {
         match msg {
             Ok(MediaEvent::TrackChanged { track, .. }) => self.state.publish_music_status(track),
-            Ok(_) => Command::none().without_redraw(),
+            Ok(
+                MediaEvent::StateChanged { .. }
+                | MediaEvent::PositionChanged { .. }
+                | MediaEvent::VolumeChanged { .. }
+                | MediaEvent::PlayerAdded { .. }
+                | MediaEvent::PlayerRemoved { .. },
+            ) => Command::none().without_redraw(),
             Err(e) => {
                 log::error!("media source error: {e}");
                 Command::none().without_redraw()
