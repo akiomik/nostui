@@ -397,10 +397,11 @@ impl<'a> AppState<'a> {
         // and the user can carry on typing — and it says so rather than ignoring the key,
         // which would read as a broken binding (#540).
         if content.trim().is_empty() {
-            // Logged like the refusals around it, so "Ctrl+P did nothing" is answerable
-            // from the log rather than only from the bar, which the next status
-            // overwrites.
-            log::info!("Refusing to publish a blank note");
+            // At the level its neighbours use, not the one this deserves: "Ctrl+P did
+            // nothing" gets triaged by grepping the log at warn and above, and a refusal
+            // that only shows at info is missing from exactly that search. The bar is no
+            // help by then — the next status has overwritten it.
+            log::warn!("Refusing to publish a blank note");
             self.set_status_error(PublishKind::Note.subject(), "nothing to post");
             return Command::none();
         }
@@ -1350,9 +1351,12 @@ mod tests {
         let (mut state, _rx) = connected_state();
 
         state.editor.update(EditorMessage::ComposingStarted);
-        for code in [' ', ' '] {
+        // A newline is not a line holding whitespace: Enter leaves the buffer as two
+        // empty lines, which `get_content` joins into `"\n"`. Different shape, same
+        // answer, and only one of the two was covered.
+        for code in [KeyCode::Char(' '), KeyCode::Enter, KeyCode::Char(' ')] {
             state.editor.update(EditorMessage::KeyEventReceived {
-                event: KeyEvent::new(KeyCode::Char(code), KeyModifiers::NONE),
+                event: KeyEvent::new(code, KeyModifiers::NONE),
             });
         }
 
@@ -1374,9 +1378,14 @@ mod tests {
     }
 
     /// The other side of it: trimming decides, and does not touch what is sent.
+    ///
+    /// Asserted on the event handed to the worker, not on the status line. Both are
+    /// built from the same `content`, so a bar reading `[Sending]  hi ` would go on
+    /// reading that if the builder started trimming — which is the one change this test
+    /// exists to catch.
     #[test]
     fn test_submit_note_posts_padded_content_as_typed() {
-        let (mut state, _rx) = connected_state();
+        let (mut state, mut rx) = connected_state();
 
         state.editor.update(EditorMessage::ComposingStarted);
         for code in [' ', 'h', 'i', ' '] {
@@ -1387,7 +1396,14 @@ mod tests {
 
         let _ = state.submit_note();
 
-        let _ = only_pending(&state);
+        let Ok(NostrCommand::SendEventBuilder { event_builder, .. }) = rx.try_recv() else {
+            panic!("the note should have been handed to the worker");
+        };
+        let event = event_builder
+            .finalize(&Keys::generate())
+            .expect("the builder should sign");
+
+        assert_eq!(event.content, " hi ");
         assert_eq!(state.status_bar.message(), Some("[Sending]  hi "));
     }
 
