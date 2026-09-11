@@ -1800,6 +1800,48 @@ mod tests {
     }
 
     #[test]
+    fn a_reply_is_dispatched_carrying_the_tags_that_make_it_one() {
+        let (mut state, mut rx) = connected_state();
+        let keys = Keys::generate();
+        let target =
+            create_text_note(&keys, "hello", Timestamp::from(1000)).expect("a valid text note");
+        let target_id = target.id;
+        let target_author = target.pubkey;
+
+        state.editor.update(EditorMessage::ReplyStarted {
+            to: Box::new(target),
+            profile: Box::new(None),
+        });
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+
+        // What the bar calls a reply is settled by `PublishKind`; what makes the event
+        // one is these tags, and nothing else asserted they were still being attached.
+        // Dropping the `.tags(…)` call publishes an untagged note under the name
+        // `[Replied]`, which every other test here would sit through.
+        let Ok(NostrCommand::SendEventBuilder { event_builder, .. }) = rx.try_recv() else {
+            panic!("the reply should have been handed to the worker");
+        };
+        let event = event_builder
+            .finalize(&Keys::generate())
+            .expect("the builder should sign");
+
+        assert_eq!(
+            event.tags.event_ids().collect::<Vec<_>>(),
+            vec![target_id],
+            "a reply names the note it answers"
+        );
+        assert_eq!(
+            event.tags.public_keys().collect::<Vec<_>>(),
+            vec![target_author],
+            "and the author it answers"
+        );
+    }
+
+    #[test]
     fn a_reply_a_relay_refused_is_named_a_reply_and_not_a_note() {
         let (mut state, _rx) = state_replying();
         state.editor.update(EditorMessage::KeyEventReceived {
