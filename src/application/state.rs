@@ -1818,10 +1818,12 @@ mod tests {
 
         let _ = state.submit_note();
 
+        assert!(state.pending_publishes.is_empty(), "nothing was published");
         assert_eq!(
             state.status_bar.message(),
             Some("[ERR: Reply] nothing to post")
         );
+        assert!(state.editor.is_active(), "the composer stays open");
     }
 
     #[test]
