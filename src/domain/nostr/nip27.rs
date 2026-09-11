@@ -1,5 +1,23 @@
+use std::sync::LazyLock;
+
 use nostr_sdk::prelude::*;
 use regex::Regex;
+
+/// The delimiters are word boundaries rather than characters the match consumes, so a mention
+/// still counts when it opens or closes the note, and when only one space separates it from the
+/// next one.
+///
+/// `(?-u:\b)` makes those boundaries ASCII-only. A bech32 URI is ASCII, so what has to be ruled
+/// out is a URI running into surrounding ASCII; Japanese writes no space before a mention, and a
+/// Unicode boundary would treat `こんにちはnostr:npub1…さん` as one word and find nothing in it.
+///
+/// The cost is that one character decides — the one next to the URI — and any non-ASCII
+/// character counts as a delimiter: `нетnostr:npub1…` is a mention where `foobarnostr:npub1…`
+/// is not. Getting Japanese right is worth that.
+static REFERENCE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?-u:\b)nostr:(?:npub|note)1[a-z0-9]{58}(?-u:\b)")
+        .expect("hardcoded NIP-27 reference regex must be valid")
+});
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Reference {
@@ -15,12 +33,10 @@ impl Reference {
 
     pub fn find(text: &str) -> Vec<Self> {
         // TODO: Add nevent and nprofile support
-        let pattern = Regex::new(r"[^\w](nostr:(npub|note)1[a-z0-9]{58})[^\w]")
-            .expect("hardcoded NIP-27 reference regex must be valid");
-        pattern
-            .captures_iter(text)
-            .filter_map(|capture| {
-                let (_, [uri, _]) = capture.extract();
+        REFERENCE_PATTERN
+            .find_iter(text)
+            .filter_map(|matched| {
+                let uri = matched.as_str();
 
                 Nip21::parse(uri)
                     .ok()
@@ -82,6 +98,57 @@ mod tests {
                 Nip21::EventId(EventId::from_nostr_uri("nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv").unwrap()),
                 String::from("nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv")
             )
+        ])
+    ]
+    #[case("Hello, foobar_nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug!", vec![])]
+    #[case("Hello, nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug_foobar!", vec![])]
+    #[case(
+        "nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug",
+        vec![
+            Reference::new(
+                Nip21::Pubkey(PublicKey::from_nostr_uri("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug").unwrap()),
+                String::from("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug")
+            ),
+        ])
+    ]
+    #[case(
+        "Hello, nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv",
+        vec![
+            Reference::new(
+                Nip21::EventId(EventId::from_nostr_uri("nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv").unwrap()),
+                String::from("nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv")
+            ),
+        ])
+    ]
+    #[case(
+        "Hello, nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv!",
+        vec![
+            Reference::new(
+                Nip21::Pubkey(PublicKey::from_nostr_uri("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug").unwrap()),
+                String::from("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug")
+            ),
+            Reference::new(
+                Nip21::EventId(EventId::from_nostr_uri("nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv").unwrap()),
+                String::from("nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv")
+            ),
+        ])
+    ]
+    #[case(
+        "こんにちはnostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug",
+        vec![
+            Reference::new(
+                Nip21::Pubkey(PublicKey::from_nostr_uri("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug").unwrap()),
+                String::from("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug")
+            ),
+        ])
+    ]
+    #[case(
+        "nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmugさん、ありがとう",
+        vec![
+            Reference::new(
+                Nip21::Pubkey(PublicKey::from_nostr_uri("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug").unwrap()),
+                String::from("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug")
+            ),
         ])
     ]
     #[allow(clippy::unwrap_used)]
