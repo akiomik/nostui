@@ -99,33 +99,23 @@ impl Config {
             // and this is the first thing a fresh install prints, with no window open to
             // read anything else in (#113).
             //
-            // Every name comes from `config_files` rather than being spelled again, so a
-            // format added or dropped there cannot leave this recommending a file nobody
-            // reads. Which of them wins if two exist is deliberately not said: that is
-            // `config`'s layering, and a sentence about it here would be one more thing
-            // to get wrong.
-            // The snippet is JSON, so the name shown beside it has to be one that reads
-            // JSON. The rest are offered as alternatives rather than as equals: the same
+            // The snippet is JSON, so the name shown beside it has to read JSON: the same
             // `{"key": …}` in a config.toml is a parse error, and in a config.ini it is a
-            // key nostui reports as missing — which reads as the user having got the key
-            // wrong rather than the format.
+            // key nostui reports as missing, which reads as the user having got the key
+            // wrong rather than the format. `EXAMPLE_FILE` is therefore spelled out
+            // rather than taken from the list, which cannot say which entries parse JSON,
+            // and `the_error_names_a_file_the_program_parses_as_json` is what holds the
+            // two together. The alternatives do come from `CONFIG_FILES`, so a format
+            // added or dropped there cannot leave them listing one nobody reads.
             //
-            // Taken from `CONFIG_FILES` so a format added or dropped there cannot leave
-            // this listing one nobody reads.
+            // Which name wins if two exist is deliberately unsaid: that is `config`'s
+            // layering, and a sentence about it here would be one more thing to get wrong.
             let alternatives = CONFIG_FILES
                 .iter()
                 .map(|(file, _)| *file)
                 .filter(|file| *file != EXAMPLE_FILE)
                 .collect::<Vec<_>>()
                 .join(", ");
-            // Dropped rather than left to trail an empty list: with `EXAMPLE_FILE` alone
-            // in `CONFIG_FILES` the sentence would have no subject. It does not try for
-            // agreement beyond that, and would say "config.json5 are read too".
-            let also_read = if alternatives.is_empty() {
-                String::new()
-            } else {
-                format!(" {alternatives} are read too, each in its own format.")
-            };
             // "Make that directory" because nothing creates it: `initialize_logging` calls
             // `create_dir_all` for the data directory, and the config directory is only
             // ever read. Telling someone to write a file into a path that is not there
@@ -134,7 +124,8 @@ impl Config {
                 "No configuration file found in {config_dir_str}\n\
                  Make that directory if it is not there, and write {EXAMPLE_FILE} in it, \
                  holding your key: {{\"key\": \"nsec1...\"}}\n\
-                 An npub instead of an nsec starts nostui read-only.{also_read}"
+                 An npub instead of an nsec starts nostui read-only. \
+                 {alternatives} are read too, each in its own format."
             );
 
             log::error!("{message}");
