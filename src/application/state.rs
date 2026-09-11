@@ -670,7 +670,7 @@ impl<'a> AppState<'a> {
         // changes the bar, and the bar is asserted.
         let subject = kind.subject();
 
-        log::error!("{subject} {}: {detail}", failure.label());
+        log::error!("Publish {} ({subject}): {detail}", failure.label());
         self.set_status_error(subject, detail);
     }
 
