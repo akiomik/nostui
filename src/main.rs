@@ -38,7 +38,9 @@ async fn tokio_main() -> Result<()> {
     initialize_panic_handler()?;
 
     // Parsed for `--help`, `--version`, and to reject anything else; nostui takes no
-    // options of its own since #527 removed `--tick-rate`.
+    // options of its own since #527 removed `--tick-rate`. It binds nothing and returns
+    // a value with no fields, so deleting it looks like tidying — `tests/cli.rs` runs
+    // the binary to make that a failing test rather than a silent change of behaviour.
     let _ = <Cli as Parser>::parse();
 
     // Load configuration
