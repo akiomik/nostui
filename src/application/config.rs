@@ -121,15 +121,25 @@ impl Config {
             // `create_dir_all` for the data directory, and the config directory is only
             // ever read. Telling someone to write a file into a path that is not there
             // hands them one more thing to work out.
+            // One line of this reaches the log and three reach the terminal, from one
+            // binding so they cannot come to disagree about the directory.
+            //
+            // The log gets the first line alone because it is read a line at a time: a
+            // three-line event is prefixed with its level and location once, so a `grep`
+            // for ERROR takes that line and leaves the rest behind it, unprefixed and
+            // unfindable. And the two it would leave are instructions, which are for the
+            // person at the terminal — who has them there — rather than for whoever is
+            // reading the log afterwards to find out what happened.
+            let found_nothing = format!("No configuration file found in {config_dir_str}");
             let message = format!(
-                "No configuration file found in {config_dir_str}\n\
+                "{found_nothing}\n\
                  Make that directory if it is not there, and write {EXAMPLE_FILE} in it, \
                  holding your key: {{\"key\": \"nsec1...\"}}\n\
                  An npub instead of an nsec starts nostui read-only. \
                  {alternatives} are read too, each in its own format."
             );
 
-            log::error!("{message}");
+            log::error!("{found_nothing}");
             return Err(ConfigError::Message(message));
         }
 
