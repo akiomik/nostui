@@ -41,20 +41,7 @@ Pull request titles take the same shape. Nothing verifies any of this.
 Tests live in a `mod tests` at the end of the file they exercise, the one
 doctest aside. `tests/` holds the integration tests: the ones that stand the
 crate up and drive it from outside, rather than exercising the item they sit
-next to.
-
-There is one today. `tests/publish_verdict.rs` runs a local relay and publishes
-to it over a socket, because the accepting half of the publish verdict needs a
-relay to answer `OK true`: `EventSendStatus::Ack` wraps a type for which
-nostr-sdk gives no public constructor, so no `SendEventOutput` assembled in a
-test can carry one
-([#523](https://github.com/akiomik/nostui/issues/523)).
-
-Note what does *not* decide this. A `mod tests` unit test can reach
-dev-dependencies, open a socket, and call private items besides, so nothing
-forced that file out of `src`. What put it in `tests/` is that it drives the
-whole publish path end to end. Something you could write either way belongs
-beside the code it is about.
+next to. A test you could write either way goes beside the code it is about.
 
 ### A name says what is asserted
 
