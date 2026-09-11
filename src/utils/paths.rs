@@ -43,16 +43,17 @@ pub fn get_config_dir() -> PathBuf {
     directory
 }
 
+/// The package version, and the directories this run would read and write.
+///
+/// The directories are the whole reason clap's own `version` is overridden: they are
+/// what turns a pasted `--version` into a diagnosable bug report. The version itself
+/// says nothing about the commit it was built from, deliberately — a `git describe`
+/// used to be appended here and named the version twice in every binary this project
+/// ever shipped ([#561](https://github.com/akiomik/nostui/issues/561)).
 pub fn version() -> String {
     let author = clap::crate_authors!();
 
-    let pkg_version = format!("v{}", env!("CARGO_PKG_VERSION"));
-    let commit_hash = option_env!("_GIT_INFO");
-    let version = if let Some(hash) = commit_hash {
-        format!("{pkg_version}-{hash}")
-    } else {
-        pkg_version
-    };
+    let version = format!("v{}", env!("CARGO_PKG_VERSION"));
 
     // let current_exe_path = PathBuf::from(clap::crate_name!()).display().to_string();
     let config_dir_path = get_config_dir().display().to_string();
