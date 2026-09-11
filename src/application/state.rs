@@ -392,10 +392,13 @@ impl<'a> AppState<'a> {
 
         let content = self.editor.get_content();
 
-        // Decided here rather than alongside the tags below, because the refusal in
-        // between has to name it too: a blank reply that reported `[ERR: Note]` would be
-        // the same publish named two different ways depending on how it ended.
-        let kind = if self.editor.reply_target().is_some() {
+        // Read once and owned, so the name on the bar and the tags on the event cannot
+        // disagree about whether this is a reply. They are decided in two places — the
+        // refusal in between has to name it too, since a blank reply reported as
+        // `[ERR: Note]` would be the same publish named two ways depending on how it
+        // ended — and one `reply_target` read is what keeps those two places honest.
+        let reply_target = self.editor.reply_target().cloned();
+        let kind = if reply_target.is_some() {
             PublishKind::Reply
         } else {
             PublishKind::Note
@@ -421,11 +424,11 @@ impl<'a> AppState<'a> {
             return Command::none();
         }
 
-        let event_builder = if let Some(reply_to_event) = self.editor.reply_target() {
+        let event_builder = if let Some(reply_to_event) = reply_target {
             log::info!("Publishing reply: {content}");
             // Build NIP-10 reply tags (root/reply markers, deduped p-tag).
             EventBuilder::new(Kind::TextNote, &content)
-                .tags(ReplyTagsBuilder::build(reply_to_event.clone()))
+                .tags(ReplyTagsBuilder::build(reply_to_event))
         } else {
             log::info!("Publishing note: {content}");
             EventBuilder::new(Kind::TextNote, &content)
