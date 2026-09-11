@@ -25,8 +25,9 @@ const RUN_TIMEOUT: Duration = Duration::from_secs(30);
 /// A directory with no configuration file in it, and never created — `Config::new` asks
 /// whether each name exists, and a path that is not there answers no for all of them.
 ///
-/// Named apart from `tests/cli.rs`'s so the two test binaries, which cargo runs at the
-/// same time, are not handing the same directory to the program at once.
+/// Named apart from `tests/cli.rs`'s rather than shared. `cargo test` runs the two
+/// binaries one after another, so today they could share it — but nothing here rests on
+/// that ordering, and `cargo nextest` does run them at once.
 fn config_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-config-that-is-not-there")
 }

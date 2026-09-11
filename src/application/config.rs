@@ -27,7 +27,8 @@ const CONFIG_FILES: [(&str, config::FileFormat); 5] = [
 /// not carry the same snippet — `config.json5` and `config.yaml` both read JSON, and
 /// only `config.toml` and `config.ini` do not.
 ///
-/// It has to be in [`CONFIG_FILES`] and parsed as JSON there;
+/// It has to be in [`CONFIG_FILES`], under one of the formats that reads the snippet
+/// shown beside it rather than JSON in particular;
 /// `the_error_names_a_file_that_reads_the_json_it_shows` is what holds it to both.
 const EXAMPLE_FILE: &str = "config.json";
 
