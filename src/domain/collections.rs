@@ -191,14 +191,17 @@ mod tests {
     use nostr_sdk::prelude::Signature;
     use nostr_sdk::prelude::{Kind, Timestamp};
 
-    fn create_test_event(id_suffix: u8, content: &str) -> Result<Event> {
+    /// Only the last byte varies, so every suffix gives a distinct id.
+    fn id_of(id_suffix: u8) -> EventId {
         let mut id_bytes = [0u8; 32];
-        // Only the last byte varies, so every suffix gives a distinct id.
         id_bytes[31] = id_suffix;
+        EventId::from_byte_array(id_bytes)
+    }
 
+    fn create_test_event(id_suffix: u8, content: &str) -> Result<Event> {
         let keys = Keys::generate();
         Ok(Event::new(
-            EventId::from_byte_array(id_bytes),
+            id_of(id_suffix),
             keys.public_key(),
             Timestamp::now(),
             Kind::TextNote,
@@ -391,8 +394,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn duplicate_inserts_keep_the_id_index_and_the_events_in_step() -> Result<()> {
+    /// Ten ids, then eleven inserts of which six repeat, so the set has seen both a
+    /// duplicate and a new id by the time it is read.
+    fn overlapping_inserts() -> Result<EventSet> {
         let mut events = EventSet::new();
 
         for i in 1..=10 {
@@ -404,37 +408,130 @@ mod tests {
             events.insert(create_test_event(i, &format!("duplicate attempt {i}"))?);
         }
 
-        assert_eq!(events.events.len(), events.event_ids.len());
-        // 1-10 from the first loop plus 11-15 from the second.
-        assert_eq!(events.len(), 15);
+        Ok(events)
+    }
 
-        for event in events.iter() {
-            assert!(events.event_ids.contains(&event.id));
-        }
+    #[test]
+    fn duplicate_inserts_leave_one_event_per_id() -> Result<()> {
+        let events = overlapping_inserts()?;
+
+        // The ids themselves rather than a count: 1-10 from the first loop and 11-15
+        // from the second, each exactly once. A count alone would also hold for a set
+        // that stored two events under one id and dropped another id entirely.
+        let ids: Vec<EventId> = events.iter().map(|event| event.id).collect();
+        let expected: Vec<EventId> = (1..=15).map(id_of).collect();
+        assert_eq!(ids, expected);
 
         Ok(())
     }
 
     #[test]
-    fn with_capacity_reserves_and_still_dedupes_by_id() -> Result<()> {
-        let mut events = EventSet::with_capacity(256);
-        assert_eq!(events.capacity(), 256);
+    fn a_duplicate_insert_leaves_the_event_already_stored() -> Result<()> {
+        let events = overlapping_inserts()?;
+
+        // Only the ids offered twice carry this claim, so only those are read. `insert`
+        // ignores the second offer, so the contents are the first loop's; an `insert`
+        // that replaced on a duplicate id would leave "duplicate attempt 5" here and
+        // still hold fifteen events under the same fifteen ids.
+        let contents: Vec<&str> = (5..=10)
+            .map(|i| {
+                let id = id_of(i);
+                events
+                    .iter()
+                    .find(|event| event.id == id)
+                    .map(|event| event.content.as_str())
+                    .expect("offered in the first loop")
+            })
+            .collect();
+        assert_eq!(
+            contents,
+            vec!["event 5", "event 6", "event 7", "event 8", "event 9", "event 10"]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn the_id_index_and_the_events_stay_in_step() -> Result<()> {
+        let events = overlapping_inserts()?;
+
+        // Fifteen written out rather than read back off `events`: a length taken from
+        // the same Vec being iterated compares `[]` against `[]` on a set that stored
+        // nothing, and an `insert` that stored nothing would pass.
+        let indexed: Vec<bool> = events
+            .iter()
+            .map(|event| events.event_ids.contains(&event.id))
+            .collect();
+        assert_eq!(indexed, vec![true; 15]);
+
+        // And no id in the index without an event of its own.
+        assert_eq!(events.event_ids.len(), 15);
+
+        Ok(())
+    }
+
+    #[test]
+    fn with_capacity_reserves_the_capacity_asked_for() {
+        let events = EventSet::with_capacity(256);
+
+        // Both halves: `capacity()` reads the events, and an `event_ids` left
+        // unreserved would make the set grow its index on the first inserts anyway.
+        // `at least`, because that is all `Vec` and `HashSet` promise.
+        assert!(events.capacity() >= 256);
+        assert!(events.event_ids.capacity() >= 256);
+    }
+
+    #[test]
+    fn a_thousand_inserts_drawn_from_256_ids_leave_256_events() -> Result<()> {
+        let mut events = EventSet::new();
 
         for i in 0..1000 {
-            let event = create_test_event((i % 256) as u8, &format!("event {i}"))?;
-            events.insert(event);
+            events.insert(create_test_event((i % 256) as u8, &format!("event {i}"))?);
         }
 
-        // 1000 inserts drawn from 256 distinct suffixes leave 256 unique events.
         assert_eq!(events.len(), 256);
 
-        // A fresh event carrying an id already present: contains() reads the id, not
-        // the content, so the differing content does not matter.
-        let test_event = create_test_event(100, "test")?;
-        assert!(events.contains(&test_event.id));
+        Ok(())
+    }
 
-        events.retain(|e| e.content.starts_with("event 1"));
-        assert!(events.len() < 256);
+    #[test]
+    fn contains_finds_an_id_even_on_an_event_it_never_saw() -> Result<()> {
+        let mut events = EventSet::new();
+        events.insert(create_test_event(1, "the content that was inserted")?);
+
+        // A freshly built event carrying the same id: different content, different
+        // author, never offered to the set. The id is what is looked up.
+        let same_id = create_test_event(1, "nothing like it")?;
+        assert!(events.contains(&same_id.id));
+
+        Ok(())
+    }
+
+    #[test]
+    fn contains_is_false_for_an_id_never_inserted() -> Result<()> {
+        let mut events = EventSet::new();
+        events.insert(create_test_event(1, "the content that was inserted")?);
+
+        let never_inserted = create_test_event(2, "the content that was inserted")?;
+        assert!(!events.contains(&never_inserted.id));
+
+        Ok(())
+    }
+
+    #[test]
+    fn retain_keeps_only_the_events_its_predicate_accepts() -> Result<()> {
+        let mut events = EventSet::new();
+        for i in 1..=6 {
+            let label = if i % 2 == 0 { "drop" } else { "keep" };
+            events.insert(create_test_event(i, &format!("{label} {i}"))?);
+        }
+
+        events.retain(|event| event.content.starts_with("keep"));
+
+        // The exact survivors, not merely fewer than before: a `retain` that dropped
+        // everything, or kept the wrong half, would pass a count-only assertion.
+        let contents: Vec<&str> = events.iter().map(|event| event.content.as_str()).collect();
+        assert_eq!(contents, vec!["keep 1", "keep 3", "keep 5"]);
 
         Ok(())
     }

@@ -74,16 +74,6 @@ mod tests {
     }
 
     #[test]
-    fn clone_sees_the_same_number_of_profiles() {
-        let profiles = HashMap::new();
-        let ctx = ViewContext {
-            profiles: &profiles,
-        };
-        let cloned = ctx.clone();
-        assert_eq!(ctx.profiles.len(), cloned.profiles.len());
-    }
-
-    #[test]
     fn new_reads_through_to_the_timeline_given() {
         // A second tab, so the assertion tells this timeline from the default one a
         // `new` that ignored its argument would have to invent.

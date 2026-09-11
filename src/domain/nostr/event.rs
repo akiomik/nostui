@@ -117,17 +117,6 @@ mod tests {
     }
 
     #[test]
-    fn sortable_event_id_equality() {
-        let event_id = EventId::from_byte_array([0; EventId::LEN]);
-        let timestamp = Timestamp::from(1000);
-
-        let sortable1 = SortableEventId::new(event_id, timestamp);
-        let sortable2 = SortableEventId::new(event_id, timestamp);
-
-        assert_eq!(sortable1, sortable2);
-    }
-
-    #[test]
     fn sortable_event_id_in_reverse_sorted_set() {
         use sorted_vec::ReverseSortedSet;
         use std::cmp::Reverse;
