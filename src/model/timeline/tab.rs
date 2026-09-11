@@ -290,8 +290,12 @@ mod tests {
 
     #[test]
     fn each_tab_keeps_the_feed_it_was_made_for() {
+        // Every `FeedKind`, so a `new` that coerced one of them fails here.
         let home_tab = TimelineTab::new_home();
         assert_eq!(home_tab.feed, FeedKind::Home);
+
+        let mention_tab = TimelineTab::new(FeedKind::Mention);
+        assert_eq!(mention_tab.feed, FeedKind::Mention);
 
         let pubkey = PublicKey::from_slice(&[1u8; 32]).expect("Valid pubkey");
         let user_tab = TimelineTab::new(FeedKind::Author(pubkey));

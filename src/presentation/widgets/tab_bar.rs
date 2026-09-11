@@ -85,13 +85,19 @@ mod tests {
 
     #[test]
     fn new_reads_through_to_the_timeline_given() {
-        let timeline = Timeline::default();
+        // A second tab, so the assertion tells this timeline from the default one a
+        // `new` that ignored its argument would have to invent.
+        let mut timeline = Timeline::default();
+        let _ = timeline.update(Message::TabAdded {
+            feed: FeedKind::Author(create_test_pubkey()),
+        });
+
         let profiles = HashMap::new();
         let ctx = ViewContext {
             profiles: &profiles,
         };
         let widget = TabBarWidget::new(&timeline, ctx.clone());
-        assert_eq!(widget.timeline.tabs().len(), 1);
+        assert_eq!(widget.timeline.tabs().len(), 2);
     }
 
     #[test]
