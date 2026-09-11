@@ -413,9 +413,9 @@ impl<'a> AppState<'a> {
             ),
         };
 
-        // Refused before it costs anything. An empty note is a real event on the relays
-        // that says nothing and cannot be recalled, and `Ctrl+P` on a composer nobody has
-        // typed into is far likelier to be a slip than a request.
+        // An empty note is a real event on the relays that says nothing and cannot be
+        // recalled, and `Ctrl+P` on a composer nobody has typed into is far likelier to
+        // be a slip than a request.
         //
         // Trimmed only to decide: whitespace and a stray newline are as empty as nothing
         // at all. What gets published is the content as typed.
@@ -430,7 +430,7 @@ impl<'a> AppState<'a> {
             // help by then — the next status has overwritten it.
             // Named from `kind` like the bar is: a maintainer reading this line and the
             // `[ERR: …]` the user reported has to be able to tell they are the same event.
-            log::warn!("Refusing to publish a blank {}", kind.subject());
+            log::warn!("Refusing to publish a blank draft ({})", kind.subject());
             self.set_status_error(kind.subject(), "nothing to post");
             return Command::none();
         }
