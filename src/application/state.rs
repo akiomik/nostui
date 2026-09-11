@@ -136,7 +136,7 @@ impl PublishKind {
 /// it: the worker answers a dispatch it would not make with `cannot send events in
 /// read-only mode`, which contains this layer's `read-only mode` whole, and the SDK with
 /// `relay not connected`, a word from this layer's `not connected`.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 enum PublishFailure {
     /// The worker had it and answered. Whether a relay ever saw it is in the cause.
     Reported,
