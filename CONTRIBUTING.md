@@ -39,7 +39,9 @@ Pull request titles take the same shape. Nothing verifies any of this.
 ## Tests
 
 Tests live in a `mod tests` at the end of the file they exercise, the one
-doctest aside. There is no `tests/` directory.
+doctest aside. `tests/` holds the integration tests: the ones that stand the
+crate up and drive it from outside, rather than exercising the item they sit
+next to. A test you could write either way goes beside the code it is about.
 
 ### A name says what is asserted
 
