@@ -22,7 +22,7 @@ use std::time::Duration;
 
 use assert_cmd::Command;
 use nostui::Result;
-use predicates::str::contains;
+use predicates::str::{contains, starts_with};
 
 /// A directory with no configuration file in it, which is the point: `Config::new`
 /// refuses to start without one, so a run that gets past argument handling ends in a
@@ -96,7 +96,14 @@ fn version_is_printed_with_the_directories_it_would_use() -> Result<()> {
         .arg("--version")
         .assert()
         .success()
-        .stdout(contains(format!("v{}", env!("CARGO_PKG_VERSION"))))
+        // The whole first line rather than a substring of it: what this printed before
+        // #561 had a `git describe` appended, and the package version sitting inside
+        // that describe output is what kept a `contains` assertion green while the line
+        // said the version twice.
+        .stdout(starts_with(format!(
+            "nostui v{}\n",
+            env!("CARGO_PKG_VERSION")
+        )))
         // Both directories it names are the ones it was told to use, which is also the
         // only thing standing between these runs and the real ones. The data directory
         // needs saying as much as the config one: `initialize_logging` runs before the
