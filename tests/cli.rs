@@ -40,7 +40,12 @@ fn nostui() -> Result<Command> {
     let mut command = Command::cargo_bin("nostui")?;
     command
         .env("NOSTUI_CONFIG", config_dir())
-        .env("NOSTUI_DATA", data_dir());
+        .env("NOSTUI_DATA", data_dir())
+        // clap styles the words asserted below, and it colours a pipe too when the
+        // caller exports `CLICOLOR_FORCE`. `anstream` reads `NO_COLOR` before that one,
+        // so this is the whole of it: nothing here should turn red over an environment
+        // the change under test has nothing to do with.
+        .env("NO_COLOR", "1");
     Ok(command)
 }
 
