@@ -15,12 +15,15 @@ impl Reference {
 
     pub fn find(text: &str) -> Vec<Self> {
         // TODO: Add nevent and nprofile support
-        let pattern = Regex::new(r"[^\w](nostr:(npub|note)1[a-z0-9]{58})[^\w]")
+        // The delimiters are word boundaries rather than characters the match consumes, so a
+        // mention still counts when it opens or closes the note, and when only one space
+        // separates it from the next one.
+        let pattern = Regex::new(r"\bnostr:(?:npub|note)1[a-z0-9]{58}\b")
             .expect("hardcoded NIP-27 reference regex must be valid");
         pattern
-            .captures_iter(text)
-            .filter_map(|capture| {
-                let (_, [uri, _]) = capture.extract();
+            .find_iter(text)
+            .filter_map(|matched| {
+                let uri = matched.as_str();
 
                 Nip21::parse(uri)
                     .ok()
@@ -82,6 +85,37 @@ mod tests {
                 Nip21::EventId(EventId::from_nostr_uri("nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv").unwrap()),
                 String::from("nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv")
             )
+        ])
+    ]
+    #[case(
+        "nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug",
+        vec![
+            Reference::new(
+                Nip21::Pubkey(PublicKey::from_nostr_uri("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug").unwrap()),
+                String::from("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug")
+            ),
+        ])
+    ]
+    #[case(
+        "Hello, nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv",
+        vec![
+            Reference::new(
+                Nip21::EventId(EventId::from_nostr_uri("nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv").unwrap()),
+                String::from("nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv")
+            ),
+        ])
+    ]
+    #[case(
+        "Hello, nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv!",
+        vec![
+            Reference::new(
+                Nip21::Pubkey(PublicKey::from_nostr_uri("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug").unwrap()),
+                String::from("nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug")
+            ),
+            Reference::new(
+                Nip21::EventId(EventId::from_nostr_uri("nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv").unwrap()),
+                String::from("nostr:note1jnnkqfzn70k6z94nwljdnaw5s5pd8jlf0eyjfmc2pvsytvsa7unsex9dyv")
+            ),
         ])
     ]
     #[allow(clippy::unwrap_used)]
