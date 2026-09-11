@@ -459,8 +459,13 @@ impl<'a> AppState<'a> {
             // help by then — the next status has overwritten it.
             // Named from `kind` like the bar is: a maintainer reading this line and the
             // `[ERR: …]` the user reported has to be able to tell they are the same event.
-            log::warn!("Refusing to publish a blank draft ({})", kind.subject());
-            self.set_status_error(kind.subject(), "nothing to post");
+            // One binding for both, as in `report_publish_failure` — this refusal cannot
+            // use that helper, since there is no content for it to name, but a word the
+            // two sinks each spell for themselves is a word they can be parted on.
+            let subject = kind.subject();
+
+            log::warn!("Refusing to publish a blank draft ({subject})");
+            self.set_status_error(subject, "nothing to post");
             return Command::none();
         }
 
