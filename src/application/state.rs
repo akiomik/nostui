@@ -125,6 +125,35 @@ impl PublishKind {
     }
 }
 
+/// Which of the two ways a publish did not happen, as far as this layer can tell.
+///
+/// The line it draws is whether the worker ever had it — not whether a relay answered,
+/// which this layer cannot know. A signing failure, a queue drained at shutdown and a
+/// relay's refusal all come back through one channel as `Err`, so a word promising a
+/// relay verdict would be wrong for two of the three.
+///
+/// A value rather than a word each caller spells, because the cause cannot be read for
+/// it: the worker answers a dispatch it would not make with `cannot send events in
+/// read-only mode`, which contains this layer's `read-only mode` whole, and the SDK with
+/// `relay not connected`, a word from this layer's `not connected`.
+#[derive(Debug, Clone, Copy)]
+enum PublishFailure {
+    /// The worker had it and answered. Whether a relay ever saw it is in the cause.
+    Reported,
+    /// It never left this layer, so nothing will answer for it.
+    NotDispatched,
+}
+
+impl PublishFailure {
+    /// How the log names it.
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Reported => "failed",
+            Self::NotDispatched => "not dispatched",
+        }
+    }
+}
+
 /// A publish handed to the worker and waiting for a relay's answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PendingPublish {
@@ -430,8 +459,13 @@ impl<'a> AppState<'a> {
             // help by then — the next status has overwritten it.
             // Named from `kind` like the bar is: a maintainer reading this line and the
             // `[ERR: …]` the user reported has to be able to tell they are the same event.
-            log::warn!("Refusing to publish a blank draft ({})", kind.subject());
-            self.set_status_error(kind.subject(), "nothing to post");
+            // One binding for both, as in `report_publish_failure` — this refusal cannot
+            // use that helper, since there is no content for it to name, but a word the
+            // two sinks each spell for themselves is a word they can be parted on.
+            let subject = kind.subject();
+
+            log::warn!("Refusing to publish a blank draft ({subject})");
+            self.set_status_error(subject, "nothing to post");
             return Command::none();
         }
 
@@ -617,6 +651,34 @@ impl<'a> AppState<'a> {
         id
     }
 
+    /// Report a publish that did not happen, to the log and to the bar together.
+    ///
+    /// The bar holds one line and the next status overwrites it, so what a bug report is
+    /// reconstructed from is the log — paired with whatever the user managed to read.
+    /// That pairing works only while the two name the same publish, which is why they are
+    /// written here rather than at each call site: the label and the detail reaching the
+    /// bar are the same values the log line is built from (#571).
+    fn report_publish_failure(
+        &mut self,
+        kind: PublishKind,
+        failure: PublishFailure,
+        cause: &str,
+        message: String,
+    ) {
+        // Cause first: the bar is one line, and what a reaction or repost carries as
+        // content is a bech32 id — long, and far less use than why it failed.
+        let detail = format!("{cause} ({message})");
+
+        // Both records read from one binding rather than calling `subject` twice, which
+        // is what a test can reach: nothing asserts log output here, so a log line with a
+        // name of its own could be changed without anything failing. Changing this one
+        // changes the bar, and the bar is asserted.
+        let subject = kind.subject();
+
+        log::error!("Publish {} ({subject}): {detail}", failure.label());
+        self.set_status_error(subject, detail);
+    }
+
     /// Settle the publish this outcome belongs to.
     ///
     /// An id with no entry is ignored: it can only mean the entry was already settled,
@@ -639,15 +701,12 @@ impl<'a> AppState<'a> {
         // which is what that issue exists to stop.
         match result {
             Ok(()) => self.set_status(pending.kind.settled_label(), pending.message),
-            Err(reason) => {
-                log::error!("Failed to publish {}: {reason}", pending.message);
-                // Reason first: the bar is one line, and what a reaction or repost carries
-                // as content is a bech32 id — long, and far less use than why it failed.
-                self.set_status_error(
-                    pending.kind.subject(),
-                    format!("{reason} ({})", pending.message),
-                );
-            }
+            Err(reason) => self.report_publish_failure(
+                pending.kind,
+                PublishFailure::Reported,
+                &reason,
+                pending.message,
+            ),
         }
 
         Command::none()
@@ -672,10 +731,11 @@ impl<'a> AppState<'a> {
             "not connected"
         };
 
-        log::error!("Publish not sent, {cause}: {}", pending.message);
-        self.set_status_error(
-            pending.kind.subject(),
-            format!("{cause} ({})", pending.message),
+        self.report_publish_failure(
+            pending.kind,
+            PublishFailure::NotDispatched,
+            cause,
+            pending.message,
         );
     }
 
@@ -1952,6 +2012,35 @@ mod tests {
         // its submission and every publish strands on "Sending" — silently, since each
         // half is individually plausible.
         assert_eq!(sent, Some(tracked));
+    }
+
+    /// #571 wants a reaction and a repost that fail on the same note told apart. The
+    /// reaction half is `publish_failure_reports_an_error_instead_of_success`; this is
+    /// the other half of the pair.
+    ///
+    /// What it pins is the bar. Nothing here can read the log, so the log carrying the
+    /// same word rests on the two being written from one binding — not on this failing
+    /// if they ever part.
+    #[test]
+    fn a_repost_that_fails_is_not_reported_as_the_reaction_it_could_have_been() -> Result<()> {
+        let (mut state, _rx) = connected_state();
+        let keys = Keys::generate();
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let Ok(note1) = event.id.to_bech32();
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+
+        let _ = state.repost_selected();
+        let id = only_pending(&state);
+        let _ = state.resolve_publish(id, Err(String::from("refused")));
+
+        assert_eq!(
+            state.status_bar.message(),
+            Some(format!("[ERR: Repost] refused ({note1})").as_str())
+        );
+
+        Ok(())
     }
 
     #[test]
