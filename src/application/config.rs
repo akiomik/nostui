@@ -28,7 +28,7 @@ const CONFIG_FILES: [(&str, config::FileFormat); 5] = [
 /// only `config.toml` and `config.ini` do not.
 ///
 /// It has to be in [`CONFIG_FILES`] and parsed as JSON there;
-/// `the_error_names_a_file_the_program_parses_as_json` is what holds it to both.
+/// `the_error_names_a_file_that_reads_the_json_it_shows` is what holds it to both.
 const EXAMPLE_FILE: &str = "config.json";
 
 #[derive(Clone, Debug, Deserialize, Default)]
@@ -104,7 +104,7 @@ impl Config {
             // key nostui reports as missing, which reads as the user having got the key
             // wrong rather than the format. `EXAMPLE_FILE` is therefore spelled out
             // rather than taken from the list, which cannot say which entries parse JSON,
-            // and `the_error_names_a_file_the_program_parses_as_json` is what holds the
+            // and `the_error_names_a_file_that_reads_the_json_it_shows` is what holds the
             // two together. The alternatives do come from `CONFIG_FILES`, so a format
             // added or dropped there cannot leave them listing one nobody reads.
             //
@@ -216,15 +216,24 @@ mod tests {
     /// the list, so renaming the JSON entry would leave the message naming a file the
     /// program ignores, and re-pointing it at another format would leave it telling every
     /// fresh install to write JSON somewhere parsed as TOML. Both with the suite green.
+    ///
+    /// The formats accepted are the ones that read the snippet, which is what
+    /// [`EXAMPLE_FILE`]'s own documentation says: YAML among them, since it is a JSON
+    /// superset here. Narrowing this to JSON would fail a `config.yaml` the message
+    /// would be right about.
     #[test]
-    fn the_error_names_a_file_the_program_parses_as_json() {
+    fn the_error_names_a_file_that_reads_the_json_it_shows() {
         assert!(
-            CONFIG_FILES.iter().any(|(file, format)| *file == EXAMPLE_FILE
-                && matches!(
-                    format,
-                    config::FileFormat::Json | config::FileFormat::Json5
-                )),
-            "the error shows JSON beside {EXAMPLE_FILE}, which {CONFIG_FILES:?} does not parse as JSON"
+            CONFIG_FILES
+                .iter()
+                .any(|(file, format)| *file == EXAMPLE_FILE
+                    && matches!(
+                        format,
+                        config::FileFormat::Json
+                            | config::FileFormat::Json5
+                            | config::FileFormat::Yaml
+                    )),
+            "the error shows JSON beside {EXAMPLE_FILE}, which {CONFIG_FILES:?} does not read"
         );
     }
 }
