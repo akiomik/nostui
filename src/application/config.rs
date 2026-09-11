@@ -22,10 +22,13 @@ const CONFIG_FILES: [(&str, config::FileFormat); 5] = [
     ("config.ini", config::FileFormat::Ini),
 ];
 
-/// The one the error names when there is no configuration at all, and the one the README
-/// tells people to write. It has to be in [`CONFIG_FILES`] and it has to read the JSON
-/// the error shows beside it — `the_file_the_error_names_is_one_the_program_reads` holds
-/// it to the first, and the second is why it is not simply the head of that list.
+/// The one the error names when there is no configuration at all. It is `config.json`
+/// because that is what the README tells people to write, not because the others could
+/// not carry the same snippet — `config.json5` and `config.yaml` both read JSON, and
+/// only `config.toml` and `config.ini` do not.
+///
+/// It has to be in [`CONFIG_FILES`] and parsed as JSON there;
+/// `the_error_names_a_file_the_program_parses_as_json` is what holds it to both.
 const EXAMPLE_FILE: &str = "config.json";
 
 #[derive(Clone, Debug, Deserialize, Default)]
@@ -107,18 +110,31 @@ impl Config {
             // key nostui reports as missing — which reads as the user having got the key
             // wrong rather than the format.
             //
+            // Taken from `CONFIG_FILES` so a format added or dropped there cannot leave
+            // this listing one nobody reads.
             let alternatives = CONFIG_FILES
                 .iter()
                 .map(|(file, _)| *file)
                 .filter(|file| *file != EXAMPLE_FILE)
                 .collect::<Vec<_>>()
                 .join(", ");
+            // Dropped rather than left to trail an empty list: with `EXAMPLE_FILE` alone
+            // in `CONFIG_FILES` the sentence would have no subject. It does not try for
+            // agreement beyond that, and would say "config.json5 are read too".
+            let also_read = if alternatives.is_empty() {
+                String::new()
+            } else {
+                format!(" {alternatives} are read too, each in its own format.")
+            };
+            // "Make that directory" because nothing creates it: `initialize_logging` calls
+            // `create_dir_all` for the data directory, and the config directory is only
+            // ever read. Telling someone to write a file into a path that is not there
+            // hands them one more thing to work out.
             let message = format!(
                 "No configuration file found in {config_dir_str}\n\
-                 Create {EXAMPLE_FILE} there, holding your key: \
-                 {{\"key\": \"nsec1...\"}}\n\
-                 An npub instead of an nsec starts nostui read-only. \
-                 {alternatives} are read too, each in its own format."
+                 Make that directory if it is not there, and write {EXAMPLE_FILE} in it, \
+                 holding your key: {{\"key\": \"nsec1...\"}}\n\
+                 An npub instead of an nsec starts nostui read-only.{also_read}"
             );
 
             log::error!("{message}");
@@ -183,15 +199,20 @@ mod tests {
         }
     }
 
-    /// The error tells a user to write one particular file. Nothing else checks that
-    /// `Config::new` still reads it: the name is spelled once and only filtered out of
-    /// the list, so dropping the JSON entry would leave the message recommending a file
-    /// the program ignores, with every other test green.
+    /// The error tells a user to write one particular file and shows JSON to put in it.
+    /// Nothing else checks either half: the name is spelled once and only filtered out of
+    /// the list, so renaming the JSON entry would leave the message naming a file the
+    /// program ignores, and re-pointing it at another format would leave it telling every
+    /// fresh install to write JSON somewhere parsed as TOML. Both with the suite green.
     #[test]
-    fn the_file_the_error_names_is_one_the_program_reads() {
+    fn the_error_names_a_file_the_program_parses_as_json() {
         assert!(
-            CONFIG_FILES.iter().any(|(file, _)| *file == EXAMPLE_FILE),
-            "the error names {EXAMPLE_FILE}, which is not among {CONFIG_FILES:?}"
+            CONFIG_FILES.iter().any(|(file, format)| *file == EXAMPLE_FILE
+                && matches!(
+                    format,
+                    config::FileFormat::Json | config::FileFormat::Json5
+                )),
+            "the error shows JSON beside {EXAMPLE_FILE}, which {CONFIG_FILES:?} does not parse as JSON"
         );
     }
 }

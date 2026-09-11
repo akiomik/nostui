@@ -56,7 +56,7 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
         .stderr(contains(config_dir.display().to_string()))
         // The whole phrase, because `contains("config.json")` also matches `config.json5`
         // and so would pass with the JSON entry gone from the list entirely.
-        .stderr(contains("Create config.json there"))
+        .stderr(contains("write config.json in it"))
         .stderr(contains("{\"key\": \"nsec1...\"}"))
         // One alternative, named where it cannot be a prefix of another.
         .stderr(contains("config.toml"));
