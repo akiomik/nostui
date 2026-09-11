@@ -102,8 +102,8 @@ enum PublishKind {
 }
 
 impl PublishKind {
-    /// How the bar names it once a relay has accepted it — past tense, and the wording
-    /// the bar has always used.
+    /// How the bar names it once a relay has accepted it. Past tense, and never the word
+    /// for a publish that did not happen — [`Self::subject`] is what says that.
     const fn settled_label(self) -> &'static str {
         match self {
             Self::Note => "Posted",
