@@ -190,6 +190,27 @@ mod tests {
         }
     }
 
+    /// The error's last sentence is plural — "… are read too, each in its own format" —
+    /// so it needs at least two names left once `EXAMPLE_FILE` is filtered out of
+    /// [`CONFIG_FILES`]. One would print "config.json5 are read too" and none would leave
+    /// the sentence without a subject at all, both of them on every fresh install.
+    ///
+    /// Asserted rather than branched on: neither is reachable from a fixed-length const
+    /// of five, so a branch would be dead code and a comment would be a claim nothing
+    /// holds to.
+    #[test]
+    fn the_error_has_at_least_two_formats_left_to_call_alternatives() {
+        let alternatives = CONFIG_FILES
+            .iter()
+            .filter(|(file, _)| *file != EXAMPLE_FILE)
+            .count();
+
+        assert!(
+            alternatives >= 2,
+            "the error says {alternatives} of them \"are read too\""
+        );
+    }
+
     /// The error tells a user to write one particular file and shows JSON to put in it.
     /// Nothing else checks either half: the name is spelled once and only filtered out of
     /// the list, so renaming the JSON entry would leave the message naming a file the
