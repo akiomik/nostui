@@ -1,5 +1,15 @@
+use std::sync::LazyLock;
+
 use nostr_sdk::prelude::*;
 use regex::Regex;
+
+/// The delimiters are word boundaries rather than characters the match consumes, so a mention
+/// still counts when it opens or closes the note, and when only one space separates it from the
+/// next one.
+static REFERENCE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\bnostr:(?:npub|note)1[a-z0-9]{58}\b")
+        .expect("hardcoded NIP-27 reference regex must be valid")
+});
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Reference {
@@ -15,12 +25,7 @@ impl Reference {
 
     pub fn find(text: &str) -> Vec<Self> {
         // TODO: Add nevent and nprofile support
-        // The delimiters are word boundaries rather than characters the match consumes, so a
-        // mention still counts when it opens or closes the note, and when only one space
-        // separates it from the next one.
-        let pattern = Regex::new(r"\bnostr:(?:npub|note)1[a-z0-9]{58}\b")
-            .expect("hardcoded NIP-27 reference regex must be valid");
-        pattern
+        REFERENCE_PATTERN
             .find_iter(text)
             .filter_map(|matched| {
                 let uri = matched.as_str();
