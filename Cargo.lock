@@ -389,6 +389,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "btreecap"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6160c957d8aa33d0a8ba1dbab98e3cb57023ad9374c501441e88559f99e6c4c9"
+
+[[package]]
 name = "bumpalo"
 version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2017,6 +2023,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nostr-memory"
+version = "0.45.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd2b7b21ffca47ad6dc32474d06d7fd1e8f83f218f7b350f4309eb5f49e7f97d"
+dependencies = [
+ "btreecap",
+ "nostr",
+ "nostr-database",
+ "tokio",
+]
+
+[[package]]
 name = "nostr-sdk"
 version = "0.45.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2031,6 +2049,7 @@ dependencies = [
  "nostr",
  "nostr-database",
  "nostr-gossip",
+ "nostr-memory",
  "opaquerr",
  "rand 0.10.2",
  "tokio",

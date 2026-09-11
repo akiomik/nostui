@@ -39,7 +39,17 @@ Pull request titles take the same shape. Nothing verifies any of this.
 ## Tests
 
 Tests live in a `mod tests` at the end of the file they exercise, the one
-doctest aside. There is no `tests/` directory.
+doctest aside. `tests/` holds the exception: a test that cannot be written
+against the crate from the inside, because what it needs to observe is only
+reachable through the public API or only produced by something outside the
+process.
+
+There is one today. `tests/publish_verdict.rs` stands up a local relay and
+publishes to it, because `EventSendStatus::Ack` wraps a type nostr-sdk gives no
+public constructor — a relay answering `OK true` is the only way to obtain one,
+so the accepting half of the publish verdict has no unit test to be written
+([#523](https://github.com/akiomik/nostui/issues/523)). Reach for `tests/` when
+that is the situation, not because a test feels like an integration test.
 
 ### A name says what is asserted
 
