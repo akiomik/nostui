@@ -1,21 +1,25 @@
-//! The accepting side of the publish verdict, which no unit test can reach.
+//! The accepting side of the publish verdict, end to end against a local relay.
 //!
-//! `NostrEvents::relay_verdict` decides whether a publish is reported as done, and its
-//! refusing directions are covered in that file's `mod tests`. The accepting one is not:
-//! `EventSendStatus::Ack` wraps an `EventSendAcknowledgement` whose constructor is
-//! private to nostr-sdk, so a `SendEventOutput` assembled by hand can only carry
-//! `EventSendStatus::Sent` — the variant the verdict deliberately refuses. A relay has to
-//! answer `OK true` for an `Ack` to exist at all, which is why this test opens a socket
-//! (#523).
+//! `NostrEvents::relay_verdict` decides whether a publish is reported as done. Its
+//! refusing directions are unit-tested beside it; this covers the branch that returns
+//! `Ok(())`, which decides whether "Posted" is ever shown.
 //!
-//! It drives the same path the application does — `NostrEvents::stream()`, a
-//! `SendEventBuilder` command, the `EventPublished` message that comes back — rather than
-//! calling the verdict directly, which from here is private anyway.
+//! It needs a real relay. `EventSendStatus::Ack` wraps an `EventSendAcknowledgement`
+//! whose constructor nostr-sdk keeps private, so a `SendEventOutput` assembled by hand
+//! can only carry `EventSendStatus::Sent` — the variant the verdict deliberately
+//! refuses. A relay answering `OK true` is the only source of an `Ack` (#523).
+//!
+//! Needing a socket is not what puts this file here: a `mod tests` unit test could open
+//! one too, and would reach `relay_verdict` directly instead of reading the outcome off
+//! `Message::EventPublished`. What puts it here is that it drives the whole publish path
+//! the application drives — `NostrEvents::stream()`, a `SendEventBuilder` command, the
+//! `EventPublished` that comes back — rather than the one function.
 
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::slice;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -33,8 +37,15 @@ const PUBLISH_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// A relay that answers `OK false` to everything, so that a send can be refused by one
 /// relay while another accepts it.
+///
+/// It counts what it was offered. A relay holding nothing afterwards is not evidence
+/// that it refused — a send that never reached it looks the same — and without this the
+/// partial case would degrade into the accepting one, silently, the day something stops
+/// writing to every registered relay.
 #[derive(Debug)]
-struct RefuseEverything;
+struct RefuseEverything {
+    offered: Arc<AtomicUsize>,
+}
 
 impl WritePolicy for RefuseEverything {
     fn admit_event<'a>(
@@ -43,6 +54,7 @@ impl WritePolicy for RefuseEverything {
         _addr: &'a SocketAddr,
     ) -> Pin<Box<dyn Future<Output = WritePolicyResult> + Send + 'a>> {
         Box::pin(async move {
+            self.offered.fetch_add(1, Ordering::SeqCst);
             WritePolicyResult::reject(MachineReadablePrefix::Blocked, "refused on purpose")
         })
     }
@@ -127,7 +139,12 @@ async fn one_relay_acknowledging_is_a_publish_even_when_another_refuses() -> Res
     let accepting = MockRelay::run().await?;
     let accepting_url = accepting.url().await;
 
-    let refusing = LocalRelay::builder().write_policy(RefuseEverything).build();
+    let offered_to_the_refusing_relay = Arc::new(AtomicUsize::new(0));
+    let refusing = LocalRelay::builder()
+        .write_policy(RefuseEverything {
+            offered: Arc::clone(&offered_to_the_refusing_relay),
+        })
+        .build();
     refusing.run().await?;
     let refusing_url = refusing.url().await;
 
@@ -139,8 +156,10 @@ async fn one_relay_acknowledging_is_a_publish_even_when_another_refuses() -> Res
     // is logged rather than reported.
     assert_eq!(outcome, Ok(()));
 
-    // The halves really were different, which is the whole point of this case — without
-    // these the test is the accepting one with a second relay attached.
+    // The halves really were different, which is the whole point of this case. The
+    // count is the load-bearing one: a refusing relay that holds nothing and a relay
+    // that was never written to are indistinguishable from the outside.
+    assert_eq!(offered_to_the_refusing_relay.load(Ordering::SeqCst), 1);
     assert_eq!(notes_held_by(&accepting_url, keys.public_key()).await?, 1);
     assert_eq!(notes_held_by(&refusing_url, keys.public_key()).await?, 0);
 

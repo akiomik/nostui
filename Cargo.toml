@@ -53,14 +53,13 @@ unicode-width = "0.2"
 
 [dev-dependencies]
 criterion = "0.8"
-futures = "0.3"
-# `local-relay` is what makes tests/publish_verdict.rs possible: a relay that answers
-# `OK true` is the only way to obtain an `EventSendStatus::Ack` from outside nostr-sdk.
+# The one dependency a test adds rather than reuses: `local-relay` is what makes
+# tests/publish_verdict.rs possible, since a relay answering `OK true` is the only way
+# to obtain an `EventSendStatus::Ack`. Everything else the tests need is in
+# `[dependencies]`, which Cargo puts on every target.
 nostr-sdk = { version = "0.45", features = ["local-relay"] }
 pretty_assertions = "1"
 rstest = "0.26"
-tears = "0.11.0"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 
 [lints.clippy]
 absolute_paths = "warn"
