@@ -617,6 +617,28 @@ impl<'a> AppState<'a> {
         id
     }
 
+    /// Report a publish that did not happen, to the log and to the bar together.
+    ///
+    /// The bar holds one line and the next status overwrites it, so what a bug report is
+    /// reconstructed from is the log — paired with whatever the user managed to read.
+    /// That pairing works only while the two name the same publish, which is why they are
+    /// written here rather than at each call site: the label and the detail reaching the
+    /// bar are the same values the log line is built from (#571).
+    fn report_publish_failure(&mut self, kind: PublishKind, cause: &str, message: String) {
+        // Cause first: the bar is one line, and what a reaction or repost carries as
+        // content is a bech32 id — long, and far less use than why it failed.
+        let detail = format!("{cause} ({message})");
+
+        // Both records read from one binding rather than calling `subject` twice, which
+        // is what a test can reach: nothing asserts log output here, so a log line with a
+        // name of its own could be changed without anything failing. Changing this one
+        // changes the bar, and the bar is asserted.
+        let subject = kind.subject();
+
+        log::error!("{subject} failed: {detail}");
+        self.set_status_error(subject, detail);
+    }
+
     /// Settle the publish this outcome belongs to.
     ///
     /// An id with no entry is ignored: it can only mean the entry was already settled,
@@ -639,15 +661,7 @@ impl<'a> AppState<'a> {
         // which is what that issue exists to stop.
         match result {
             Ok(()) => self.set_status(pending.kind.settled_label(), pending.message),
-            Err(reason) => {
-                log::error!("Failed to publish {}: {reason}", pending.message);
-                // Reason first: the bar is one line, and what a reaction or repost carries
-                // as content is a bech32 id — long, and far less use than why it failed.
-                self.set_status_error(
-                    pending.kind.subject(),
-                    format!("{reason} ({})", pending.message),
-                );
-            }
+            Err(reason) => self.report_publish_failure(pending.kind, &reason, pending.message),
         }
 
         Command::none()
@@ -672,11 +686,7 @@ impl<'a> AppState<'a> {
             "not connected"
         };
 
-        log::error!("Publish not sent, {cause}: {}", pending.message);
-        self.set_status_error(
-            pending.kind.subject(),
-            format!("{cause} ({})", pending.message),
-        );
+        self.report_publish_failure(pending.kind, cause, pending.message);
     }
 
     /// Record that the Nostr subscription is ready and store its command sender,
@@ -1952,6 +1962,33 @@ mod tests {
         // its submission and every publish strands on "Sending" — silently, since each
         // half is individually plausible.
         assert_eq!(sent, Some(tracked));
+    }
+
+    /// #571: the log line for a failure is built from the same `kind` as the bar's, so
+    /// what pins one pins the other. The reaction half is
+    /// `publish_failure_reports_an_error_instead_of_success`; this is the half that makes
+    /// them a pair, since a reaction and a repost of the same note are otherwise reported
+    /// in identical words.
+    #[test]
+    fn a_repost_that_fails_is_not_reported_as_the_reaction_it_could_have_been() -> Result<()> {
+        let (mut state, _rx) = connected_state();
+        let keys = Keys::generate();
+
+        let event = create_text_note(&keys, "hello", Timestamp::from(1000))?;
+        let Ok(note1) = event.id.to_bech32();
+        let _ = state.process_nostr_event_for_tab(event, &FeedKind::Home);
+        let _ = state.timeline.update(TimelineMessage::FirstItemSelected);
+
+        let _ = state.repost_selected();
+        let id = only_pending(&state);
+        let _ = state.resolve_publish(id, Err(String::from("refused")));
+
+        assert_eq!(
+            state.status_bar.message(),
+            Some(format!("[ERR: Repost] refused ({note1})").as_str())
+        );
+
+        Ok(())
     }
 
     #[test]
