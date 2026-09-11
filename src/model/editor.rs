@@ -35,11 +35,6 @@ impl<'a> Editor<'a> {
         self.is_active
     }
 
-    /// Returns true if currently composing a reply
-    pub fn is_reply(&self) -> bool {
-        self.reply_to.is_some()
-    }
-
     /// Returns the event being replied to, if any
     pub fn reply_target(&self) -> Option<&Event> {
         self.reply_to.as_ref()
@@ -138,7 +133,6 @@ mod tests {
     fn new_editor_default_state() {
         let editor = Editor::new();
         assert!(!editor.is_active());
-        assert!(!editor.is_reply());
         assert_eq!(editor.reply_target(), None);
         assert_eq!(editor.get_content(), "");
     }
@@ -149,7 +143,6 @@ mod tests {
         editor.update(Message::ComposingStarted);
 
         assert!(editor.is_active());
-        assert!(!editor.is_reply());
         assert_eq!(editor.reply_target(), None);
         assert_eq!(editor.get_content(), "");
     }
@@ -166,7 +159,6 @@ mod tests {
         });
 
         assert!(editor.is_active());
-        assert!(editor.is_reply());
         assert_eq!(editor.reply_target(), Some(&event));
     }
 
@@ -181,7 +173,6 @@ mod tests {
         });
 
         assert!(editor.is_active());
-        assert!(editor.is_reply());
         assert_eq!(editor.reply_target(), Some(&event));
     }
 
@@ -202,14 +193,13 @@ mod tests {
 
         // Start a reply
         editor.update(Message::ReplyStarted {
-            to: Box::new(event),
+            to: Box::new(event.clone()),
             profile: Box::new(None),
         });
-        assert!(editor.is_reply());
+        assert_eq!(editor.reply_target(), Some(&event));
 
         // Start new composition
         editor.update(Message::ComposingStarted);
-        assert!(!editor.is_reply());
         assert_eq!(editor.reply_target(), None);
     }
 
