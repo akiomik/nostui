@@ -12,6 +12,22 @@ use crate::utils;
 
 const CONFIG: &str = include_str!("../../.config/config.json5");
 
+/// The names `Config::new` reads, each with the format it is parsed as. Later entries
+/// layer over earlier ones, which is `config`'s doing rather than a choice made here.
+const CONFIG_FILES: [(&str, config::FileFormat); 5] = [
+    ("config.json5", config::FileFormat::Json5),
+    ("config.json", config::FileFormat::Json),
+    ("config.yaml", config::FileFormat::Yaml),
+    ("config.toml", config::FileFormat::Toml),
+    ("config.ini", config::FileFormat::Ini),
+];
+
+/// The one the error names when there is no configuration at all, and the one the README
+/// tells people to write. It has to be in [`CONFIG_FILES`] and it has to read the JSON
+/// the error shows beside it — `the_file_the_error_names_is_one_the_program_reads` holds
+/// it to the first, and the second is why it is not simply the head of that list.
+const EXAMPLE_FILE: &str = "config.json";
+
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct AppConfig {
     #[serde(default)]
@@ -63,15 +79,8 @@ impl Config {
             .set_default("_data_dir", data_dir_str)?
             .set_default("_config_dir", config_dir_str)?;
 
-        let config_files = [
-            ("config.json5", config::FileFormat::Json5),
-            ("config.json", config::FileFormat::Json),
-            ("config.yaml", config::FileFormat::Yaml),
-            ("config.toml", config::FileFormat::Toml),
-            ("config.ini", config::FileFormat::Ini),
-        ];
         let mut found_config = false;
-        for (file, format) in &config_files {
+        for (file, format) in &CONFIG_FILES {
             builder = builder.add_source(
                 config::File::from(config_dir.join(file))
                     .format(*format)
@@ -92,16 +101,24 @@ impl Config {
             // reads. Which of them wins if two exist is deliberately not said: that is
             // `config`'s layering, and a sentence about it here would be one more thing
             // to get wrong.
-            let names = config_files
+            // The snippet is JSON, so the name shown beside it has to be one that reads
+            // JSON. The rest are offered as alternatives rather than as equals: the same
+            // `{"key": …}` in a config.toml is a parse error, and in a config.ini it is a
+            // key nostui reports as missing — which reads as the user having got the key
+            // wrong rather than the format.
+            //
+            let alternatives = CONFIG_FILES
                 .iter()
                 .map(|(file, _)| *file)
+                .filter(|file| *file != EXAMPLE_FILE)
                 .collect::<Vec<_>>()
                 .join(", ");
             let message = format!(
                 "No configuration file found in {config_dir_str}\n\
-                 Create one there named any of {names}, holding your key: \
+                 Create {EXAMPLE_FILE} there, holding your key: \
                  {{\"key\": \"nsec1...\"}}\n\
-                 An npub instead of an nsec starts nostui read-only."
+                 An npub instead of an nsec starts nostui read-only. \
+                 {alternatives} are read too, each in its own format."
             );
 
             log::error!("{message}");
@@ -164,5 +181,17 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The error tells a user to write one particular file. Nothing else checks that
+    /// `Config::new` still reads it: the name is spelled once and only filtered out of
+    /// the list, so dropping the JSON entry would leave the message recommending a file
+    /// the program ignores, with every other test green.
+    #[test]
+    fn the_file_the_error_names_is_one_the_program_reads() {
+        assert!(
+            CONFIG_FILES.iter().any(|(file, _)| *file == EXAMPLE_FILE),
+            "the error names {EXAMPLE_FILE}, which is not among {CONFIG_FILES:?}"
+        );
     }
 }

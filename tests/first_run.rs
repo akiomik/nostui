@@ -45,15 +45,21 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
         .timeout(RUN_TIMEOUT)
         .env("NOSTUI_CONFIG", &config_dir)
         .env("NOSTUI_DATA", data_dir())
-        .env("NO_COLOR", "1")
         .assert()
         // Refusing to start is the existing behaviour and not what #113 is about: a
         // configuration is what the program needs to reach a relay at all, and starting
         // without one would trade this message for an empty timeline explaining nothing.
         .failure()
+        // `NO_COLOR` is not set, unlike in `tests/cli.rs` where it silences clap: the
+        // report here is `color_eyre`'s and comes out with its escape either way, which
+        // I checked rather than assumed. Every substring below sits away from it.
         .stderr(contains(config_dir.display().to_string()))
-        .stderr(contains("config.json"))
-        .stderr(contains("\"key\""));
+        // The whole phrase, because `contains("config.json")` also matches `config.json5`
+        // and so would pass with the JSON entry gone from the list entirely.
+        .stderr(contains("Create config.json there"))
+        .stderr(contains("{\"key\": \"nsec1...\"}"))
+        // One alternative, named where it cannot be a prefix of another.
+        .stderr(contains("config.toml"));
 
     Ok(())
 }
