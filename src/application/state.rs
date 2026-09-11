@@ -419,7 +419,9 @@ impl<'a> AppState<'a> {
             // nothing" gets triaged by grepping the log at warn and above, and a refusal
             // that only shows at info is missing from exactly that search. The bar is no
             // help by then — the next status has overwritten it.
-            log::warn!("Refusing to publish a blank note");
+            // Named from `kind` like the bar is: a maintainer reading this line and the
+            // `[ERR: …]` the user reported has to be able to tell they are the same event.
+            log::warn!("Refusing to publish a blank {}", kind.subject());
             self.set_status_error(kind.subject(), "nothing to post");
             return Command::none();
         }
