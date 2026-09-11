@@ -896,7 +896,7 @@ mod tests {
     }
 
     #[test]
-    fn app_state_default() {
+    fn default_has_an_empty_active_tab_no_active_editor_and_startup_in_progress() {
         let state = AppState::default();
 
         assert_eq!(state.timeline.len(), 0);

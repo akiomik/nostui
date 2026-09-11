@@ -364,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn standard_traits() -> Result<()> {
+    fn trait_impls_reflect_the_set_contents() -> Result<()> {
         let mut events = EventSet::new();
         let event1 = create_test_event(1, "first")?;
         let event2 = create_test_event(2, "second")?;
@@ -392,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    fn internal_consistency() -> Result<()> {
+    fn duplicate_inserts_keep_the_id_index_and_the_events_in_step() -> Result<()> {
         let mut events = EventSet::new();
 
         for i in 1..=10 {
@@ -416,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn performance_and_capacity() -> Result<()> {
+    fn with_capacity_reserves_and_still_dedupes_by_id() -> Result<()> {
         let mut events = EventSet::with_capacity(256);
         assert_eq!(events.capacity(), 256);
 

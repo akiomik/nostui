@@ -205,7 +205,7 @@ mod tests {
     }
 
     #[test]
-    fn profile_clone() {
+    fn clone_equals_the_original() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();
@@ -220,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn profile_serialization() {
+    fn json_round_trip_preserves_the_profile() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
         let created_at = Timestamp::now();

@@ -86,9 +86,14 @@ mod tests {
     }
 
     #[test]
-    fn status_bar_widget_new() {
+    fn new_keeps_the_status_bar_and_context_given() {
         let pubkey = create_test_pubkey();
-        let status_bar = StatusBar::default();
+        // Carrying a message, so a `new` that stored `StatusBar::default()` fails here.
+        let mut status_bar = StatusBar::default();
+        status_bar.update(Message::MessageChanged {
+            label: String::from("Info"),
+            message: String::from("Connected"),
+        });
         let ctx = ViewContext {
             user_pubkey: pubkey,
             user_profile: None,
