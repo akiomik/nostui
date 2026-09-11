@@ -10,6 +10,11 @@ use regex::Regex;
 /// `(?-u:\b)` makes those boundaries ASCII-only. A bech32 URI is ASCII, so what has to be ruled
 /// out is a URI running into surrounding ASCII; Japanese writes no space before a mention, and a
 /// Unicode boundary would treat `こんにちはnostr:npub1…さん` as one word and find nothing in it.
+///
+/// The cost is paid by scripts that do use spaces: `нетnostr:npub1…` is a mention here, where
+/// `foobarnostr:npub1…` is not. Reading the two apart needs to know which script writes spaces,
+/// which a word boundary cannot, and getting Japanese right is worth more than rejecting a
+/// mention nobody writes.
 static REFERENCE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?-u:\b)nostr:(?:npub|note)1[a-z0-9]{58}(?-u:\b)")
         .expect("hardcoded NIP-27 reference regex must be valid")
