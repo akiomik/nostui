@@ -96,6 +96,8 @@ mod tests {
             )
         ])
     ]
+    #[case("Hello, foobar_nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug!", vec![])]
+    #[case("Hello, nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug_foobar!", vec![])]
     #[case(
         "nostr:npub1f5uuywemqwlejj2d7he6zjw8jz9wr0r5z6q8lhttxj333ph24cjsymjmug",
         vec![
