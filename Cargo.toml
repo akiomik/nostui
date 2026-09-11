@@ -52,12 +52,13 @@ tui-widget-list = "0.15"
 unicode-width = "0.2"
 
 [dev-dependencies]
+assert_cmd = "2"
 criterion = "0.8"
-# The one dependency a test adds rather than reuses: `local-relay` is what makes
+# Repeated from `[dependencies]` for one feature: `local-relay` is what makes
 # tests/publish_verdict.rs possible, since a relay answering `OK true` is the only way
-# to obtain an `EventSendStatus::Ack`. Everything else the tests need is in
-# `[dependencies]`, which Cargo puts on every target.
+# to obtain an `EventSendStatus::Ack`.
 nostr-sdk = { version = "0.45", features = ["local-relay"] }
+predicates = "3"
 pretty_assertions = "1"
 rstest = "0.26"
 
