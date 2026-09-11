@@ -429,29 +429,23 @@ mod tests {
     fn a_duplicate_insert_leaves_the_event_already_stored() -> Result<()> {
         let events = overlapping_inserts()?;
 
-        // Ids 5-10 were offered twice. `insert` ignores the second offer, so the
-        // contents are the first loop's; an `insert` that replaced on a duplicate id
-        // would leave "duplicate attempt 5" here and still hold fifteen events.
-        let contents: Vec<&str> = events.iter().map(|event| event.content.as_str()).collect();
+        // Only the ids offered twice carry this claim, so only those are read. `insert`
+        // ignores the second offer, so the contents are the first loop's; an `insert`
+        // that replaced on a duplicate id would leave "duplicate attempt 5" here and
+        // still hold fifteen events under the same fifteen ids.
+        let contents: Vec<&str> = (5..=10)
+            .map(|i| {
+                let id = id_of(i);
+                events
+                    .iter()
+                    .find(|event| event.id == id)
+                    .map(|event| event.content.as_str())
+                    .expect("offered in the first loop")
+            })
+            .collect();
         assert_eq!(
             contents,
-            vec![
-                "event 1",
-                "event 2",
-                "event 3",
-                "event 4",
-                "event 5",
-                "event 6",
-                "event 7",
-                "event 8",
-                "event 9",
-                "event 10",
-                "duplicate attempt 11",
-                "duplicate attempt 12",
-                "duplicate attempt 13",
-                "duplicate attempt 14",
-                "duplicate attempt 15",
-            ]
+            vec!["event 5", "event 6", "event 7", "event 8", "event 9", "event 10"]
         );
 
         Ok(())
@@ -461,13 +455,17 @@ mod tests {
     fn the_id_index_and_the_events_stay_in_step() -> Result<()> {
         let events = overlapping_inserts()?;
 
-        assert_eq!(events.events.len(), events.event_ids.len());
-
+        // Fifteen written out rather than read back off `events`: a length taken from
+        // the same Vec being iterated compares `[]` against `[]` on a set that stored
+        // nothing, and an `insert` that stored nothing would pass.
         let indexed: Vec<bool> = events
             .iter()
             .map(|event| events.event_ids.contains(&event.id))
             .collect();
-        assert_eq!(indexed, vec![true; events.len()]);
+        assert_eq!(indexed, vec![true; 15]);
+
+        // And no id in the index without an event of its own.
+        assert_eq!(events.event_ids.len(), 15);
 
         Ok(())
     }
@@ -497,17 +495,25 @@ mod tests {
     }
 
     #[test]
-    fn contains_reads_the_id_and_not_the_content() -> Result<()> {
+    fn contains_finds_an_id_even_on_an_event_it_never_saw() -> Result<()> {
         let mut events = EventSet::new();
         events.insert(create_test_event(1, "the content that was inserted")?);
 
-        // Same id, different content: found anyway.
+        // A freshly built event carrying the same id: different content, different
+        // author, never offered to the set. The id is what is looked up.
         let same_id = create_test_event(1, "nothing like it")?;
         assert!(events.contains(&same_id.id));
 
-        // Same content, different id: not found.
-        let same_content = create_test_event(2, "the content that was inserted")?;
-        assert!(!events.contains(&same_content.id));
+        Ok(())
+    }
+
+    #[test]
+    fn contains_is_false_for_an_id_never_inserted() -> Result<()> {
+        let mut events = EventSet::new();
+        events.insert(create_test_event(1, "the content that was inserted")?);
+
+        let never_inserted = create_test_event(2, "the content that was inserted")?;
+        assert!(!events.contains(&never_inserted.id));
 
         Ok(())
     }
