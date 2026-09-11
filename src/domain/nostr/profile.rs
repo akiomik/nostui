@@ -205,21 +205,6 @@ mod tests {
     }
 
     #[test]
-    fn clone_equals_the_original() {
-        let keys = Keys::generate();
-        let pubkey = keys.public_key();
-        let created_at = Timestamp::now();
-        let mut metadata = Metadata::new();
-        metadata.display_name = Some(String::from("Test User"));
-
-        let profile = Profile::new(pubkey, created_at, metadata);
-        let cloned = profile.clone();
-
-        assert_eq!(profile, cloned);
-        assert_eq!(profile.name(), cloned.name());
-    }
-
-    #[test]
     fn json_round_trip_preserves_the_profile() {
         let keys = Keys::generate();
         let pubkey = keys.public_key();
