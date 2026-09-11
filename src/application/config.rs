@@ -82,10 +82,30 @@ impl Config {
             }
         }
         if !found_config {
-            log::error!("No configuration file found");
-            return Err(ConfigError::Message(String::from(
-                "No configuration file found",
-            )));
+            // Where it looked and what to write there. The path is the part a user cannot
+            // guess — it differs per platform, and the README can only list all three —
+            // and this is the first thing a fresh install prints, with no window open to
+            // read anything else in (#113).
+            //
+            // Every name comes from `config_files` rather than being spelled again, so a
+            // format added or dropped there cannot leave this recommending a file nobody
+            // reads. Which of them wins if two exist is deliberately not said: that is
+            // `config`'s layering, and a sentence about it here would be one more thing
+            // to get wrong.
+            let names = config_files
+                .iter()
+                .map(|(file, _)| *file)
+                .collect::<Vec<_>>()
+                .join(", ");
+            let message = format!(
+                "No configuration file found in {config_dir_str}\n\
+                 Create one there named any of {names}, holding your key: \
+                 {{\"key\": \"nsec1...\"}}\n\
+                 An npub instead of an nsec starts nostui read-only."
+            );
+
+            log::error!("{message}");
+            return Err(ConfigError::Message(message));
         }
 
         let mut cfg: Self = builder.build()?.try_deserialize()?;
