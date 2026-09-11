@@ -191,14 +191,17 @@ mod tests {
     use nostr_sdk::prelude::Signature;
     use nostr_sdk::prelude::{Kind, Timestamp};
 
-    fn create_test_event(id_suffix: u8, content: &str) -> Result<Event> {
+    /// Only the last byte varies, so every suffix gives a distinct id.
+    fn id_of(id_suffix: u8) -> EventId {
         let mut id_bytes = [0u8; 32];
-        // Only the last byte varies, so every suffix gives a distinct id.
         id_bytes[31] = id_suffix;
+        EventId::from_byte_array(id_bytes)
+    }
 
+    fn create_test_event(id_suffix: u8, content: &str) -> Result<Event> {
         let keys = Keys::generate();
         Ok(Event::new(
-            EventId::from_byte_array(id_bytes),
+            id_of(id_suffix),
             keys.public_key(),
             Timestamp::now(),
             Kind::TextNote,
@@ -412,9 +415,44 @@ mod tests {
     fn duplicate_inserts_leave_one_event_per_id() -> Result<()> {
         let events = overlapping_inserts()?;
 
-        // 1-10 from the first loop plus 11-15 from the second, and nothing for the six
-        // repeats.
-        assert_eq!(events.len(), 15);
+        // The ids themselves rather than a count: 1-10 from the first loop and 11-15
+        // from the second, each exactly once. A count alone would also hold for a set
+        // that stored two events under one id and dropped another id entirely.
+        let ids: Vec<EventId> = events.iter().map(|event| event.id).collect();
+        let expected: Vec<EventId> = (1..=15).map(id_of).collect();
+        assert_eq!(ids, expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn a_duplicate_insert_leaves_the_event_already_stored() -> Result<()> {
+        let events = overlapping_inserts()?;
+
+        // Ids 5-10 were offered twice. `insert` ignores the second offer, so the
+        // contents are the first loop's; an `insert` that replaced on a duplicate id
+        // would leave "duplicate attempt 5" here and still hold fifteen events.
+        let contents: Vec<&str> = events.iter().map(|event| event.content.as_str()).collect();
+        assert_eq!(
+            contents,
+            vec![
+                "event 1",
+                "event 2",
+                "event 3",
+                "event 4",
+                "event 5",
+                "event 6",
+                "event 7",
+                "event 8",
+                "event 9",
+                "event 10",
+                "duplicate attempt 11",
+                "duplicate attempt 12",
+                "duplicate attempt 13",
+                "duplicate attempt 14",
+                "duplicate attempt 15",
+            ]
+        );
 
         Ok(())
     }
@@ -438,7 +476,11 @@ mod tests {
     fn with_capacity_reserves_the_capacity_asked_for() {
         let events = EventSet::with_capacity(256);
 
-        assert_eq!(events.capacity(), 256);
+        // Both halves: `capacity()` reads the events, and an `event_ids` left
+        // unreserved would make the set grow its index on the first inserts anyway.
+        // `at least`, because that is all `Vec` and `HashSet` promise.
+        assert!(events.capacity() >= 256);
+        assert!(events.event_ids.capacity() >= 256);
     }
 
     #[test]
