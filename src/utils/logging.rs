@@ -3,16 +3,11 @@ use std::env;
 use std::fs::{self, File};
 
 use color_eyre::eyre::Result;
-use lazy_static::lazy_static;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
 use super::paths::{get_data_dir, LOG_ENV, LOG_FILE};
-
-lazy_static! {
-    pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase();
-}
 
 pub fn initialize_logging() -> Result<()> {
     let directory = get_data_dir();

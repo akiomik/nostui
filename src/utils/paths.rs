@@ -1,21 +1,22 @@
+use std::sync::LazyLock;
 use std::{env, path::PathBuf};
 
 use directories::ProjectDirs;
-use lazy_static::lazy_static;
 
-lazy_static! {
-    pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase();
-    pub static ref DATA_FOLDER: Option<PathBuf> =
-        env::var(format!("{}_DATA", PROJECT_NAME.clone()))
-            .ok()
-            .map(PathBuf::from);
-    pub static ref CONFIG_FOLDER: Option<PathBuf> =
-        env::var(format!("{}_CONFIG", PROJECT_NAME.clone()))
-            .ok()
-            .map(PathBuf::from);
-    pub static ref LOG_ENV: String = format!("{}_LOGLEVEL", PROJECT_NAME.clone());
-    pub static ref LOG_FILE: String = format!("{}.log", env!("CARGO_PKG_NAME"));
-}
+pub static PROJECT_NAME: LazyLock<String> =
+    LazyLock::new(|| env!("CARGO_CRATE_NAME").to_uppercase());
+pub static DATA_FOLDER: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
+    env::var(format!("{}_DATA", *PROJECT_NAME))
+        .ok()
+        .map(PathBuf::from)
+});
+pub static CONFIG_FOLDER: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
+    env::var(format!("{}_CONFIG", *PROJECT_NAME))
+        .ok()
+        .map(PathBuf::from)
+});
+pub static LOG_ENV: LazyLock<String> = LazyLock::new(|| format!("{}_LOGLEVEL", *PROJECT_NAME));
+pub static LOG_FILE: LazyLock<String> = LazyLock::new(|| format!("{}.log", env!("CARGO_PKG_NAME")));
 
 fn project_directory() -> Option<ProjectDirs> {
     ProjectDirs::from("io", "0m1", env!("CARGO_PKG_NAME"))
