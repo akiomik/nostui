@@ -125,27 +125,31 @@ impl PublishKind {
     }
 }
 
-/// Which of the two ways a publish did not happen.
+/// Which of the two ways a publish did not happen, as far as this layer can tell.
 ///
-/// Whether it was ever handed over is the first thing a report about one has to settle,
-/// and the cause cannot be read for it: the SDK answers a dispatch it would not make
-/// with `relay not connected`, a word away from this layer's `not connected`, and with
-/// `cannot send events in read-only mode`, which contains this layer's `read-only mode`
-/// whole.
+/// The line it draws is whether the worker ever had it — not whether a relay answered,
+/// which this layer cannot know. A signing failure, a queue drained at shutdown and a
+/// relay's refusal all come back through one channel as `Err`, so a word promising a
+/// relay verdict would be wrong for two of the three.
+///
+/// A value rather than a word each caller spells, because the cause cannot be read for
+/// it: the worker answers a dispatch it would not make with `cannot send events in
+/// read-only mode`, which contains this layer's `read-only mode` whole, and the SDK with
+/// `relay not connected`, a word from this layer's `not connected`.
 #[derive(Clone, Copy)]
 enum PublishFailure {
-    /// It reached the worker. A relay answered, or none did.
-    Rejected,
-    /// It never reached the worker.
-    NotSent,
+    /// The worker had it and answered. Whether a relay ever saw it is in the cause.
+    Reported,
+    /// It never left this layer, so nothing will answer for it.
+    NotDispatched,
 }
 
 impl PublishFailure {
     /// How the log names it.
     const fn label(self) -> &'static str {
         match self {
-            Self::Rejected => "failed",
-            Self::NotSent => "not sent",
+            Self::Reported => "failed",
+            Self::NotDispatched => "not dispatched",
         }
     }
 }
@@ -694,7 +698,7 @@ impl<'a> AppState<'a> {
             Ok(()) => self.set_status(pending.kind.settled_label(), pending.message),
             Err(reason) => self.report_publish_failure(
                 pending.kind,
-                PublishFailure::Rejected,
+                PublishFailure::Reported,
                 &reason,
                 pending.message,
             ),
@@ -724,7 +728,7 @@ impl<'a> AppState<'a> {
 
         self.report_publish_failure(
             pending.kind,
-            PublishFailure::NotSent,
+            PublishFailure::NotDispatched,
             cause,
             pending.message,
         );
