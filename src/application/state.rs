@@ -125,6 +125,31 @@ impl PublishKind {
     }
 }
 
+/// Which of the two ways a publish did not happen.
+///
+/// Whether it was ever handed over is the first thing a report about one has to settle,
+/// and the cause cannot be read for it: the SDK answers a dispatch it would not make
+/// with `relay not connected`, a word away from this layer's `not connected`, and with
+/// `cannot send events in read-only mode`, which contains this layer's `read-only mode`
+/// whole.
+#[derive(Clone, Copy)]
+enum PublishFailure {
+    /// It reached the worker. A relay answered, or none did.
+    Rejected,
+    /// It never reached the worker.
+    NotSent,
+}
+
+impl PublishFailure {
+    /// How the log names it.
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Rejected => "failed",
+            Self::NotSent => "not sent",
+        }
+    }
+}
+
 /// A publish handed to the worker and waiting for a relay's answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PendingPublish {
@@ -624,7 +649,13 @@ impl<'a> AppState<'a> {
     /// That pairing works only while the two name the same publish, which is why they are
     /// written here rather than at each call site: the label and the detail reaching the
     /// bar are the same values the log line is built from (#571).
-    fn report_publish_failure(&mut self, kind: PublishKind, cause: &str, message: String) {
+    fn report_publish_failure(
+        &mut self,
+        kind: PublishKind,
+        failure: PublishFailure,
+        cause: &str,
+        message: String,
+    ) {
         // Cause first: the bar is one line, and what a reaction or repost carries as
         // content is a bech32 id — long, and far less use than why it failed.
         let detail = format!("{cause} ({message})");
@@ -635,7 +666,7 @@ impl<'a> AppState<'a> {
         // changes the bar, and the bar is asserted.
         let subject = kind.subject();
 
-        log::error!("{subject} failed: {detail}");
+        log::error!("{subject} {}: {detail}", failure.label());
         self.set_status_error(subject, detail);
     }
 
@@ -661,7 +692,12 @@ impl<'a> AppState<'a> {
         // which is what that issue exists to stop.
         match result {
             Ok(()) => self.set_status(pending.kind.settled_label(), pending.message),
-            Err(reason) => self.report_publish_failure(pending.kind, &reason, pending.message),
+            Err(reason) => self.report_publish_failure(
+                pending.kind,
+                PublishFailure::Rejected,
+                &reason,
+                pending.message,
+            ),
         }
 
         Command::none()
@@ -686,7 +722,12 @@ impl<'a> AppState<'a> {
             "not connected"
         };
 
-        self.report_publish_failure(pending.kind, cause, pending.message);
+        self.report_publish_failure(
+            pending.kind,
+            PublishFailure::NotSent,
+            cause,
+            pending.message,
+        );
     }
 
     /// Record that the Nostr subscription is ready and store its command sender,
@@ -1964,11 +2005,13 @@ mod tests {
         assert_eq!(sent, Some(tracked));
     }
 
-    /// #571: the log line for a failure is built from the same `kind` as the bar's, so
-    /// what pins one pins the other. The reaction half is
-    /// `publish_failure_reports_an_error_instead_of_success`; this is the half that makes
-    /// them a pair, since a reaction and a repost of the same note are otherwise reported
-    /// in identical words.
+    /// #571 wants a reaction and a repost that fail on the same note told apart. The
+    /// reaction half is `publish_failure_reports_an_error_instead_of_success`; this is
+    /// the other half of the pair.
+    ///
+    /// What it pins is the bar. Nothing here can read the log, so the log carrying the
+    /// same word rests on the two being written from one binding — not on this failing
+    /// if they ever part.
     #[test]
     fn a_repost_that_fails_is_not_reported_as_the_reaction_it_could_have_been() -> Result<()> {
         let (mut state, _rx) = connected_state();
