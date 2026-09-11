@@ -86,7 +86,7 @@ mod tests {
     }
 
     #[test]
-    fn status_bar_widget_new() {
+    fn new_keeps_the_status_bar_and_context_given() {
         let pubkey = create_test_pubkey();
         let status_bar = StatusBar::default();
         let ctx = ViewContext {

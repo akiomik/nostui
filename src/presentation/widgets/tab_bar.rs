@@ -74,7 +74,7 @@ mod tests {
     }
 
     #[test]
-    fn view_context_clone() {
+    fn clone_sees_the_same_number_of_profiles() {
         let profiles = HashMap::new();
         let ctx = ViewContext {
             profiles: &profiles,
@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn tab_bar_widget_new() {
+    fn new_reads_through_to_the_timeline_given() {
         let timeline = Timeline::default();
         let profiles = HashMap::new();
         let ctx = ViewContext {

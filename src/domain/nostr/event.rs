@@ -62,7 +62,7 @@ mod tests {
     use color_eyre::eyre::Result;
 
     #[test]
-    fn sortable_event_id_creation() {
+    fn new_keeps_the_id_and_timestamp_given() {
         let event_id = EventId::from_byte_array([0; EventId::LEN]);
         let timestamp = Timestamp::from(1000);
 

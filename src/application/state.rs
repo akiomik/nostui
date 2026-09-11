@@ -896,7 +896,7 @@ mod tests {
     }
 
     #[test]
-    fn app_state_default() {
+    fn default_has_no_notes_no_editor_and_startup_in_progress() {
         let state = AppState::default();
 
         assert_eq!(state.timeline.len(), 0);

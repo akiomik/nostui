@@ -279,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn timeline_tab_default() {
+    fn new_home_starts_empty_unselected_and_not_loading() {
         let tab = TimelineTab::new_home();
         assert_eq!(tab.len(), 0);
         assert!(tab.is_empty());
@@ -289,7 +289,7 @@ mod tests {
     }
 
     #[test]
-    fn timeline_feed() {
+    fn each_tab_keeps_the_feed_it_was_made_for() {
         let home_tab = TimelineTab::new_home();
         assert_eq!(home_tab.feed, FeedKind::Home);
 

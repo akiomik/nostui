@@ -112,7 +112,7 @@ mod tests {
     }
 
     #[test]
-    fn scroll_up() {
+    fn previous_item_steps_back_and_stops_at_the_first() {
         let mut state = Selection::new();
         state.update(Message::ItemSelected(5));
 
@@ -126,7 +126,7 @@ mod tests {
     }
 
     #[test]
-    fn scroll_down() {
+    fn next_item_starts_at_zero_and_stops_at_max_index() {
         let mut state = Selection::new();
 
         // Initial scroll down selects first item

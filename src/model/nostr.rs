@@ -159,7 +159,7 @@ mod tests {
     }
 
     #[test]
-    fn new_creates_default_instance() {
+    fn new_is_not_ready_and_has_no_subscriptions() {
         let nostr = Nostr::new();
 
         assert!(!nostr.is_ready());
