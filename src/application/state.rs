@@ -392,16 +392,25 @@ impl<'a> AppState<'a> {
 
         let content = self.editor.get_content();
 
-        // Read once and owned, so the name on the bar and the tags on the event cannot
-        // disagree about whether this is a reply. They are decided in two places — the
-        // refusal in between has to name it too, since a blank reply reported as
-        // `[ERR: Note]` would be the same publish named two ways depending on how it
-        // ended — and one `reply_target` read is what keeps those two places honest.
-        let reply_target = self.editor.reply_target().cloned();
-        let kind = if reply_target.is_some() {
-            PublishKind::Reply
-        } else {
-            PublishKind::Note
+        // One decision, two products. The name the bar gives this publish and the tags
+        // the event carries come out of the same arm, so no later edit can narrow one
+        // without the other — a tag branch that grew a condition of its own would send a
+        // top-level note while the bar called it a reply, which is this defect inverted.
+        //
+        // Above the refusal below rather than after it, because that refusal has to name
+        // the publish too: a blank reply reported as `[ERR: Note]` would be the same
+        // publish named two ways depending on how it ended.
+        let (kind, event_builder) = match self.editor.reply_target().cloned() {
+            Some(reply_to_event) => (
+                PublishKind::Reply,
+                // Build NIP-10 reply tags (root/reply markers, deduped p-tag).
+                EventBuilder::new(Kind::TextNote, &content)
+                    .tags(ReplyTagsBuilder::build(reply_to_event)),
+            ),
+            None => (
+                PublishKind::Note,
+                EventBuilder::new(Kind::TextNote, &content),
+            ),
         };
 
         // Refused before it costs anything. An empty note is a real event on the relays
@@ -426,15 +435,9 @@ impl<'a> AppState<'a> {
             return Command::none();
         }
 
-        let event_builder = if let Some(reply_to_event) = reply_target {
-            log::info!("Publishing reply: {content}");
-            // Build NIP-10 reply tags (root/reply markers, deduped p-tag).
-            EventBuilder::new(Kind::TextNote, &content)
-                .tags(ReplyTagsBuilder::build(reply_to_event))
-        } else {
-            log::info!("Publishing note: {content}");
-            EventBuilder::new(Kind::TextNote, &content)
-        };
+        // Below the refusal, so a draft that never went anywhere is not logged as one
+        // that did; named from `kind` for the same reason the warn above it is.
+        log::info!("Publishing {}: {content}", kind.subject());
 
         // Only discard the draft once it is actually on its way. Closing the editor
         // loses the text for good — the next `ComposingStarted` clears the buffer — and
