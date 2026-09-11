@@ -78,15 +78,20 @@ fn help_is_printed_and_the_application_does_not_start() -> Result<()> {
 #[test]
 fn version_is_printed_with_the_directories_it_would_use() -> Result<()> {
     let expected_config_dir = config_dir().display().to_string();
+    let expected_data_dir = data_dir().display().to_string();
 
     nostui()?
         .arg("--version")
         .assert()
         .success()
         .stdout(contains(format!("v{}", env!("CARGO_PKG_VERSION"))))
-        // The directory it names is the one it was told to use, which is also what
-        // keeps these runs out of the real one.
-        .stdout(contains(format!("Config directory: {expected_config_dir}")));
+        // Both directories it names are the ones it was told to use, which is also the
+        // only thing standing between these runs and the real ones. The data directory
+        // needs saying as much as the config one: `initialize_logging` runs before the
+        // parse and truncates the log file it opens, so an env key that stopped working
+        // would empty the log of whoever ran the tests, quietly.
+        .stdout(contains(format!("Config directory: {expected_config_dir}")))
+        .stdout(contains(format!("Data directory: {expected_data_dir}")));
 
     Ok(())
 }
