@@ -18,6 +18,7 @@
 //! is not there, and exits 1 saying something went wrong.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use assert_cmd::Command;
 use nostui::Result;
@@ -36,9 +37,20 @@ fn data_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cli-data")
 }
 
+/// Nothing here should take a measurable amount of time; this is the difference between
+/// a regression that fails and one that hangs `cargo test` with no output.
+///
+/// What would hang: the only reason a run that gets past argument handling stops is that
+/// `Config::new` refuses to start, which is an invariant of another module. Were
+/// configuration to become optional, `ratatui::init()` would follow, and crossterm opens
+/// `/dev/tty` rather than the piped stdout — so on a developer's machine it would
+/// succeed, take the real terminal, and wait for input forever.
+const RUN_TIMEOUT: Duration = Duration::from_secs(30);
+
 fn nostui() -> Result<Command> {
     let mut command = Command::cargo_bin("nostui")?;
     command
+        .timeout(RUN_TIMEOUT)
         .env("NOSTUI_CONFIG", config_dir())
         .env("NOSTUI_DATA", data_dir())
         // clap styles the words asserted below, and it colours a pipe too when the
