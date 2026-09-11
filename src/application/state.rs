@@ -93,6 +93,10 @@ const NOW_PLAYING_LABEL: &str = "Music";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PublishKind {
     Note,
+    /// A note with a reply target, which the bar has to name apart from a top-level one:
+    /// the bar holds a single line, so a user with both in flight otherwise cannot tell
+    /// which of them an error is about (#546).
+    Reply,
     Reaction,
     Repost,
 }
@@ -103,6 +107,7 @@ impl PublishKind {
     const fn settled_label(self) -> &'static str {
         match self {
             Self::Note => "Posted",
+            Self::Reply => "Replied",
             Self::Reaction => "Reacted",
             Self::Repost => "Reposted",
         }
@@ -113,6 +118,7 @@ impl PublishKind {
     const fn subject(self) -> &'static str {
         match self {
             Self::Note => "Note",
+            Self::Reply => "Reply",
             Self::Reaction => "Reaction",
             Self::Repost => "Repost",
         }
@@ -386,6 +392,15 @@ impl<'a> AppState<'a> {
 
         let content = self.editor.get_content();
 
+        // Decided here rather than alongside the tags below, because the refusal in
+        // between has to name it too: a blank reply that reported `[ERR: Note]` would be
+        // the same publish named two different ways depending on how it ended.
+        let kind = if self.editor.reply_target().is_some() {
+            PublishKind::Reply
+        } else {
+            PublishKind::Note
+        };
+
         // Refused before it costs anything. An empty note is a real event on the relays
         // that says nothing and cannot be recalled, and `Ctrl+P` on a composer nobody has
         // typed into is far likelier to be a slip than a request.
@@ -402,7 +417,7 @@ impl<'a> AppState<'a> {
             // that only shows at info is missing from exactly that search. The bar is no
             // help by then — the next status has overwritten it.
             log::warn!("Refusing to publish a blank note");
-            self.set_status_error(PublishKind::Note.subject(), "nothing to post");
+            self.set_status_error(kind.subject(), "nothing to post");
             return Command::none();
         }
 
@@ -420,7 +435,7 @@ impl<'a> AppState<'a> {
         // loses the text for good — the next `ComposingStarted` clears the buffer — and
         // this change is what makes a pre-send failure knowable in time to keep it. A
         // failure the relays report later still loses it: #514.
-        if self.publish(PublishKind::Note, &content, event_builder) {
+        if self.publish(kind, &content, event_builder) {
             self.editor.update(EditorMessage::ComposingCanceled);
         }
 
@@ -1445,7 +1460,7 @@ mod tests {
     }
 
     #[test]
-    fn submit_note_as_reply_posts_and_resets_editor() -> Result<()> {
+    fn submit_note_as_reply_is_reported_as_a_reply_and_resets_the_editor() -> Result<()> {
         let (mut state, _rx) = connected_state();
         let keys = Keys::generate();
 
@@ -1468,7 +1483,7 @@ mod tests {
 
         let _ = state.resolve_publish(id, Ok(()));
 
-        assert_eq!(state.status_bar.message(), Some("[Posted] y"));
+        assert_eq!(state.status_bar.message(), Some("[Replied] y"));
 
         Ok(())
     }
@@ -1756,6 +1771,52 @@ mod tests {
         let _ = state.submit_note();
 
         assert!(!state.editor.is_active());
+    }
+
+    /// A connected state with the composer open as a reply and nothing typed into it.
+    ///
+    /// The target is a note the timeline never saw: a reply is a reply because `reply_to`
+    /// is set, and nothing on this path reads the note back.
+    fn state_replying() -> (AppState<'static>, mpsc::UnboundedReceiver<NostrCommand>) {
+        let (mut state, rx) = connected_state();
+        let keys = Keys::generate();
+        let target =
+            create_text_note(&keys, "hello", Timestamp::from(1000)).expect("a valid text note");
+
+        state.editor.update(EditorMessage::ReplyStarted {
+            to: Box::new(target),
+            profile: Box::new(None),
+        });
+
+        (state, rx)
+    }
+
+    #[test]
+    fn a_reply_a_relay_refused_is_named_a_reply_and_not_a_note() {
+        let (mut state, _rx) = state_replying();
+        state.editor.update(EditorMessage::KeyEventReceived {
+            event: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+        });
+
+        let _ = state.submit_note();
+        let id = only_pending(&state);
+        let _ = state.resolve_publish(id, Err(String::from("refused")));
+
+        // The bar holds one line: a user with a note and a reply both in flight reads
+        // this one and has to know which of them it is about.
+        assert_eq!(state.status_bar.message(), Some("[ERR: Reply] refused (h)"));
+    }
+
+    #[test]
+    fn a_blank_reply_is_refused_under_the_name_a_sent_one_would_have_had() {
+        let (mut state, _rx) = state_replying();
+
+        let _ = state.submit_note();
+
+        assert_eq!(
+            state.status_bar.message(),
+            Some("[ERR: Reply] nothing to post")
+        );
     }
 
     #[test]
