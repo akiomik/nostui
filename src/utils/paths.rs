@@ -32,8 +32,12 @@ fn project_directory() -> Option<ProjectDirs> {
 /// a junction.
 ///
 /// Absolute, not canonical: `canonicalize` asks the filesystem and fails on the directory
-/// that is not there, which is the case this exists to name. A process whose working
-/// directory has gone gets the relative name back.
+/// that is not there, which is the case this exists to name.
+///
+/// A process whose working directory has gone gets the relative name back, silently. It
+/// does not reach a message: `initialize_logging` runs first and opens a file under the
+/// equally relative data directory, so the run ends at `No such file or directory` before
+/// any of this is printed — which is #583 rather than something to report here.
 fn resolved(directory: PathBuf) -> PathBuf {
     if directory.is_absolute() {
         return directory;
