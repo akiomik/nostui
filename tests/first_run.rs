@@ -60,28 +60,16 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
         .env("RUST_LOG", "nostui=error")
         .assert()
         .failure()
-        // No `NO_COLOR`, unlike `tests/cli.rs` where it silences clap: this report is
-        // `color_eyre`'s and is coloured either way, and every substring below sits away
-        // from the escapes.
+        // No `NO_COLOR`: this report is `color_eyre`'s, which colours it either way, and
+        // every substring below sits away from the escapes.
         .stderr(contains(config_dir.display().to_string()))
         // The whole phrase: `contains("config.json")` matches `config.json5` too.
         .stderr(contains("write config.json in it"))
         .stderr(contains("{\"key\": \"nsec1...\"}"))
-        // Whole lines, because which of the two each name lands on is the whole point of
-        // splitting them: `contains("config.toml")` matches either, so swapping the lists
-        // would put `config.toml` under "take the same text" and pass. Reworded, these
-        // fail rather than quietly stop asserting, which is why the phrases are here.
-        .stderr(contains(
-            "These take the same text: config.json5, config.yaml",
-        ))
-        .stderr(contains(
-            "These want their own syntax: config.toml, config.ini",
-        ));
+        .stderr(contains("An npub instead of an nsec"));
 
-    // An event is prefixed once however many lines it spans, so the whole message in
-    // `log::error!` would put the instructions past the reach of a `grep` for ERROR.
-    // Counted rather than matched on a phrase, which would be a copy of prose in another
-    // file and would stop asserting anything the moment that prose was reworded.
+    // Counted rather than matched on a phrase: a phrase would be a copy of prose in
+    // another file, and would stop asserting the moment that prose was reworded.
     let log = fs::read_to_string(data_dir("missing").join("nostui.log"))?;
 
     assert!(

@@ -24,17 +24,13 @@ fn project_directory() -> Option<ProjectDirs> {
 
 /// A directory nostui uses, as a place rather than as a name: the variables can hold
 /// anything, including nothing at all, and the fallbacks below are relative — each of
-/// which names a different directory from every shell, where [`version`] prints both for
-/// pasting into a bug report.
+/// which names a different directory from every shell.
 ///
-/// As far as `absolute` manages, which is neither canonical nor certain: it asks for the
-/// working directory, so a process whose own has gone gets the relative name back. On
-/// Unix it joins and drops `.` components, leaving `..` where it is; Windows answers through
-/// `GetFullPathNameW`, which collapses it. Canonicalising instead would ask the
-/// filesystem, and fail on the directory that is not there — the case this describes.
+/// Absolute, not canonical: `canonicalize` asks the filesystem and fails on the directory
+/// that is not there, which is the case this exists to name. A process whose working
+/// directory has gone gets the relative name back.
 fn resolved(directory: PathBuf) -> PathBuf {
-    // An empty path is the one thing `absolute` refuses, and it is where names are joined
-    // onto nothing — the working directory.
+    // The one input `absolute` refuses, and where names are joined onto nothing.
     let directory = if directory.as_os_str().is_empty() {
         PathBuf::from(".")
     } else {
@@ -44,7 +40,6 @@ fn resolved(directory: PathBuf) -> PathBuf {
     path::absolute(&directory).unwrap_or(directory)
 }
 
-/// The directory nostui writes its log and its data into.
 pub fn get_data_dir() -> PathBuf {
     resolved(if let Some(s) = DATA_FOLDER.clone() {
         s
@@ -55,8 +50,6 @@ pub fn get_data_dir() -> PathBuf {
     })
 }
 
-/// The directory nostui reads its configuration from. The error printed when there is no
-/// configuration names it, and has to name the same place `--version` does.
 pub fn get_config_dir() -> PathBuf {
     resolved(if let Some(s) = CONFIG_FOLDER.clone() {
         s
@@ -102,10 +95,8 @@ mod tests {
 
     use super::*;
 
-    /// The one input `path::absolute` refuses, and the one a variable set to nothing
-    /// produces. Reached through the binary by `tests/first_run.rs`, but only on Unix —
-    /// `CreateProcess` drops an empty entry from the environment block — so on Windows
-    /// this is the only thing that covers it.
+    /// `tests/first_run.rs` reaches this through the binary, but only on Unix:
+    /// `CreateProcess` drops an empty entry from the environment block.
     #[test]
     fn an_empty_directory_resolves_to_the_working_one() -> Result<(), io::Error> {
         assert_eq!(resolved(PathBuf::new()), env::current_dir()?);
@@ -113,8 +104,6 @@ mod tests {
         Ok(())
     }
 
-    /// A relative name means a different place from every shell, which is the whole
-    /// reason for resolving at all.
     #[test]
     fn a_relative_directory_resolves_against_the_working_one() -> Result<(), io::Error> {
         assert_eq!(
