@@ -59,7 +59,8 @@ without it nostui uses its own list.
 playing as a NIP-38 status, to the relays above, where anyone can read it. It is
 off unless you write it.
 
-Every example here is JSON, so it can go in the `config.json` above as it is.
+Every example here is JSON, and each is one object: keys from more than one go
+together inside a single pair of braces rather than one block after another.
 Comments belong to `config.json5`, which is read as JSON5 — `config.json` is read
 as JSON, which has none.
 
