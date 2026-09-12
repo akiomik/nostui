@@ -90,8 +90,8 @@ fn help_is_printed_and_the_application_does_not_start() -> Result<()> {
 
 /// Both directories `--version` names are places rather than names. A relative one means
 /// a different directory from every shell, and this output is what a bug report is built
-/// from — the configuration error names the same two, so a report carrying both halves
-/// would disagree with itself.
+/// from — the no-configuration error names the config one too, so a report carrying both
+/// would disagree with itself over it.
 ///
 /// Run from a directory of its own, since a relative name is resolved against whichever
 /// one the process is standing in.
