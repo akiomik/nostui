@@ -172,9 +172,13 @@ mod tests {
             Ok(cfg) => {
                 // If config loads successfully, it should have required fields
                 println!("Config loaded successfully in test environment");
+                // The same pair `Config::new` accepts, rather than one of the two: the
+                // error it prints tells people to write `key`, so a contributor whose own
+                // configuration takes that advice would otherwise fail this.
                 assert!(
-                    !cfg.privatekey.expose_secret().is_empty(),
-                    "privatekey should not be empty if config loads"
+                    !cfg.privatekey.expose_secret().is_empty()
+                        || !cfg.key.expose_secret().is_empty(),
+                    "a configuration that loads has one of the two key fields set"
                 );
                 assert!(!cfg.relays.is_empty(), "relays should not be empty");
             }

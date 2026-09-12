@@ -84,6 +84,20 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
     Ok(())
 }
 
+/// A working directory of this case's own, since a blank `NOSTUI_CONFIG` is what sends
+/// the loader at the working directory — `CARGO_TARGET_TMPDIR` itself would be probed by
+/// any case that later dropped a `config.*` beside it.
+///
+/// Canonical, because the child resolves `.` through `getcwd`, which follows symlinks
+/// where `CARGO_TARGET_TMPDIR` does not: on a checkout reached through one, the two forms
+/// name the same directory and do not compare equal.
+fn blank_config_cwd() -> Result<PathBuf> {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-blank-cwd");
+    fs::create_dir_all(&dir)?;
+
+    Ok(dir.canonicalize()?)
+}
+
 /// `NOSTUI_CONFIG` set to nothing is set as far as `env::var` is concerned, so the loader
 /// takes the empty path and joins each name onto it — probing the working directory. The
 /// message has to say so: it once printed `No configuration file found in ` and left the
@@ -91,9 +105,14 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
 ///
 /// The case above cannot see this. It hands over an absolute directory, where
 /// `path::absolute` changes nothing and the empty path never arises.
+///
+/// Unix only: `CreateProcess` drops an empty entry from the environment block, so on
+/// Windows the variable would read as unset and the branch under test is unreachable
+/// from here — the case would fail saying nothing about the guard it exists for.
+#[cfg(unix)]
 #[test]
 fn a_blank_configuration_directory_names_the_working_directory_it_fell_back_to() -> Result<()> {
-    let cwd = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let cwd = blank_config_cwd()?;
 
     Command::cargo_bin("nostui")?
         .timeout(RUN_TIMEOUT)
