@@ -203,6 +203,7 @@ fn a_candidate_that_cannot_be_looked_at_does_not_take_the_instructions_with_it()
     let config_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-looping");
     let looping = config_dir.join("config.json5");
 
+    let _ = fs::remove_dir_all(data_dir("looping"));
     fs::create_dir_all(&config_dir)?;
     if looping.symlink_metadata().is_err() {
         symlink("config.json5", &looping)?;
@@ -220,6 +221,19 @@ fn a_candidate_that_cannot_be_looked_at_does_not_take_the_instructions_with_it()
             "Could not look at {}:",
             looping.display()
         )));
+
+    // The reason reaches the log too, as its own event: it is the one fact a report
+    // needs, and without it this run's log is an empty directory's.
+    let log = fs::read_to_string(data_dir("looping").join("nostui.log"))?;
+
+    assert!(
+        log.contains(&format!("Could not look at {}:", looping.display())),
+        "the log should carry the reason, got: {log}"
+    );
+    assert!(
+        !log.contains(r#"{"key": "nsec1..."}"#),
+        "the instructions belong on the terminal, not in the log: {log}"
+    );
 
     Ok(())
 }

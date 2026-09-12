@@ -91,37 +91,51 @@ impl Config {
             }
         }
         if !found_config {
-            let found_nothing = format!("No configuration file found in {}", config_dir.display());
-
             // Every name failing says nothing about any one of them: what they have in
             // common is the directory, and telling someone to make one that is already
             // there helps nobody. Some failing leaves the directory fine and the
-            // instructions worth having, with the name that failed alongside them.
-            let message = match unreadable.first() {
-                Some((_, e)) if unreadable.len() == CONFIG_FILES.len() => {
-                    format!("Could not look in {}: {e}", config_dir.display())
-                }
+            // instructions worth having.
+            let (facts, instructions) = match unreadable.first() {
+                Some((_, e)) if unreadable.len() == CONFIG_FILES.len() => (
+                    vec![format!("Could not look in {}: {e}", config_dir.display())],
+                    None,
+                ),
                 rest => {
-                    let mut message = format!(
-                        "{found_nothing}\n\
-                         Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
-                         \x20   {EXAMPLE_SNIPPET}\n\
-                         An npub instead of an nsec starts nostui read-only."
-                    );
+                    let mut facts = vec![format!(
+                        "No configuration file found in {}",
+                        config_dir.display()
+                    )];
 
                     if let Some((path, e)) = rest {
-                        message.push_str(&format!("\nCould not look at {}: {e}", path.display()));
+                        facts.push(format!("Could not look at {}: {e}", path.display()));
                     }
 
-                    message
+                    (
+                        facts,
+                        Some(format!(
+                            "Make that directory if it is not there, then write \
+                             {EXAMPLE_FILE} in it:\n\
+                             \x20   {EXAMPLE_SNIPPET}\n\
+                             An npub instead of an nsec starts nostui read-only."
+                        )),
+                    )
                 }
             };
 
-            // A `tracing` event is prefixed once however many lines it spans, so the rest
-            // would be out of reach of a `grep` for ERROR.
-            let first_line = message.lines().next().unwrap_or(&message);
+            // One event each, because an event is prefixed with its level and location
+            // once however many lines it spans: a `grep` for ERROR would take the first
+            // and leave the rest unfindable. The instructions stay off it — they are for
+            // the person at the terminal, who has them there.
+            for fact in &facts {
+                log::error!("{fact}");
+            }
 
-            log::error!("{first_line}");
+            let message = facts
+                .into_iter()
+                .chain(instructions)
+                .collect::<Vec<_>>()
+                .join("\n");
+
             return Err(ConfigError::Message(message));
         }
 
@@ -182,7 +196,7 @@ mod tests {
                 let err_msg = format!("{e:?}");
                 assert!(
                     err_msg.contains("No configuration file found")
-                        || err_msg.contains("Could not look for a configuration")
+                        || err_msg.contains("Could not look")
                         || err_msg.contains(r#"missing configuration field "key""#),
                     "an error here should name what is missing, got: {e:?}",
                 );
