@@ -150,7 +150,10 @@ fn a_blank_configuration_directory_names_the_working_directory_it_fell_back_to()
 fn unreadable_config_dir() -> Result<PathBuf> {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-unreadable");
 
+    // Opened before it is filled, because a run whose assertions failed left it shut:
+    // this case cannot put its cleaning up after something that panics.
     fs::create_dir_all(&dir)?;
+    fs::set_permissions(&dir, PermissionsExt::from_mode(0o755))?;
     fs::write(dir.join("config.json"), r#"{"key": "nsec1..."}"#)?;
     fs::set_permissions(&dir, PermissionsExt::from_mode(0o000))?;
 
@@ -167,7 +170,7 @@ fn unreadable_config_dir() -> Result<PathBuf> {
 fn a_configuration_that_cannot_be_looked_at_is_not_reported_missing() -> Result<()> {
     let config_dir = unreadable_config_dir()?;
 
-    let assertion = Command::cargo_bin("nostui")?
+    Command::cargo_bin("nostui")?
         .timeout(RUN_TIMEOUT)
         .env("NOSTUI_CONFIG", &config_dir)
         .env("NOSTUI_DATA", data_dir("unreadable"))
@@ -177,13 +180,6 @@ fn a_configuration_that_cannot_be_looked_at_is_not_reported_missing() -> Result<
         .stderr(contains(config_dir.display().to_string()))
         .stderr(contains("Could not look for a configuration"))
         .stderr(contains("Make that directory").not());
-
-    // Left readable, or the next run of this case cannot write into it.
-    fs::set_permissions(
-        &config_dir,
-        <fs::Permissions as PermissionsExt>::from_mode(0o755),
-    )?;
-    drop(assertion);
 
     Ok(())
 }
