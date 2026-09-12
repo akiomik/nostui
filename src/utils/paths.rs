@@ -24,6 +24,11 @@ fn project_directory() -> Option<ProjectDirs> {
 
 /// A directory nostui uses, as a place rather than as a name.
 ///
+/// Absolute rather than canonical: `..` survives, so `NOSTUI_CONFIG=../cfg` is named
+/// `<working directory>/../cfg`. Collapsing it would mean `canonicalize`, which asks the
+/// filesystem and fails on a directory that is not there — which is the case this exists
+/// to describe.
+///
 /// The variables can hold anything, including nothing at all — `env::var` answers `Ok("")`
 /// for one set without a value — and the fallbacks below are relative. Each of those names
 /// a different directory from every shell, and [`version`] prints both of them for pasting
@@ -88,4 +93,36 @@ Authors: {author}
 Config directory: {config_dir_path}
 Data directory: {data_dir_path}"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    /// The one input `path::absolute` refuses, and the one a variable set to nothing
+    /// produces. Reached through the binary by `tests/first_run.rs`, but only on Unix —
+    /// `CreateProcess` drops an empty entry from the environment block — so on Windows
+    /// this is the only thing that covers it.
+    #[test]
+    fn an_empty_directory_resolves_to_the_working_one() -> Result<(), io::Error> {
+        assert_eq!(resolved(PathBuf::new()), env::current_dir()?);
+
+        Ok(())
+    }
+
+    /// A relative name means a different place from every shell, which is the whole
+    /// reason for resolving at all.
+    #[test]
+    fn a_relative_directory_resolves_against_the_working_one() -> Result<(), io::Error> {
+        assert_eq!(
+            resolved(PathBuf::from("cfg")),
+            env::current_dir()?.join("cfg")
+        );
+
+        Ok(())
+    }
 }

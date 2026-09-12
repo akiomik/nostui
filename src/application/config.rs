@@ -50,6 +50,11 @@ const fn reads_json(format: config::FileFormat) -> bool {
     )
 }
 
+/// The directories this run uses, as `config` defaults a user's own file can refer to.
+///
+/// Nothing here reads them back, which is why they are filled lossily: a directory whose
+/// name is not UTF-8 would otherwise stop nostui starting over a value nobody consumes.
+/// Anything that does start reading them gets U+FFFD where those bytes were.
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct AppConfig {
     #[serde(default)]
