@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use assert_cmd::Command;
 use nostui::Result;
+#[cfg(unix)]
 use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 
@@ -180,6 +181,11 @@ fn a_configuration_that_cannot_be_looked_at_is_not_reported_missing() -> Result<
         .stderr(contains(config_dir.display().to_string()))
         .stderr(contains("Could not look for a configuration"))
         .stderr(contains("Make that directory").not());
+
+    // Left open. The defensive chmod above covers a run that panicked before reaching
+    // here; this covers everyone else — a directory nothing can traverse defeats
+    // `rm -rf target`, `cargo clean`, and whatever archives the tree for a CI cache.
+    fs::set_permissions(&config_dir, PermissionsExt::from_mode(0o755))?;
 
     Ok(())
 }

@@ -146,8 +146,9 @@ impl Config {
             };
             let (same_text, own_syntax) = (names(true), names(false));
 
-            // Made as well as filled: `create_dir_all` is called for the data directory
-            // and never for this one.
+            // Made as well as filled: nothing creates it as the config directory. Where a
+            // platform puts the data directory in the same place — macOS does —
+            // `initialize_logging` has already made it, which is what the hedge is for.
             let message = format!(
                 "{found_nothing}\n\
                  Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
@@ -220,14 +221,15 @@ mod tests {
             Err(e) => {
                 // If it fails, it should be for expected reasons (no config file or no privatekey)
                 println!("Config failed as expected: {e:?}");
-                // The two ways `Config::new` refuses, in full rather than by a word of
-                // them: no file at all, or one without a key, which arrives as
-                // `NotFound("key")`. `contains("key")` would take almost any other error
+                // The three ways `Config::new` refuses, in full rather than by a word of
+                // them: nothing found, nothing readable, or nothing holding a key — the
+                // last arriving as `NotFound("key")`. `contains("key")` would take almost any other error
                 // with it, since `config` appends `` for key `…` `` to its own — a
                 // `relays` written as a string passed here as an expected failure.
                 let err_msg = format!("{e:?}");
                 assert!(
                     err_msg.contains("No configuration file found")
+                        || err_msg.contains("Could not look for a configuration")
                         || err_msg.contains(r#"missing configuration field "key""#),
                     "an error here should name what is missing, got: {e:?}",
                 );
