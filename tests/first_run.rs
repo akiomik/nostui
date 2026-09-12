@@ -11,6 +11,7 @@
 //! process. A unit test setting that variable would be racing every other test in its
 //! binary for the first read.
 
+use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -61,6 +62,22 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
         .stderr(contains("{\"key\": \"nsec1...\"}"))
         // One alternative, named where it cannot be a prefix of another.
         .stderr(contains("config.toml"));
+
+    // The log is read a line at a time, and an event is prefixed once however many lines
+    // it spans — so handing the whole message to `log::error!` leaves everything after
+    // the first line unprefixed and out of reach of a `grep` for ERROR. The directory is
+    // the half worth keeping there; the instructions are for the terminal, which has
+    // them. Nothing else asserts the two are split.
+    let log = fs::read_to_string(data_dir().join("nostui.log"))?;
+
+    assert!(
+        log.contains(&config_dir.display().to_string()),
+        "the log should name the directory, got: {log}"
+    );
+    assert!(
+        !log.contains("Make that directory"),
+        "the instructions belong on the terminal, not in the log: {log}"
+    );
 
     Ok(())
 }

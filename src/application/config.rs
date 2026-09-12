@@ -121,15 +121,16 @@ impl Config {
             // `create_dir_all` for the data directory, and the config directory is only
             // ever read. Telling someone to write a file into a path that is not there
             // hands them one more thing to work out.
-            // One line of this reaches the log and three reach the terminal, from one
-            // binding so they cannot come to disagree about the directory.
+            // The first line of this reaches the log and the whole of it reaches the
+            // terminal, from one binding so they cannot come to disagree about the
+            // directory.
             //
-            // The log gets the first line alone because it is read a line at a time: a
-            // three-line event is prefixed with its level and location once, so a `grep`
-            // for ERROR takes that line and leaves the rest behind it, unprefixed and
-            // unfindable. And the two it would leave are instructions, which are for the
-            // person at the terminal — who has them there — rather than for whoever is
-            // reading the log afterwards to find out what happened.
+            // The log gets that line alone because it is read a line at a time: an event
+            // is prefixed with its level and location once however many lines it spans,
+            // so a `grep` for ERROR takes the first and leaves the rest behind it,
+            // unprefixed and unfindable. What it would leave is instructions, which are
+            // for the person at the terminal — who has them there — rather than for
+            // whoever is reading the log afterwards to find out what happened.
             let found_nothing = format!("No configuration file found in {config_dir_str}");
             // Kept under eighty columns a line, indent included. A terminal wraps rather
             // than truncates, so nothing is lost either way — but the wrap falls mid
@@ -140,7 +141,7 @@ impl Config {
                  Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
                  \x20   {{\"key\": \"nsec1...\"}}\n\
                  An npub instead of an nsec starts nostui read-only.\n\
-                 Also read, each in its own format:\n\
+                 These are read too, each in its own format:\n\
                  \x20   {alternatives}"
             );
 
@@ -206,10 +207,11 @@ mod tests {
         }
     }
 
-    /// The error's last sentence is plural — "… are read too, each in its own format" —
-    /// so it needs at least two names left once `EXAMPLE_FILE` is filtered out of
-    /// [`CONFIG_FILES`]. One would print "config.json5 are read too" and none would leave
-    /// the sentence without a subject at all, both of them on every fresh install.
+    /// The error ends by naming the formats it did not tell you to write, on a line of
+    /// their own under "These are read too". That line needs something on it: with
+    /// [`CONFIG_FILES`] holding nothing but `EXAMPLE_FILE` it would be blank but for its
+    /// indent, and the sentence above would introduce nothing, on every fresh install.
+    /// Two is where it starts reading as the plural it is written as.
     ///
     /// Asserted rather than branched on: neither is reachable from a fixed-length const
     /// of five, so a branch would be dead code and a comment would be a claim nothing
@@ -223,7 +225,7 @@ mod tests {
 
         assert!(
             alternatives >= 2,
-            "the error says {alternatives} of them \"are read too\""
+            "the error introduces {alternatives} formats as \"read too\""
         );
     }
 
