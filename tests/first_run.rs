@@ -53,15 +53,18 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
         .stderr(contains("config.toml"));
 
     // An event is prefixed once however many lines it spans, so passing the whole message
-    // to `log::error!` puts the instructions past the reach of a `grep` for ERROR.
+    // to `log::error!` puts the instructions past the reach of a `grep` for ERROR. Counted
+    // rather than matched on a phrase: the phrase would be a copy of prose in another file
+    // and would stop asserting anything the moment that prose was reworded.
     let log = fs::read_to_string(data_dir().join("nostui.log"))?;
 
     assert!(
         log.contains(&config_dir.display().to_string()),
         "the log should name the directory, got: {log}"
     );
-    assert!(
-        !log.contains("Make that directory"),
+    assert_eq!(
+        log.lines().count(),
+        1,
         "the instructions belong on the terminal, not in the log: {log}"
     );
 
