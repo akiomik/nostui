@@ -7,11 +7,14 @@
 
 use std::fs;
 use std::io;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use assert_cmd::Command;
 use nostui::Result;
+use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 
 /// Matches `tests/cli.rs`: nothing here should take a measurable amount of time, and a
@@ -133,6 +136,54 @@ fn a_blank_configuration_directory_names_the_working_directory_it_fell_back_to()
         .assert()
         .failure()
         .stderr(contains(cwd.display().to_string()));
+
+    Ok(())
+}
+
+/// A directory holding a configuration that this process cannot look inside. `exists`
+/// answers `false` for it as readily as for an empty one, and the message that follows
+/// would tell someone to create a directory that is there and write a file they have.
+///
+/// Unix only, for `chmod`; and it asserts the directory really is shut rather than
+/// skipping, so running as root fails here rather than passing having proved nothing.
+#[cfg(unix)]
+fn unreadable_config_dir() -> Result<PathBuf> {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-unreadable");
+
+    fs::create_dir_all(&dir)?;
+    fs::write(dir.join("config.json"), r#"{"key": "nsec1..."}"#)?;
+    fs::set_permissions(&dir, PermissionsExt::from_mode(0o000))?;
+
+    assert!(
+        fs::read_dir(&dir).is_err(),
+        "this case needs a user that a mode of 000 keeps out"
+    );
+
+    Ok(dir)
+}
+
+#[cfg(unix)]
+#[test]
+fn a_configuration_that_cannot_be_looked_at_is_not_reported_missing() -> Result<()> {
+    let config_dir = unreadable_config_dir()?;
+
+    let assertion = Command::cargo_bin("nostui")?
+        .timeout(RUN_TIMEOUT)
+        .env("NOSTUI_CONFIG", &config_dir)
+        .env("NOSTUI_DATA", data_dir("unreadable"))
+        .env("RUST_LOG", "nostui=error")
+        .assert()
+        .failure()
+        .stderr(contains(config_dir.display().to_string()))
+        .stderr(contains("Could not look for a configuration"))
+        .stderr(contains("Make that directory").not());
+
+    // Left readable, or the next run of this case cannot write into it.
+    fs::set_permissions(
+        &config_dir,
+        <fs::Permissions as PermissionsExt>::from_mode(0o755),
+    )?;
+    drop(assertion);
 
     Ok(())
 }

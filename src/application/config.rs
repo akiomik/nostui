@@ -99,16 +99,34 @@ impl Config {
             .set_default("_data_dir", data_dir_str.as_ref())?
             .set_default("_config_dir", config_dir_str.as_ref())?;
 
+        // `try_exists` rather than `exists`, which answers `false` for a directory it
+        // cannot look inside as readily as for one holding nothing. The message below
+        // would then tell someone to create a directory that is already there and write a
+        // file they already have.
         let mut found_config = false;
+        let mut unreadable = None;
         for (file, format) in &CONFIG_FILES {
+            let path = config_dir.join(file);
+
             builder = builder.add_source(
-                config::File::from(config_dir.join(file))
+                config::File::from(path.clone())
                     .format(*format)
                     .required(false),
             );
-            if config_dir.join(file).exists() {
-                found_config = true
+            match path.try_exists() {
+                Ok(true) => found_config = true,
+                Ok(false) => {}
+                Err(e) => unreadable = unreadable.or(Some(e)),
             }
+        }
+        if let (false, Some(e)) = (found_config, unreadable) {
+            let message = format!(
+                "Could not look for a configuration in {}: {e}",
+                config_dir.display()
+            );
+
+            log::error!("{message}");
+            return Err(ConfigError::Message(message));
         }
         if !found_config {
             // The part a stranger cannot supply for themselves: it differs per platform,

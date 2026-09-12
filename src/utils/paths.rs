@@ -29,7 +29,7 @@ fn project_directory() -> Option<ProjectDirs> {
 ///
 /// As far as `absolute` manages, which is neither canonical nor certain: it asks for the
 /// working directory, so a process whose own has gone gets the relative name back. On
-/// Unix it is a join and nothing more, leaving `..` where it is; Windows answers through
+/// Unix it joins and drops `.` components, leaving `..` where it is; Windows answers through
 /// `GetFullPathNameW`, which collapses it. Canonicalising instead would ask the
 /// filesystem, and fail on the directory that is not there — the case this describes.
 fn resolved(directory: PathBuf) -> PathBuf {
