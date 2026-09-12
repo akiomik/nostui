@@ -6,6 +6,7 @@
 //! setting that variable would race every other test in its binary for the first read.
 
 use std::fs;
+use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -33,6 +34,16 @@ fn data_dir() -> PathBuf {
 #[test]
 fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Result<()> {
     let config_dir = config_dir();
+
+    // `CARGO_TARGET_TMPDIR` outlives the run, so without this the log read below is
+    // whatever the last green run left. That matters for the one regression it cannot
+    // otherwise see: were `NOSTUI_DATA` to stop being honoured, the binary would truncate
+    // the log of whoever is running the tests, the stderr assertions would pass anyway,
+    // and this would read the stale file and agree.
+    match fs::remove_dir_all(data_dir()) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e.into()),
+        _ => {}
+    }
 
     Command::cargo_bin("nostui")?
         .timeout(RUN_TIMEOUT)

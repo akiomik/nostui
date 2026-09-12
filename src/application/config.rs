@@ -1,7 +1,7 @@
 pub mod keybindings;
 pub mod styles;
 
-use std::path::PathBuf;
+use std::path::{self, PathBuf};
 
 use color_eyre::eyre::Result;
 use config::ConfigError;
@@ -99,9 +99,14 @@ impl Config {
                 .filter(|file| *file != EXAMPLE_FILE)
                 .collect::<Vec<_>>()
                 .join(", ");
+            // Shown absolute: `get_config_dir` answers `./.config` when there is no home
+            // directory to ask about, and `NOSTUI_CONFIG` can be set to anything. A
+            // relative path here names a different place from every shell.
+            //
             // The directory has to be made as well as filled: `create_dir_all` is called
             // for the data directory and never for this one.
-            let found_nothing = format!("No configuration file found in {config_dir_str}");
+            let shown = path::absolute(&config_dir).unwrap_or_else(|_| config_dir.clone());
+            let found_nothing = format!("No configuration file found in {}", shown.display());
             let message = format!(
                 "{found_nothing}\n\
                  Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
@@ -111,8 +116,7 @@ impl Config {
                  \x20   {alternatives}"
             );
 
-            // The first line only — `a_missing_configuration_says_where_to_put_one…` is
-            // what holds the log to it.
+            // The first line only; `tests/first_run.rs` is what holds the log to it.
             log::error!("{found_nothing}");
             return Err(ConfigError::Message(message));
         }
