@@ -129,18 +129,28 @@ fn a_blank_configuration_directory_names_the_working_directory_it_fell_back_to()
     Ok(())
 }
 
+/// Opens the directory it is given when it goes out of scope, however that happens: an
+/// assertion that panics must not leave one behind that `rm -rf target` and `cargo clean`
+/// cannot get past.
+#[cfg(unix)]
+struct Reopened(PathBuf);
+
+#[cfg(unix)]
+impl Drop for Reopened {
+    fn drop(&mut self) {
+        let _ = fs::set_permissions(&self.0, PermissionsExt::from_mode(0o755));
+    }
+}
+
 /// A directory holding a configuration that this process cannot look inside. `exists`
-/// answers `false` for it as readily as for an empty one, and the message that follows
-/// would tell someone to create a directory that is there and write a file they have.
+/// answers `false` for it as readily as for an empty one.
 ///
 /// Unix only, for `chmod`; and it asserts the directory really is shut rather than
 /// skipping, so running as root fails here rather than passing having proved nothing.
 #[cfg(unix)]
-fn unreadable_config_dir() -> Result<PathBuf> {
+fn unreadable_config_dir() -> Result<Reopened> {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-unreadable");
 
-    // Opened before it is filled, because a run whose assertions failed left it shut:
-    // this case cannot put its cleaning up after something that panics.
     fs::create_dir_all(&dir)?;
     fs::set_permissions(&dir, PermissionsExt::from_mode(0o755))?;
     fs::write(dir.join("config.json"), r#"{"key": "nsec1..."}"#)?;
@@ -151,17 +161,18 @@ fn unreadable_config_dir() -> Result<PathBuf> {
         "this case needs a user that a mode of 000 keeps out"
     );
 
-    Ok(dir)
+    Ok(Reopened(dir))
 }
 
 #[cfg(unix)]
 #[test]
 fn a_configuration_that_cannot_be_looked_at_is_not_reported_missing() -> Result<()> {
-    let config_dir = unreadable_config_dir()?;
+    let shut = unreadable_config_dir()?;
+    let config_dir = &shut.0;
 
     Command::cargo_bin("nostui")?
         .timeout(RUN_TIMEOUT)
-        .env("NOSTUI_CONFIG", &config_dir)
+        .env("NOSTUI_CONFIG", config_dir)
         .env("NOSTUI_DATA", data_dir("unreadable"))
         .env("RUST_LOG", "nostui=error")
         .assert()
@@ -169,11 +180,6 @@ fn a_configuration_that_cannot_be_looked_at_is_not_reported_missing() -> Result<
         .stderr(contains(config_dir.display().to_string()))
         .stderr(contains("Could not look for a configuration"))
         .stderr(contains("Make that directory").not());
-
-    // Left open. The defensive chmod above covers a run that panicked before reaching
-    // here; this covers everyone else — a directory nothing can traverse defeats
-    // `rm -rf target`, `cargo clean`, and whatever archives the tree for a CI cache.
-    fs::set_permissions(&config_dir, PermissionsExt::from_mode(0o755))?;
 
     Ok(())
 }

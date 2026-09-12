@@ -184,11 +184,11 @@ mod tests {
     }
 
     /// The message names one file and shows one text. Nothing else holds the two
-    /// together: renaming the JSON entry, or pointing it at a format that cannot read
-    /// what is shown, leaves every fresh install told to write something that will not
-    /// load.
+    /// together, and holding them means deserialising: a `rename` on `Config::key` leaves
+    /// the snippet parsing and the key unbound, which every fresh install would meet as
+    /// `missing configuration field "key"` after following the instructions exactly.
     #[test]
-    fn the_file_the_error_names_reads_the_text_it_shows() {
+    fn the_file_the_error_names_gives_nostui_the_key_it_shows() {
         let format = CONFIG_FILES
             .iter()
             .find_map(|(file, format)| (*file == EXAMPLE_FILE).then_some(*format))
@@ -197,11 +197,12 @@ mod tests {
         let read = config::Config::builder()
             .add_source(config::File::from_str(EXAMPLE_SNIPPET, format))
             .build()
-            .and_then(|parsed| parsed.get_string("key"));
+            .and_then(config::Config::try_deserialize::<Config>);
 
         assert!(
-            read.is_ok(),
-            "{EXAMPLE_FILE} does not read {EXAMPLE_SNIPPET}"
+            read.as_ref()
+                .is_ok_and(|cfg| !cfg.key.expose_secret().is_empty()),
+            "{EXAMPLE_SNIPPET} in a {EXAMPLE_FILE} gives nostui no key: {read:?}"
         );
     }
 }
