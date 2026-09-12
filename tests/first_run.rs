@@ -14,8 +14,6 @@ use std::time::Duration;
 
 use assert_cmd::Command;
 use nostui::Result;
-#[cfg(unix)]
-use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 
 /// Matches `tests/cli.rs`: nothing here should take a measurable amount of time, and a
@@ -189,7 +187,9 @@ fn a_configuration_that_cannot_be_looked_at_is_not_reported_missing() -> Result<
             "Could not look in {}:",
             config_dir.display()
         )))
-        .stderr(contains("Make that directory").not());
+        // The instructions stay: whatever could not be looked at, a reader still has no
+        // configuration and still needs to know what nostui wants.
+        .stderr(contains("write config.json in it"));
 
     Ok(())
 }
@@ -202,11 +202,19 @@ fn a_configuration_that_cannot_be_looked_at_is_not_reported_missing() -> Result<
 fn a_candidate_that_cannot_be_looked_at_does_not_take_the_instructions_with_it() -> Result<()> {
     let config_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-looping");
     let looping = config_dir.join("config.json5");
+    // The second is the name the instructions go on to give, which is the one a reader
+    // would otherwise be sent to write over something already broken.
+    let also_looping = config_dir.join("config.json");
 
-    let _ = fs::remove_dir_all(data_dir("looping"));
+    match fs::remove_dir_all(data_dir("looping")) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e.into()),
+        _ => {}
+    }
     fs::create_dir_all(&config_dir)?;
-    if looping.symlink_metadata().is_err() {
-        symlink("config.json5", &looping)?;
+    for (name, link) in [("config.json5", &looping), ("config.json", &also_looping)] {
+        if link.symlink_metadata().is_err() {
+            symlink(name, link)?;
+        }
     }
 
     Command::cargo_bin("nostui")?
@@ -220,6 +228,10 @@ fn a_candidate_that_cannot_be_looked_at_does_not_take_the_instructions_with_it()
         .stderr(contains(format!(
             "Could not look at {}:",
             looping.display()
+        )))
+        .stderr(contains(format!(
+            "Could not look at {}:",
+            also_looping.display()
         )));
 
     // The reason reaches the log too, as its own event: it is the one fact a report

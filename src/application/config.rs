@@ -91,36 +91,33 @@ impl Config {
             }
         }
         if !found_config {
-            // Every name failing says nothing about any one of them: what they have in
-            // common is the directory, and telling someone to make one that is already
-            // there helps nobody. Some failing leaves the directory fine and the
-            // instructions worth having.
-            let (facts, instructions) = match unreadable.first() {
-                Some((_, e)) if unreadable.len() == CONFIG_FILES.len() => (
-                    vec![format!("Could not look in {}: {e}", config_dir.display())],
-                    None,
-                ),
-                rest => {
-                    let mut facts = vec![format!(
-                        "No configuration file found in {}",
-                        config_dir.display()
-                    )];
-
-                    if let Some((path, e)) = rest {
-                        facts.push(format!("Could not look at {}: {e}", path.display()));
-                    }
-
-                    (
-                        facts,
-                        Some(format!(
-                            "Make that directory if it is not there, then write \
-                             {EXAMPLE_FILE} in it:\n\
-                             \x20   {EXAMPLE_SNIPPET}\n\
-                             An npub instead of an nsec starts nostui read-only."
-                        )),
-                    )
-                }
+            // What is known changes with what could be looked at; what a reader needs to
+            // do does not. Every name failing leaves nostui unable to say a configuration
+            // is absent at all — the directory may not even be there, behind a parent it
+            // cannot search — so it reports that rather than claiming to have found
+            // nothing. Some failing leaves the rest genuinely absent, and each name that
+            // failed is worth saying: one of them may be the file the instructions go on
+            // to name.
+            let mut facts = if unreadable.len() == CONFIG_FILES.len() {
+                Vec::new()
+            } else {
+                vec![format!(
+                    "No configuration file found in {}",
+                    config_dir.display()
+                )]
             };
+
+            match unreadable.as_slice() {
+                [] => {}
+                [(_, e), ..] if unreadable.len() == CONFIG_FILES.len() => {
+                    facts.push(format!("Could not look in {}: {e}", config_dir.display()));
+                }
+                failures => facts.extend(
+                    failures
+                        .iter()
+                        .map(|(path, e)| format!("Could not look at {}: {e}", path.display())),
+                ),
+            }
 
             // One event each, because an event is prefixed with its level and location
             // once however many lines it spans: a `grep` for ERROR would take the first
@@ -132,7 +129,11 @@ impl Config {
 
             let message = facts
                 .into_iter()
-                .chain(instructions)
+                .chain([format!(
+                    "Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
+                     \x20   {EXAMPLE_SNIPPET}\n\
+                     An npub instead of an nsec starts nostui read-only."
+                )])
                 .collect::<Vec<_>>()
                 .join("\n");
 
