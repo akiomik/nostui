@@ -47,6 +47,12 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
         .timeout(RUN_TIMEOUT)
         .env("NOSTUI_CONFIG", &config_dir)
         .env("NOSTUI_DATA", data_dir())
+        // Pinned because `initialize_logging` takes `RUST_LOG` first, then
+        // `NOSTUI_LOGLEVEL`, and only then its own default — so whatever the person
+        // running this exported decides whether the log below is written at all. A
+        // `RUST_LOG` naming some other crate empties the file, which fails the first
+        // assertion and passes the second for the wrong reason.
+        .env("RUST_LOG", "nostui=error")
         .assert()
         // Refusing to start is the existing behaviour and not what #113 is about: a
         // configuration is what the program needs to reach a relay at all, and starting
@@ -68,6 +74,10 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
     // the first line unprefixed and out of reach of a `grep` for ERROR. The directory is
     // the half worth keeping there; the instructions are for the terminal, which has
     // them. Nothing else asserts the two are split.
+    //
+    // Both assertions need the file to have been written, which is what the pinned
+    // `RUST_LOG` above is for: against an empty one the first fails and the second
+    // passes without having looked at anything.
     let log = fs::read_to_string(data_dir().join("nostui.log"))?;
 
     assert!(
