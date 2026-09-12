@@ -8,7 +8,7 @@
 use std::fs;
 use std::io;
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -183,11 +183,43 @@ fn a_configuration_that_cannot_be_looked_at_is_not_reported_missing() -> Result<
         .assert()
         .failure()
         .stderr(contains(config_dir.display().to_string()))
-        .stderr(contains("Could not look for a configuration"))
         // The directory, not a name inside it: every candidate failed here, so none of
         // them is the news. `contains(dir)` alone would pass on either.
-        .stderr(contains(format!("at {}:", config_dir.display())))
+        .stderr(contains(format!(
+            "Could not look in {}:",
+            config_dir.display()
+        )))
         .stderr(contains("Make that directory").not());
+
+    Ok(())
+}
+
+/// One candidate failing leaves the directory fine and the configuration still absent, so
+/// the instructions are still what a reader needs — with the name that failed after them
+/// rather than in their place.
+#[cfg(unix)]
+#[test]
+fn a_candidate_that_cannot_be_looked_at_does_not_take_the_instructions_with_it() -> Result<()> {
+    let config_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-looping");
+    let looping = config_dir.join("config.json5");
+
+    fs::create_dir_all(&config_dir)?;
+    if looping.symlink_metadata().is_err() {
+        symlink("config.json5", &looping)?;
+    }
+
+    Command::cargo_bin("nostui")?
+        .timeout(RUN_TIMEOUT)
+        .env("NOSTUI_CONFIG", &config_dir)
+        .env("NOSTUI_DATA", data_dir("looping"))
+        .env("RUST_LOG", "nostui=error")
+        .assert()
+        .failure()
+        .stderr(contains("write config.json in it"))
+        .stderr(contains(format!(
+            "Could not look at {}:",
+            looping.display()
+        )));
 
     Ok(())
 }

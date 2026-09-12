@@ -90,40 +90,38 @@ impl Config {
                 Err(e) => unreadable.push((path, e)),
             }
         }
-        // Every name failing says nothing about any one of them — what they have in
-        // common is the directory. Some failing is news about those: a looping symlink,
-        // or one pointing somewhere unreadable, leaves the directory itself fine.
-        if let (false, Some((path, e))) = (found_config, unreadable.first()) {
-            let subject = if unreadable.len() == CONFIG_FILES.len() {
-                config_dir.as_path()
-            } else {
-                path.as_path()
-            };
-            let message = format!(
-                "Could not look for a configuration at {}: {e}",
-                subject.display()
-            );
-
-            log::error!("{message}");
-            return Err(ConfigError::Message(message));
-        }
-
         if !found_config {
-            // The directory is what a fresh install cannot work out for itself, and this
-            // is the whole of what it prints (#113). Nothing creates it: on a platform
-            // that puts the data directory elsewhere, `initialize_logging` has not been
-            // past.
             let found_nothing = format!("No configuration file found in {}", config_dir.display());
-            let message = format!(
-                "{found_nothing}\n\
-                 Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
-                 \x20   {EXAMPLE_SNIPPET}\n\
-                 An npub instead of an nsec starts nostui read-only."
-            );
+
+            // Every name failing says nothing about any one of them: what they have in
+            // common is the directory, and telling someone to make one that is already
+            // there helps nobody. Some failing leaves the directory fine and the
+            // instructions worth having, with the name that failed alongside them.
+            let message = match unreadable.first() {
+                Some((_, e)) if unreadable.len() == CONFIG_FILES.len() => {
+                    format!("Could not look in {}: {e}", config_dir.display())
+                }
+                rest => {
+                    let mut message = format!(
+                        "{found_nothing}\n\
+                         Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
+                         \x20   {EXAMPLE_SNIPPET}\n\
+                         An npub instead of an nsec starts nostui read-only."
+                    );
+
+                    if let Some((path, e)) = rest {
+                        message.push_str(&format!("\nCould not look at {}: {e}", path.display()));
+                    }
+
+                    message
+                }
+            };
 
             // A `tracing` event is prefixed once however many lines it spans, so the rest
             // would be out of reach of a `grep` for ERROR.
-            log::error!("{found_nothing}");
+            let first_line = message.lines().next().unwrap_or(&message);
+
+            log::error!("{first_line}");
             return Err(ConfigError::Message(message));
         }
 
