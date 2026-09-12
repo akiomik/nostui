@@ -131,12 +131,17 @@ impl Config {
             // person at the terminal — who has them there — rather than for whoever is
             // reading the log afterwards to find out what happened.
             let found_nothing = format!("No configuration file found in {config_dir_str}");
+            // Kept under eighty columns a line, indent included. A terminal wraps rather
+            // than truncates, so nothing is lost either way — but the wrap falls mid
+            // phrase, and the one thing here a reader has to copy exactly is the snippet.
+            // The directory is the exception and cannot be helped: it is as long as it is.
             let message = format!(
                 "{found_nothing}\n\
-                 Make that directory if it is not there, and write {EXAMPLE_FILE} in it, \
-                 holding your key: {{\"key\": \"nsec1...\"}}\n\
-                 An npub instead of an nsec starts nostui read-only. \
-                 {alternatives} are read too, each in its own format."
+                 Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
+                 \x20   {{\"key\": \"nsec1...\"}}\n\
+                 An npub instead of an nsec starts nostui read-only.\n\
+                 Also read, each in its own format:\n\
+                 \x20   {alternatives}"
             );
 
             log::error!("{found_nothing}");
