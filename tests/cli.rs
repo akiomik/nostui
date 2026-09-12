@@ -101,7 +101,15 @@ fn version_names_directories_that_do_not_depend_on_where_it_was_run() -> Result<
 
     fs::create_dir_all(&cwd)?;
 
-    let cwd = cwd.canonicalize()?;
+    // Canonical on Unix, because the child reads its own directory back through `getcwd`,
+    // which follows the symlinks a checkout may sit behind. Not on Windows, where
+    // `canonicalize` answers with a `\\?\` prefix that `GetCurrentDirectoryW` never
+    // produces, so the two forms would never match.
+    let cwd = if cfg!(windows) {
+        cwd
+    } else {
+        cwd.canonicalize()?
+    };
 
     nostui()?
         .current_dir(&cwd)

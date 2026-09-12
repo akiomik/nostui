@@ -55,9 +55,9 @@ pkgin install nostui
 `key` takes an `npub...` instead for read-only mode, and `relays` is optional —
 without it nostui uses its own list.
 
-`"nip-38": { "enabled": true }` is the third key. It broadcasts whatever you are
-playing as a NIP-38 status, to the relays above, where anyone can read it. It is
-off unless you write it.
+`"nip-38": { "enabled": true }` is another key you can add. It broadcasts
+whatever you are playing as a NIP-38 status, to the relays above, where anyone
+can read it. It is off unless you write it.
 
 Every example here is JSON, and each is one object: keys from more than one go
 together inside a single pair of braces rather than one block after another.
