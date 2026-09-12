@@ -86,19 +86,22 @@ impl Config {
             }
         }
         if !found_config {
+            // One binding for both, so stderr and the log cannot come to call the same
+            // failure different things — matching a pasted terminal against a pasted log
+            // is the whole use of having it in both.
+            let found_nothing = format!("No configuration file found in {}", config_dir.display());
             let message = format!(
-                "No configuration file found in {}\n\
+                "{found_nothing}\n\
                  Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
                  \x20   {EXAMPLE_SNIPPET}\n\
-                 An npub instead of an nsec starts nostui read-only.",
-                config_dir.display()
+                 An npub instead of an nsec starts nostui read-only."
             );
 
             // The first line only. A `tracing` event is prefixed with its level and
             // location once however many lines it spans, so a `grep` for ERROR would take
             // that line and leave the instructions behind it — and they are for the
             // person at the terminal, who has them there.
-            log::error!("No configuration file found in {}", config_dir.display());
+            log::error!("{found_nothing}");
             return Err(ConfigError::Message(message));
         }
 
@@ -142,8 +145,12 @@ mod tests {
                 // If config loads successfully, it should have required fields
                 println!("Config loaded successfully in test environment");
                 // The pair `Config::new` accepts, not one of the two: the error tells
-                // people to write `key`. Both assertions here need the environment to
-                // supply their case, which #578 would settle.
+                // people to write `key`.
+                //
+                // Neither assertion here fails on its own. This one needs the guard above
+                // gone *and* a configuration with no key; the relays one below needs the
+                // bundled `.config/config.json5` stripped of its own. A run against a
+                // directory this test owns is what would stop that being luck: #578.
                 assert!(
                     !cfg.privatekey.expose_secret().is_empty()
                         || !cfg.key.expose_secret().is_empty(),
