@@ -22,18 +22,16 @@ fn project_directory() -> Option<ProjectDirs> {
     ProjectDirs::from("io", "0m1", env!("CARGO_PKG_NAME"))
 }
 
-/// A directory nostui uses, as a place rather than as a name.
+/// A directory nostui uses, as a place rather than as a name: the variables can hold
+/// anything, including nothing at all, and the fallbacks below are relative — each of
+/// which names a different directory from every shell, where [`version`] prints both for
+/// pasting into a bug report.
 ///
-/// Absolute rather than canonical. On Unix that is a join and nothing more, so `..`
-/// survives and `NOSTUI_CONFIG=../cfg` is named `<working directory>/../cfg`; Windows
-/// answers through `GetFullPathNameW`, which collapses it. Doing the collapsing here
-/// would mean `canonicalize`, which asks the filesystem and fails on a directory that is
-/// not there — the case this exists to describe.
-///
-/// The variables can hold anything, including nothing at all — `env::var` answers `Ok("")`
-/// for one set without a value — and the fallbacks below are relative. Each of those names
-/// a different directory from every shell, and [`version`] prints both of them for pasting
-/// into a bug report, where a name that depends on the reporter's shell says nothing.
+/// As far as `absolute` manages, which is neither canonical nor certain: it asks for the
+/// working directory, so a process whose own has gone gets the relative name back. On
+/// Unix it is a join and nothing more, leaving `..` where it is; Windows answers through
+/// `GetFullPathNameW`, which collapses it. Canonicalising instead would ask the
+/// filesystem, and fail on the directory that is not there — the case this describes.
 fn resolved(directory: PathBuf) -> PathBuf {
     // An empty path is the one thing `absolute` refuses, and it is where names are joined
     // onto nothing — the working directory.
