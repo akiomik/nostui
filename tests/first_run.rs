@@ -1,15 +1,9 @@
-//! What a fresh install says when there is no configuration to start from.
+//! What a fresh install says when there is no configuration to start from
+//! ([#113](https://github.com/akiomik/nostui/issues/113)).
 //!
-//! `Config::new` refuses to start without one, so this is the first thing a user who has
-//! just unpacked a release sees — and there is no window open to read anything else in
-//! ([#113](https://github.com/akiomik/nostui/issues/113)). What it has to carry is the
-//! directory it looked in, which is the one part a user cannot guess: it differs per
-//! platform, and the README can only list all three.
-//!
-//! Driven through the built binary rather than by calling `Config::new`, because the
-//! directory comes from `NOSTUI_CONFIG` by way of a `LazyLock` that reads it once per
-//! process. A unit test setting that variable would be racing every other test in its
-//! binary for the first read.
+//! Driven through the built binary rather than by calling `Config::new`: the directory
+//! comes from `NOSTUI_CONFIG` through a `LazyLock` read once per process, so a unit test
+//! setting that variable would race every other test in its binary for the first read.
 
 use std::fs;
 use std::path::PathBuf;
@@ -23,12 +17,9 @@ use predicates::str::contains;
 /// regression that hangs is worth a failure rather than a silent `cargo test`.
 const RUN_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// A directory with no configuration file in it, and never created — `Config::new` asks
-/// whether each name exists, and a path that is not there answers no for all of them.
-///
-/// Named apart from `tests/cli.rs`'s rather than shared. `cargo test` runs the two
-/// binaries one after another, so today they could share it — but nothing here rests on
-/// that ordering, and `cargo nextest` does run them at once.
+/// Never created: `Config::new` asks whether each name exists, and a path that is not
+/// there answers no for all of them. Named apart from `tests/cli.rs`'s, which `cargo
+/// nextest` runs at the same time as this one.
 fn config_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-config-that-is-not-there")
 }
@@ -47,37 +38,22 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
         .timeout(RUN_TIMEOUT)
         .env("NOSTUI_CONFIG", &config_dir)
         .env("NOSTUI_DATA", data_dir())
-        // Pinned because `initialize_logging` takes `RUST_LOG` first, then
-        // `NOSTUI_LOGLEVEL`, and only then its own default — so whatever the person
-        // running this exported decides whether the log below is written at all. A
-        // `RUST_LOG` naming some other crate empties the file, which fails the first
-        // assertion and passes the second for the wrong reason.
+        // `initialize_logging` takes this before `NOSTUI_LOGLEVEL` and before its own
+        // default, so without it whatever the runner exported decides whether the log
+        // read below is written at all — and an empty one passes the second assertion
+        // having looked at nothing. `NO_COLOR` is deliberately absent: the report is
+        // `color_eyre`'s, which emits its escape either way.
         .env("RUST_LOG", "nostui=error")
         .assert()
-        // Refusing to start is the existing behaviour and not what #113 is about: a
-        // configuration is what the program needs to reach a relay at all, and starting
-        // without one would trade this message for an empty timeline explaining nothing.
         .failure()
-        // `NO_COLOR` is not set, unlike in `tests/cli.rs` where it silences clap: the
-        // report here is `color_eyre`'s and comes out with its escape either way, which
-        // I checked rather than assumed. Every substring below sits away from it.
         .stderr(contains(config_dir.display().to_string()))
-        // The whole phrase, because `contains("config.json")` also matches `config.json5`
-        // and so would pass with the JSON entry gone from the list entirely.
+        // The whole phrase: `contains("config.json")` matches `config.json5` too.
         .stderr(contains("write config.json in it"))
         .stderr(contains("{\"key\": \"nsec1...\"}"))
-        // One alternative, named where it cannot be a prefix of another.
         .stderr(contains("config.toml"));
 
-    // The log is read a line at a time, and an event is prefixed once however many lines
-    // it spans — so handing the whole message to `log::error!` leaves everything after
-    // the first line unprefixed and out of reach of a `grep` for ERROR. The directory is
-    // the half worth keeping there; the instructions are for the terminal, which has
-    // them. Nothing else asserts the two are split.
-    //
-    // Both assertions need the file to have been written, which is what the pinned
-    // `RUST_LOG` above is for: against an empty one the first fails and the second
-    // passes without having looked at anything.
+    // An event is prefixed once however many lines it spans, so passing the whole message
+    // to `log::error!` puts the instructions past the reach of a `grep` for ERROR.
     let log = fs::read_to_string(data_dir().join("nostui.log"))?;
 
     assert!(

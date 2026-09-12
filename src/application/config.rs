@@ -22,14 +22,9 @@ const CONFIG_FILES: [(&str, config::FileFormat); 5] = [
     ("config.ini", config::FileFormat::Ini),
 ];
 
-/// The one the error names when there is no configuration at all. It is `config.json`
-/// because that is what the README tells people to write, not because the others could
-/// not carry the same snippet — `config.json5` and `config.yaml` both read JSON, and
-/// only `config.toml` and `config.ini` do not.
-///
-/// It has to be in [`CONFIG_FILES`], under one of the formats that reads the snippet
-/// shown beside it rather than JSON in particular;
-/// `the_error_names_a_file_that_reads_the_json_it_shows` is what holds it to both.
+/// The one the error names, and the one the README tells people to write. It has to be in
+/// [`CONFIG_FILES`] under a format that reads the snippet shown beside it — not JSON in
+/// particular, since `config.json5` and `config.yaml` read it too.
 const EXAMPLE_FILE: &str = "config.json";
 
 #[derive(Clone, Debug, Deserialize, Default)]
@@ -95,47 +90,18 @@ impl Config {
             }
         }
         if !found_config {
-            // Where it looked and what to write there. The path is the part a user cannot
-            // guess — it differs per platform, and the README can only list all three —
-            // and this is the first thing a fresh install prints, with no window open to
-            // read anything else in (#113).
-            //
-            // The snippet is JSON, so the name shown beside it has to read JSON: the same
-            // `{"key": …}` in a config.toml is a parse error, and in a config.ini it is a
-            // key nostui reports as missing, which reads as the user having got the key
-            // wrong rather than the format. `EXAMPLE_FILE` is therefore spelled out
-            // rather than taken from the list, which cannot say which entries parse JSON,
-            // and `the_error_names_a_file_that_reads_the_json_it_shows` is what holds the
-            // two together. The alternatives do come from `CONFIG_FILES`, so a format
-            // added or dropped there cannot leave them listing one nobody reads.
-            //
-            // Which name wins if two exist is deliberately unsaid: that is `config`'s
-            // layering, and a sentence about it here would be one more thing to get wrong.
+            // The directory is the part a user cannot supply for themselves: it differs
+            // per platform, and this is the first thing a fresh install prints, with no
+            // window open to read anything else in (#113).
             let alternatives = CONFIG_FILES
                 .iter()
                 .map(|(file, _)| *file)
                 .filter(|file| *file != EXAMPLE_FILE)
                 .collect::<Vec<_>>()
                 .join(", ");
-            // "Make that directory" because nothing creates it: `initialize_logging` calls
-            // `create_dir_all` for the data directory, and the config directory is only
-            // ever read. Telling someone to write a file into a path that is not there
-            // hands them one more thing to work out.
-            // The first line of this reaches the log and the whole of it reaches the
-            // terminal, from one binding so they cannot come to disagree about the
-            // directory.
-            //
-            // The log gets that line alone because it is read a line at a time: an event
-            // is prefixed with its level and location once however many lines it spans,
-            // so a `grep` for ERROR takes the first and leaves the rest behind it,
-            // unprefixed and unfindable. What it would leave is instructions, which are
-            // for the person at the terminal — who has them there — rather than for
-            // whoever is reading the log afterwards to find out what happened.
+            // The directory has to be made as well as filled: `create_dir_all` is called
+            // for the data directory and never for this one.
             let found_nothing = format!("No configuration file found in {config_dir_str}");
-            // Kept under eighty columns a line, indent included. A terminal wraps rather
-            // than truncates, so nothing is lost either way — but the wrap falls mid
-            // phrase, and the one thing here a reader has to copy exactly is the snippet.
-            // The directory is the exception and cannot be helped: it is as long as it is.
             let message = format!(
                 "{found_nothing}\n\
                  Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
@@ -145,6 +111,8 @@ impl Config {
                  \x20   {alternatives}"
             );
 
+            // The first line only — `a_missing_configuration_says_where_to_put_one…` is
+            // what holds the log to it.
             log::error!("{found_nothing}");
             return Err(ConfigError::Message(message));
         }
