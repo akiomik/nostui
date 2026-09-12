@@ -187,14 +187,11 @@ mod tests {
                 // error it prints tells people to write `key`, so a contributor whose own
                 // configuration takes that advice would otherwise fail this.
                 //
-                // Which leaves this half holding by construction for any `Ok` that
-                // arrives, since the guard above returns `NotFound` otherwise. What would
-                // catch that guard going is a run against a configuration known to have
-                // no key, which needs a directory of its own: #578.
-                //
-                // The relays half below is not in the same position: `Config::new` fills
-                // them from the bundled `.config/config.json5` rather than refusing, so
-                // emptying that file's list fails here.
+                // Both halves need the environment to supply the case. Deleting the guard
+                // above fails this one, but only where the configuration has no key;
+                // emptying the bundled `.config/config.json5` fails the relays one below.
+                // A run against a directory this test owns is what would stop that being
+                // luck: #578.
                 assert!(
                     !cfg.privatekey.expose_secret().is_empty()
                         || !cfg.key.expose_secret().is_empty(),
