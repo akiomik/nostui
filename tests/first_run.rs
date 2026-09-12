@@ -105,9 +105,11 @@ fn blank_config_cwd() -> Result<PathBuf> {
 /// The case above cannot see this. It hands over an absolute directory, where
 /// `path::absolute` changes nothing and the empty path never arises.
 ///
-/// Unix only: `CreateProcess` drops an empty entry from the environment block, so on
-/// Windows the variable would read as unset and the branch under test is unreachable
-/// from here — the case would fail saying nothing about the guard it exists for.
+/// Unix only, and not because Windows is known to differ. `make_envp` does write the
+/// entry as `NOSTUI_CONFIG=`, and what the child then reads back is not something this
+/// checkout can run. A case that is green or red for unmeasured reasons says less than
+/// one that does not run; `an_empty_directory_resolves_to_the_working_one` in
+/// `src/utils/paths.rs` covers the guard itself on every platform.
 #[cfg(unix)]
 #[test]
 fn a_blank_configuration_directory_names_the_working_directory_it_fell_back_to() -> Result<()> {

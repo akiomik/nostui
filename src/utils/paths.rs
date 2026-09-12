@@ -23,10 +23,7 @@ fn project_directory() -> Option<ProjectDirs> {
 }
 
 /// A directory nostui uses, as a place rather than as a name. A relative one means a
-/// different directory from every shell, and two of the three sources below can give one:
-/// the variables, which hold whatever they were set to, and the last fallback. What
-/// `ProjectDirs` answers is absolute or nothing — `directories` drops an `XDG_*` that is
-/// not absolute and builds the rest from the home directory.
+/// different directory from every shell, and any of the sources below can give one.
 ///
 /// Only a relative one is touched. An absolute path already names one place, so there is
 /// nothing left to work out, and `absolute` does not leave a path alone: it drops `.`
@@ -109,8 +106,8 @@ mod tests {
 
     use super::*;
 
-    /// `tests/first_run.rs` reaches this through the binary, but only on Unix:
-    /// `CreateProcess` drops an empty entry from the environment block.
+    /// `tests/first_run.rs` reaches this through the binary, but only on Unix — see the
+    /// case there for why.
     #[test]
     fn an_empty_directory_resolves_to_the_working_one() -> Result<(), io::Error> {
         assert_eq!(resolved(PathBuf::new()), env::current_dir()?);
