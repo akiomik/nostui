@@ -68,17 +68,18 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
         .stderr(contains("{\"key\": \"nsec1...\"}"))
         .stderr(contains("An npub instead of an nsec"));
 
-    // Counted rather than matched on a phrase: a phrase would be a copy of prose in
-    // another file, and would stop asserting the moment that prose was reworded.
+    // The snippet rather than a line count, which would also fail for an unrelated event
+    // logged before this one. It is a copy of prose in another file, but one the stderr
+    // assertion above spells too — reworded, that fails first rather than this quietly
+    // stopping.
     let log = fs::read_to_string(data_dir("missing").join("nostui.log"))?;
 
     assert!(
         log.contains(&config_dir.display().to_string()),
         "the log should name the directory, got: {log}"
     );
-    assert_eq!(
-        log.lines().count(),
-        1,
+    assert!(
+        !log.contains(r#"{"key": "nsec1..."}"#),
         "the instructions belong on the terminal, not in the log: {log}"
     );
 
