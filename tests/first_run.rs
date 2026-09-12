@@ -121,6 +121,10 @@ fn a_blank_configuration_directory_names_the_working_directory_it_fell_back_to()
         .env("RUST_LOG", "nostui=error")
         .assert()
         .failure()
+        // Both halves: the path alone would hold for a failure from somewhere else that
+        // happened to echo the working directory, and this case is named after which
+        // failure it is.
+        .stderr(contains("No configuration file found in"))
         .stderr(contains(cwd.display().to_string()));
 
     Ok(())

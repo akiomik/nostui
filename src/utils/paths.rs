@@ -22,9 +22,11 @@ fn project_directory() -> Option<ProjectDirs> {
     ProjectDirs::from("io", "0m1", env!("CARGO_PKG_NAME"))
 }
 
-/// A directory nostui uses, as a place rather than as a name: the variables can hold
-/// anything, including nothing at all, and the fallbacks below are relative — each of
-/// which names a different directory from every shell.
+/// A directory nostui uses, as a place rather than as a name. A relative one means a
+/// different directory from every shell, and two of the three sources below can give one:
+/// the variables, which hold whatever they were set to, and the last fallback. What
+/// `ProjectDirs` answers is absolute or nothing — `directories` drops an `XDG_*` that is
+/// not absolute and builds the rest from the home directory.
 ///
 /// Only a relative one is touched. An absolute path already names one place, and putting
 /// it through `absolute` could only change it: it drops `.` components anywhere, and on
@@ -36,8 +38,7 @@ fn project_directory() -> Option<ProjectDirs> {
 ///
 /// A process whose working directory has gone gets the relative name back, and there is
 /// no better answer: `absolute` is the thing that asks where the process is, and nothing
-/// else here knows. What such a run prints is
-/// [#583](https://github.com/akiomik/nostui/issues/583).
+/// else here knows.
 fn resolved(directory: PathBuf) -> PathBuf {
     if directory.is_absolute() {
         return directory;
