@@ -24,10 +24,11 @@ fn project_directory() -> Option<ProjectDirs> {
 
 /// A directory nostui uses, as a place rather than as a name.
 ///
-/// Absolute rather than canonical: `..` survives, so `NOSTUI_CONFIG=../cfg` is named
-/// `<working directory>/../cfg`. Collapsing it would mean `canonicalize`, which asks the
-/// filesystem and fails on a directory that is not there — which is the case this exists
-/// to describe.
+/// Absolute rather than canonical. On Unix that is a join and nothing more, so `..`
+/// survives and `NOSTUI_CONFIG=../cfg` is named `<working directory>/../cfg`; Windows
+/// answers through `GetFullPathNameW`, which collapses it. Doing the collapsing here
+/// would mean `canonicalize`, which asks the filesystem and fails on a directory that is
+/// not there — the case this exists to describe.
 ///
 /// The variables can hold anything, including nothing at all — `env::var` answers `Ok("")`
 /// for one set without a value — and the fallbacks below are relative. Each of those names
