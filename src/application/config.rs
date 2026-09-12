@@ -89,17 +89,17 @@ impl Config {
             .map_err(|e| ConfigError::Message(format!("Failed to load default config: {e}")))?;
         let data_dir = utils::get_data_dir();
         let config_dir = utils::get_config_dir();
-        let data_dir_str = data_dir.to_str().ok_or_else(|| {
-            ConfigError::Message(format!("Data dir path is not valid UTF-8: {data_dir:?}"))
-        })?;
-        let config_dir_str = config_dir.to_str().ok_or_else(|| {
-            ConfigError::Message(format!(
-                "Config dir path is not valid UTF-8: {config_dir:?}"
-            ))
-        })?;
+        // Lossy rather than refused: these two reach nothing but `config`'s own defaults,
+        // which nothing here reads back, and a directory whose name is not UTF-8 is no
+        // reason to refuse to start when the configuration in it is readable. Since
+        // `get_config_dir` began answering with an absolute path, the bytes being asked
+        // about are the working directory's as well as the configured name's.
+        let data_dir_str = data_dir.to_string_lossy();
+        let config_dir_str = config_dir.to_string_lossy();
+
         let mut builder = config::Config::builder()
-            .set_default("_data_dir", data_dir_str)?
-            .set_default("_config_dir", config_dir_str)?;
+            .set_default("_data_dir", data_dir_str.as_ref())?
+            .set_default("_config_dir", config_dir_str.as_ref())?;
 
         let mut found_config = false;
         for (file, format) in &CONFIG_FILES {

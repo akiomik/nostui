@@ -22,35 +22,15 @@ fn project_directory() -> Option<ProjectDirs> {
     ProjectDirs::from("io", "0m1", env!("CARGO_PKG_NAME"))
 }
 
-pub fn get_data_dir() -> PathBuf {
-    let directory = if let Some(s) = DATA_FOLDER.clone() {
-        s
-    } else if let Some(proj_dirs) = project_directory() {
-        proj_dirs.data_local_dir().to_path_buf()
-    } else {
-        PathBuf::from(".").join(".data")
-    };
-    directory
-}
-
-/// The directory nostui reads its configuration from, as a place rather than as a name.
+/// A directory nostui uses, as a place rather than as a name.
 ///
-/// `NOSTUI_CONFIG` can hold anything, including nothing at all — `env::var` answers
-/// `Ok("")` for a variable set without a value — and the fallback below is relative. Each
-/// of those names a different directory from every shell, and both the error printed when
-/// no configuration is found and the `--version` that gets pasted into a bug report have
-/// to name the same one.
-pub fn get_config_dir() -> PathBuf {
-    let directory = if let Some(s) = CONFIG_FOLDER.clone() {
-        s
-    } else if let Some(proj_dirs) = project_directory() {
-        proj_dirs.config_local_dir().to_path_buf()
-    } else {
-        PathBuf::from(".").join(".config")
-    };
-
-    // An empty path is the one thing `absolute` refuses, and it is where the names are
-    // joined onto nothing — the working directory.
+/// The variables can hold anything, including nothing at all — `env::var` answers `Ok("")`
+/// for one set without a value — and the fallbacks below are relative. Each of those names
+/// a different directory from every shell, and [`version`] prints both of them for pasting
+/// into a bug report, where a name that depends on the reporter's shell says nothing.
+fn resolved(directory: PathBuf) -> PathBuf {
+    // An empty path is the one thing `absolute` refuses, and it is where names are joined
+    // onto nothing — the working directory.
     let directory = if directory.as_os_str().is_empty() {
         PathBuf::from(".")
     } else {
@@ -58,6 +38,29 @@ pub fn get_config_dir() -> PathBuf {
     };
 
     path::absolute(&directory).unwrap_or(directory)
+}
+
+/// The directory nostui writes its log and its data into.
+pub fn get_data_dir() -> PathBuf {
+    resolved(if let Some(s) = DATA_FOLDER.clone() {
+        s
+    } else if let Some(proj_dirs) = project_directory() {
+        proj_dirs.data_local_dir().to_path_buf()
+    } else {
+        PathBuf::from(".").join(".data")
+    })
+}
+
+/// The directory nostui reads its configuration from. The error printed when there is no
+/// configuration names it, and has to name the same place `--version` does.
+pub fn get_config_dir() -> PathBuf {
+    resolved(if let Some(s) = CONFIG_FOLDER.clone() {
+        s
+    } else if let Some(proj_dirs) = project_directory() {
+        proj_dirs.config_local_dir().to_path_buf()
+    } else {
+        PathBuf::from(".").join(".config")
+    })
 }
 
 /// The package version, and the directories this run would read and write.
