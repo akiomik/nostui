@@ -175,6 +175,11 @@ mod tests {
                 // The same pair `Config::new` accepts, rather than one of the two: the
                 // error it prints tells people to write `key`, so a contributor whose own
                 // configuration takes that advice would otherwise fail this.
+                //
+                // Which leaves it holding by construction for any `Ok` that arrives here,
+                // since the guard above returns `NotFound` otherwise. What would catch
+                // that guard going is a run against a configuration known to have no key,
+                // which needs a directory of its own: #578.
                 assert!(
                     !cfg.privatekey.expose_secret().is_empty()
                         || !cfg.key.expose_secret().is_empty(),
@@ -185,11 +190,15 @@ mod tests {
             Err(e) => {
                 // If it fails, it should be for expected reasons (no config file or no privatekey)
                 println!("Config failed as expected: {e:?}");
+                // The two ways `Config::new` refuses, named as it names them: no file
+                // at all, or one without a key — which arrives as `NotFound("key")` and
+                // reads `missing configuration field "key"`. The second is what a
+                // contributor gets for writing `key` where the older `privatekey` was
+                // expected, and for following the message this error now prints.
                 let err_msg = format!("{e:?}");
                 assert!(
-                    err_msg.contains("No configuration file found")
-                        || err_msg.contains("privatekey"),
-                    "Error should be about missing config file or privatekey, got: {e:?}",
+                    err_msg.contains("No configuration file found") || err_msg.contains("key"),
+                    "an error here should name what is missing, got: {e:?}",
                 );
             }
         }

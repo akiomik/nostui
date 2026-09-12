@@ -91,6 +91,7 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
 /// Canonical, because the child resolves `.` through `getcwd`, which follows symlinks
 /// where `CARGO_TARGET_TMPDIR` does not: on a checkout reached through one, the two forms
 /// name the same directory and do not compare equal.
+#[cfg(unix)]
 fn blank_config_cwd() -> Result<PathBuf> {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-blank-cwd");
     fs::create_dir_all(&dir)?;
