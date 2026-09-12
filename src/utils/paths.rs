@@ -26,10 +26,18 @@ fn project_directory() -> Option<ProjectDirs> {
 /// anything, including nothing at all, and the fallbacks below are relative — each of
 /// which names a different directory from every shell.
 ///
+/// Only a relative one is touched. An absolute path already names one place, and putting
+/// it through `absolute` could only change it: on Windows that call collapses `..`
+/// lexically, which is not where the kernel would have gone through a junction.
+///
 /// Absolute, not canonical: `canonicalize` asks the filesystem and fails on the directory
 /// that is not there, which is the case this exists to name. A process whose working
 /// directory has gone gets the relative name back.
 fn resolved(directory: PathBuf) -> PathBuf {
+    if directory.is_absolute() {
+        return directory;
+    }
+
     // The one input `absolute` refuses, and where names are joined onto nothing.
     let directory = if directory.as_os_str().is_empty() {
         PathBuf::from(".")
@@ -102,6 +110,22 @@ mod tests {
         assert_eq!(resolved(PathBuf::new()), env::current_dir()?);
 
         Ok(())
+    }
+
+    /// Not merely already resolved — untouched. `absolute` drops a `.` from it on any
+    /// platform and collapses a `..` on Windows, where that is a different directory from
+    /// the one the kernel reaches through a junction.
+    #[test]
+    fn an_absolute_directory_is_left_as_it_is() {
+        let directory = PathBuf::from("/srv").join(".").join("cfg");
+
+        // Compared as text: `Path`'s own equality reads components, and `.` is not one of
+        // them — `/srv/./cfg` and `/srv/cfg` are equal to it, which is the difference
+        // this is here to see.
+        assert_eq!(
+            resolved(directory.clone()).as_os_str(),
+            directory.as_os_str()
+        );
     }
 
     #[test]
