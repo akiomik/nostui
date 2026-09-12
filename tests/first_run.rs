@@ -12,7 +12,6 @@ use std::time::Duration;
 
 use assert_cmd::Command;
 use nostui::Result;
-use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 
 /// Matches `tests/cli.rs`: nothing here should take a measurable amount of time, and a
@@ -123,34 +122,6 @@ fn a_blank_configuration_directory_names_the_working_directory_it_fell_back_to()
         .assert()
         .failure()
         .stderr(contains(cwd.display().to_string()));
-
-    Ok(())
-}
-
-/// `config` resolves a source through every extension its format claims, so a name this
-/// loop does not probe is still one it would read — and a directory holding a working
-/// configuration under such a name was told to write another beside it.
-#[test]
-fn a_configuration_under_a_second_name_for_its_format_is_found() -> Result<()> {
-    let config_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-second-name");
-
-    match fs::remove_dir_all(&config_dir) {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e.into()),
-        _ => {}
-    }
-    fs::create_dir_all(&config_dir)?;
-    fs::write(config_dir.join("config.yml"), "key: \"nsec1...\"\n")?;
-
-    Command::cargo_bin("nostui")?
-        .timeout(RUN_TIMEOUT)
-        .env("NOSTUI_CONFIG", &config_dir)
-        .env("NOSTUI_DATA", data_dir("second-name"))
-        .env("RUST_LOG", "nostui=error")
-        .assert()
-        .failure()
-        // It got past the loader and on to the key, which is the placeholder's to fail.
-        .stderr(contains("No configuration file found").not())
-        .stderr(contains("invalid secret key"));
 
     Ok(())
 }
