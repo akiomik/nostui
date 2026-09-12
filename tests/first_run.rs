@@ -63,7 +63,16 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
         // The whole phrase: `contains("config.json")` matches `config.json5` too.
         .stderr(contains("write config.json in it"))
         .stderr(contains("{\"key\": \"nsec1...\"}"))
-        .stderr(contains("config.toml"));
+        // Whole lines, because which of the two each name lands on is the whole point of
+        // splitting them: `contains("config.toml")` matches either, so swapping the lists
+        // would put `config.toml` under "take the same text" and pass. Reworded, these
+        // fail rather than quietly stop asserting, which is why the phrases are here.
+        .stderr(contains(
+            "These take the same text: config.json5, config.yaml",
+        ))
+        .stderr(contains(
+            "These want their own syntax: config.toml, config.ini",
+        ));
 
     // An event is prefixed once however many lines it spans, so the whole message in
     // `log::error!` would put the instructions past the reach of a `grep` for ERROR.
