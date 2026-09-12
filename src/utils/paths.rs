@@ -34,10 +34,15 @@ fn project_directory() -> Option<ProjectDirs> {
 /// Absolute, not canonical: `canonicalize` asks the filesystem and fails on the directory
 /// that is not there, which is the case this exists to name.
 ///
-/// A process whose working directory has gone gets the relative name back, silently. It
-/// does not reach a message: `initialize_logging` runs first and opens a file under the
-/// equally relative data directory, so the run ends at `No such file or directory` before
-/// any of this is printed — which is #583 rather than something to report here.
+/// A process whose working directory has gone gets the relative name back, silently, and
+/// whether anyone sees it depends on the other directory. With both variables blank the
+/// data one is relative too, `initialize_logging` fails on it first, and the run ends at
+/// `No such file or directory` with nothing printed (#583). With the data directory
+/// absolute — which it is unless someone set it otherwise — logging succeeds and the
+/// error names `cfg` rather than a place, which is the output this exists to stop.
+///
+/// There is no better answer once `getcwd` is gone: `absolute` is the thing that asks,
+/// and nothing else here knows where the process is.
 fn resolved(directory: PathBuf) -> PathBuf {
     if directory.is_absolute() {
         return directory;
