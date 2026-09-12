@@ -90,12 +90,10 @@ impl Config {
             // failure different things — matching a pasted terminal against a pasted log
             // is the whole use of having it in both.
             let found_nothing = format!("No configuration file found in {}", config_dir.display());
-            // "if it is not there" carries the whole of that clause on a platform where
-            // the data directory is the same one — macOS is — since `initialize_logging`
-            // has made it before this runs. It is Linux that needs the instruction.
             let message = format!(
                 "{found_nothing}\n\
-                 Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
+                 Write {EXAMPLE_FILE} in that directory — create it first if it is not \
+                 there:\n\
                  \x20   {EXAMPLE_SNIPPET}\n\
                  An npub instead of an nsec starts nostui read-only."
             );

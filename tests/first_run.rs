@@ -60,7 +60,7 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
         // every substring below sits away from the escapes.
         .stderr(contains(config_dir.display().to_string()))
         // The whole phrase: `contains("config.json")` matches `config.json5` too.
-        .stderr(contains("write config.json in it"))
+        .stderr(contains("Write config.json in that directory"))
         .stderr(contains("{\"key\": \"nsec1...\"}"))
         .stderr(contains("An npub instead of an nsec"));
 
