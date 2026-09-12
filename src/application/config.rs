@@ -1,7 +1,7 @@
 pub mod keybindings;
 pub mod styles;
 
-use std::path::{self, PathBuf};
+use std::path::{self, Path, PathBuf};
 
 use color_eyre::eyre::Result;
 use config::ConfigError;
@@ -90,10 +90,20 @@ impl Config {
             }
         }
         if !found_config {
-            // Absolute: `get_config_dir` answers `./.config` where there is no home
-            // directory to ask about, and `NOSTUI_CONFIG` can be set to anything, so a
-            // relative name means a different place from every shell.
-            let directory = path::absolute(&config_dir).unwrap_or_else(|_| config_dir.clone());
+            // Where the loader looked, which is what it joins each name onto. A blank
+            // `NOSTUI_CONFIG` leaves that empty and the names resolve against the working
+            // directory, so that is the place to name — and it is what `path::absolute`
+            // refuses to be asked about.
+            let probed = if config_dir.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                config_dir.as_path()
+            };
+
+            // Absolute, because `get_config_dir` also answers `./.config` where there is
+            // no home directory to ask about: a relative name means a different place
+            // from every shell.
+            let directory = path::absolute(probed).unwrap_or_else(|_| probed.to_path_buf());
 
             // The part a stranger cannot supply for themselves: it differs per platform,
             // and this is the whole of what a fresh install prints, with no window open
