@@ -115,9 +115,13 @@ mod tests {
     /// Not merely already resolved — untouched. `absolute` drops a `.` from it on any
     /// platform and collapses a `..` on Windows, where that is a different directory from
     /// the one the kernel reaches through a junction.
+    ///
+    /// Spelled per platform because `is_absolute` is: `\srv` has a root and no prefix on
+    /// Windows, which does not count, and the early return this is about would be skipped.
     #[test]
     fn an_absolute_directory_is_left_as_it_is() {
-        let directory = PathBuf::from("/srv").join(".").join("cfg");
+        let root = if cfg!(windows) { r"C:\srv" } else { "/srv" };
+        let directory = PathBuf::from(root).join(".").join("cfg");
 
         // Compared as text: `Path`'s own equality reads components, and `.` is not one of
         // them — `/srv/./cfg` and `/srv/cfg` are equal to it, which is the difference

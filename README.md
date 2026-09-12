@@ -45,13 +45,18 @@ pkgin install nostui
 
 2. Add your key to the `config.json`:
 
-```json5
+```json
 {
-    "key": "nsec1...", // or "npub..." for readonly mode
-    "relays": ["wss://nos.lol"], // optional
-    "nip-38": { "enabled": true } // optional, broadcasts the currently playing track as a status (default: false)
+    "key": "nsec1...",
+    "relays": ["wss://nos.lol"],
+    "nip-38": { "enabled": true }
 }
 ```
+
+`key` takes an `npub...` instead for read-only mode. `relays` and `nip-38` are
+optional — the defaults are nostui's own relay list and a NIP-38 status that is
+not broadcast. Comments are `config.json5` only: `config.json` is read as JSON,
+which has none.
 
 ## Usage
 
