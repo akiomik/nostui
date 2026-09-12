@@ -48,15 +48,18 @@ pkgin install nostui
 ```json
 {
     "key": "nsec1...",
-    "relays": ["wss://nos.lol"],
-    "nip-38": { "enabled": true }
+    "relays": ["wss://nos.lol"]
 }
 ```
 
-`key` takes an `npub...` instead for read-only mode. `relays` and `nip-38` are
-optional — the defaults are nostui's own relay list and a NIP-38 status that is
-not broadcast. Comments are `config.json5` only: `config.json` is read as JSON,
-which has none.
+`key` takes an `npub...` instead for read-only mode, and `relays` is optional —
+without it nostui uses its own list.
+
+`"nip-38": { "enabled": true }` is the third key. It broadcasts whatever you are
+playing as a NIP-38 status, to the relays above, where anyone can read it. It is
+off unless you write it.
+
+Comments are `config.json5`'s: `config.json` is read as JSON, which has none.
 
 ## Usage
 
