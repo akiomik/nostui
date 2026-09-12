@@ -12,12 +12,17 @@ use crate::utils;
 
 const CONFIG: &str = include_str!("../../.config/config.json5");
 
-const CONFIG_FILES: [(&str, config::FileFormat); 5] = [
-    ("config.json5", config::FileFormat::Json5),
-    ("config.json", config::FileFormat::Json),
-    ("config.yaml", config::FileFormat::Yaml),
-    ("config.toml", config::FileFormat::Toml),
-    ("config.ini", config::FileFormat::Ini),
+/// The names `Config::new` reads, each with the format it is parsed as. Every name a
+/// format answers to, rather than one apiece: `config` resolves a source through the
+/// extensions it claims — `yaml` and then `yml` — and its own list of them is
+/// `pub(crate)`, so a loop that probed one name per format would call a `config.yml` a
+/// directory with nothing in it.
+const CONFIG_FILES: [(&[&str], config::FileFormat); 5] = [
+    (&["config.json5"], config::FileFormat::Json5),
+    (&["config.json"], config::FileFormat::Json),
+    (&["config.yaml", "config.yml"], config::FileFormat::Yaml),
+    (&["config.toml"], config::FileFormat::Toml),
+    (&["config.ini"], config::FileFormat::Ini),
 ];
 
 /// The file the no-configuration error tells a reader to write, and what to put in it.
@@ -72,17 +77,16 @@ impl Config {
             .set_default("_data_dir", data_dir_str.as_ref())?
             .set_default("_config_dir", config_dir_str.as_ref())?;
 
+        // Every name gets its own source, so what is read and what is looked for are the
+        // same list rather than two that can drift.
         let mut found_config = false;
-        for (file, format) in &CONFIG_FILES {
-            let path = config_dir.join(file);
+        for (names, format) in &CONFIG_FILES {
+            for name in *names {
+                let path = config_dir.join(name);
 
-            builder = builder.add_source(
-                config::File::from(path.clone())
-                    .format(*format)
-                    .required(false),
-            );
-            if path.exists() {
-                found_config = true;
+                found_config |= path.exists();
+                builder =
+                    builder.add_source(config::File::from(path).format(*format).required(false));
             }
         }
         if !found_config {
@@ -181,7 +185,7 @@ mod tests {
     fn the_file_the_error_names_gives_nostui_the_key_it_shows() {
         let format = CONFIG_FILES
             .iter()
-            .find_map(|(file, format)| (*file == EXAMPLE_FILE).then_some(*format))
+            .find_map(|(names, format)| names.contains(&EXAMPLE_FILE).then_some(*format))
             .unwrap_or_else(|| panic!("{EXAMPLE_FILE} is not among {CONFIG_FILES:?}"));
 
         let read = config::Config::builder()
