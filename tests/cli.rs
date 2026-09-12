@@ -88,15 +88,14 @@ fn help_is_printed_and_the_application_does_not_start() -> Result<()> {
     Ok(())
 }
 
-/// Both directories `--version` names are places rather than names. A relative one means
-/// a different directory from every shell, and this output is what a bug report is built
-/// from — the no-configuration error names the config one too, so a report carrying both
-/// would disagree with itself over it.
+/// A relative name means a different directory from every shell, and this output is what
+/// a bug report is built from — the no-configuration error names the config one too, so a
+/// report carrying both would disagree with itself over it.
 ///
-/// Run from a directory of its own, since a relative name is resolved against whichever
+/// Run from a directory of its own, since the place a relative name resolves to is the
 /// one the process is standing in.
 #[test]
-fn version_names_directories_that_do_not_depend_on_where_it_was_run() -> Result<()> {
+fn version_prints_the_place_a_relative_directory_resolves_to() -> Result<()> {
     let cwd = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cli-relative");
 
     fs::create_dir_all(&cwd)?;

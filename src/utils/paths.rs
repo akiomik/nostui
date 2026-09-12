@@ -28,10 +28,10 @@ fn project_directory() -> Option<ProjectDirs> {
 /// `ProjectDirs` answers is absolute or nothing — `directories` drops an `XDG_*` that is
 /// not absolute and builds the rest from the home directory.
 ///
-/// Only a relative one is touched. An absolute path already names one place, and putting
-/// it through `absolute` could only change it: it drops `.` components anywhere, and on
-/// Windows collapses `..` as well, which is not where the kernel would have gone through
-/// a junction.
+/// Only a relative one is touched. An absolute path already names one place, so there is
+/// nothing left to work out, and `absolute` does not leave a path alone: it drops `.`
+/// components anywhere and collapses `..` on Windows. Rewriting an answer is only a way
+/// to get it wrong.
 ///
 /// Absolute, not canonical: `canonicalize` asks the filesystem and fails on the directory
 /// that is not there, which is the case this exists to name.
@@ -118,9 +118,8 @@ mod tests {
         Ok(())
     }
 
-    /// Not merely already resolved — untouched. `absolute` drops a `.` from it on any
-    /// platform and collapses a `..` on Windows, where that is a different directory from
-    /// the one the kernel reaches through a junction.
+    /// Not merely already resolved — untouched, which `absolute` would not leave it: it
+    /// drops a `.` on any platform and collapses a `..` on Windows.
     ///
     /// Spelled per platform because `is_absolute` is: `\srv` has a root and no prefix on
     /// Windows, which does not count, and the early return this is about would be skipped.
