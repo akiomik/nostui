@@ -156,12 +156,16 @@ fn unreadable_config_dir() -> Result<Reopened> {
     fs::write(dir.join("config.json"), r#"{"key": "nsec1..."}"#)?;
     fs::set_permissions(&dir, PermissionsExt::from_mode(0o000))?;
 
+    // Before the assertion, which is the one thing here that can panic while the mode is
+    // 000 — a user this does not keep out, which is the case it exists to catch.
+    let shut = Reopened(dir);
+
     assert!(
-        fs::read_dir(&dir).is_err(),
+        fs::read_dir(&shut.0).is_err(),
         "this case needs a user that a mode of 000 keeps out"
     );
 
-    Ok(Reopened(dir))
+    Ok(shut)
 }
 
 #[cfg(unix)]

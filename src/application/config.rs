@@ -87,13 +87,15 @@ impl Config {
             match path.try_exists() {
                 Ok(true) => found_config = true,
                 Ok(false) => {}
-                Err(e) => unreadable = unreadable.or(Some(e)),
+                Err(e) => unreadable = unreadable.or(Some((path, e))),
             }
         }
-        if let (false, Some(e)) = (found_config, unreadable) {
+        // The name that failed, not the directory holding it: a looping symlink or one
+        // pointing somewhere unreadable leaves the directory itself perfectly fine.
+        if let (false, Some((path, e))) = (found_config, unreadable) {
             let message = format!(
-                "Could not look for a configuration in {}: {e}",
-                config_dir.display()
+                "Could not look for a configuration at {}: {e}",
+                path.display()
             );
 
             log::error!("{message}");
