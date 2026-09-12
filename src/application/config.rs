@@ -39,10 +39,8 @@ fn alternatives() -> impl Iterator<Item = (&'static str, config::FileFormat)> {
         .filter(|(file, _)| *file != EXAMPLE_FILE)
 }
 
-/// Whether a format reads [`EXAMPLE_SNIPPET`]. YAML does,
-/// being a superset of it here; TOML and INI want their own syntax, and a reader who
-/// carried the snippet into one of those gets `missing configuration field "key"` — which
-/// reads as having named the key wrong rather than having chosen the wrong file.
+/// Whether a format reads [`EXAMPLE_SNIPPET`]. YAML does, being a superset of it here;
+/// TOML and INI want their own syntax.
 const fn reads_json(format: config::FileFormat) -> bool {
     matches!(
         format,
@@ -50,13 +48,6 @@ const fn reads_json(format: config::FileFormat) -> bool {
     )
 }
 
-/// The directories this run uses, set as `config` defaults and read back by nothing —
-/// `config` has no interpolation, so a user's file can override these but cannot refer to
-/// them.
-///
-/// Which is why they are filled lossily: a directory whose name is not UTF-8 would
-/// otherwise stop nostui starting over a value nobody consumes. Anything that does start
-/// reading them gets U+FFFD where those bytes were.
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct AppConfig {
     #[serde(default)]
