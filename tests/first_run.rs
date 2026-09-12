@@ -201,20 +201,29 @@ fn a_configuration_that_cannot_be_looked_at_is_not_reported_missing() -> Result<
 #[test]
 fn a_candidate_that_cannot_be_looked_at_does_not_take_the_instructions_with_it() -> Result<()> {
     let config_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-looping");
-    let looping = config_dir.join("config.json5");
-    // The second is the name the instructions go on to give, which is the one a reader
-    // would otherwise be sent to write over something already broken.
-    let also_looping = config_dir.join("config.json");
+    // Every name, because a directory this readable with nothing readable in it is what
+    // the count once mistook for a directory nobody can read — and one failure cannot
+    // tell "names them" from "names one".
+    let looping = [
+        "config.json5",
+        "config.json",
+        "config.yaml",
+        "config.toml",
+        "config.ini",
+    ]
+    .map(|name| (name, config_dir.join(name)));
 
-    match fs::remove_dir_all(data_dir("looping")) {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e.into()),
-        _ => {}
+    // Both removed first: `CARGO_TARGET_TMPDIR` outlives a run, so entries left under
+    // these names by an earlier one would stand in for the fixture this describes.
+    for directory in [&config_dir, &data_dir("looping")] {
+        match fs::remove_dir_all(directory) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e.into()),
+            _ => {}
+        }
     }
     fs::create_dir_all(&config_dir)?;
-    for (name, link) in [("config.json5", &looping), ("config.json", &also_looping)] {
-        if link.symlink_metadata().is_err() {
-            symlink(name, link)?;
-        }
+    for (name, link) in &looping {
+        symlink(name, link)?;
     }
 
     Command::cargo_bin("nostui")?
@@ -225,21 +234,30 @@ fn a_candidate_that_cannot_be_looked_at_does_not_take_the_instructions_with_it()
         .assert()
         .failure()
         .stderr(contains("write config.json in it"))
+        // The directory is readable, so nothing may claim otherwise, and every name that
+        // failed is named.
         .stderr(contains(format!(
-            "Could not look at {}:",
-            looping.display()
-        )))
-        .stderr(contains(format!(
-            "Could not look at {}:",
-            also_looping.display()
+            "No configuration file found in {}",
+            config_dir.display()
         )));
+
+    for (_, link) in &looping {
+        Command::cargo_bin("nostui")?
+            .timeout(RUN_TIMEOUT)
+            .env("NOSTUI_CONFIG", &config_dir)
+            .env("NOSTUI_DATA", data_dir("looping"))
+            .env("RUST_LOG", "nostui=error")
+            .assert()
+            .failure()
+            .stderr(contains(format!("Could not look at {}:", link.display())));
+    }
 
     // The reason reaches the log too, as its own event: it is the one fact a report
     // needs, and without it this run's log is an empty directory's.
     let log = fs::read_to_string(data_dir("looping").join("nostui.log"))?;
 
     assert!(
-        log.contains(&format!("Could not look at {}:", looping.display())),
+        log.contains(&format!("Could not look at {}:", looping[0].1.display())),
         "the log should carry the reason, got: {log}"
     );
     assert!(

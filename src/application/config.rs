@@ -1,6 +1,8 @@
 pub mod keybindings;
 pub mod styles;
 
+use std::fs;
+use std::io;
 use std::path::PathBuf;
 
 use color_eyre::eyre::Result;
@@ -90,34 +92,42 @@ impl Config {
                 Err(e) => unreadable.push((path, e)),
             }
         }
+        // Said whether or not a configuration was found: a name that could not be looked
+        // at is one whose edits do nothing, and silence about it is what leaves someone
+        // editing a file nostui never reads.
+        for (path, e) in &unreadable {
+            log::warn!("Could not look at {}: {e}", path.display());
+        }
+
         if !found_config {
-            // What is known changes with what could be looked at; what a reader needs to
-            // do does not. Every name failing leaves nostui unable to say a configuration
-            // is absent at all — the directory may not even be there, behind a parent it
-            // cannot search — so it reports that rather than claiming to have found
-            // nothing. Some failing leaves the rest genuinely absent, and each name that
-            // failed is worth saying: one of them may be the file the instructions go on
-            // to name.
-            let mut facts = if unreadable.len() == CONFIG_FILES.len() {
-                Vec::new()
-            } else {
-                vec![format!(
-                    "No configuration file found in {}",
-                    config_dir.display()
-                )]
+            // Asked of the directory rather than inferred from how many names failed:
+            // five symlink loops in a directory anyone can read is not a directory nobody
+            // can. `NotFound` is not being unable to look — it is the ordinary case of a
+            // fresh install, and the instructions below say to make it.
+            let unreadable_dir = match fs::read_dir(&config_dir) {
+                Err(e) if e.kind() != io::ErrorKind::NotFound => Some(e),
+                _ => None,
             };
 
-            match unreadable.as_slice() {
-                [] => {}
-                [(_, e), ..] if unreadable.len() == CONFIG_FILES.len() => {
-                    facts.push(format!("Could not look in {}: {e}", config_dir.display()));
+            // Nothing claims a configuration is absent from a directory that could not be
+            // looked in; what a reader has to do is the same either way.
+            let mut facts = match &unreadable_dir {
+                Some(e) => vec![format!("Could not look in {}: {e}", config_dir.display())],
+                None => {
+                    let mut facts = vec![format!(
+                        "No configuration file found in {}",
+                        config_dir.display()
+                    )];
+
+                    facts.extend(
+                        unreadable
+                            .iter()
+                            .map(|(path, e)| format!("Could not look at {}: {e}", path.display())),
+                    );
+
+                    facts
                 }
-                failures => facts.extend(
-                    failures
-                        .iter()
-                        .map(|(path, e)| format!("Could not look at {}: {e}", path.display())),
-                ),
-            }
+            };
 
             // One event each, because an event is prefixed with its level and location
             // once however many lines it spans: a `grep` for ERROR would take the first
@@ -127,17 +137,13 @@ impl Config {
                 log::error!("{fact}");
             }
 
-            let message = facts
-                .into_iter()
-                .chain([format!(
-                    "Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
-                     \x20   {EXAMPLE_SNIPPET}\n\
-                     An npub instead of an nsec starts nostui read-only."
-                )])
-                .collect::<Vec<_>>()
-                .join("\n");
+            facts.push(format!(
+                "Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
+                 \x20   {EXAMPLE_SNIPPET}\n\
+                 An npub instead of an nsec starts nostui read-only."
+            ));
 
-            return Err(ConfigError::Message(message));
+            return Err(ConfigError::Message(facts.join("\n")));
         }
 
         let mut cfg: Self = builder.build()?.try_deserialize()?;
