@@ -59,7 +59,9 @@ without it nostui uses its own list.
 playing as a NIP-38 status, to the relays above, where anyone can read it. It is
 off unless you write it.
 
-Comments are `config.json5`'s: `config.json` is read as JSON, which has none.
+Every example here is JSON, so it can go in the `config.json` above as it is.
+Comments belong to `config.json5`, which is read as JSON5 — `config.json` is read
+as JSON, which has none.
 
 ## Usage
 
@@ -98,16 +100,19 @@ Options:
 
 You can override or add keybindings in your config file under `keybindings.Home`. Your settings are merged on top of the defaults, so you only need to list the keys you want to change.
 
-```json5
+```json
 {
     "keybindings": {
         "Home": {
-            "<Ctrl-r>": "Repost",  // bind an additional key to an action
-            "<t>": "ScrollToTop"   // override an existing default
+            "<Ctrl-r>": "Repost",
+            "<t>": "ScrollToTop"
         }
     }
 }
 ```
+
+The first of those binds another key to an action; the second rebinds one the
+defaults already use.
 
 Each key is written between `<` and `>`. Modifiers are joined with `-` (e.g. `<Ctrl-p>`, `<Shift-g>`, `<Alt-Enter>`). Special keys such as `up`, `down`, `home`, `end`, `esc`, `enter`, `tab` and `space` are also supported.
 

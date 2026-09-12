@@ -27,8 +27,9 @@ fn project_directory() -> Option<ProjectDirs> {
 /// which names a different directory from every shell.
 ///
 /// Only a relative one is touched. An absolute path already names one place, and putting
-/// it through `absolute` could only change it: on Windows that call collapses `..`
-/// lexically, which is not where the kernel would have gone through a junction.
+/// it through `absolute` could only change it: it drops `.` components anywhere, and on
+/// Windows collapses `..` as well, which is not where the kernel would have gone through
+/// a junction.
 ///
 /// Absolute, not canonical: `canonicalize` asks the filesystem and fails on the directory
 /// that is not there, which is the case this exists to name. A process whose working
