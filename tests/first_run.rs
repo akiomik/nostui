@@ -183,6 +183,9 @@ fn a_configuration_that_cannot_be_looked_at_is_not_reported_missing() -> Result<
         .failure()
         .stderr(contains(config_dir.display().to_string()))
         .stderr(contains("Could not look for a configuration"))
+        // The directory, not a name inside it: every candidate failed here, so none of
+        // them is the news. `contains(dir)` alone would pass on either.
+        .stderr(contains(format!("at {}:", config_dir.display())))
         .stderr(contains("Make that directory").not());
 
     Ok(())

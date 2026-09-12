@@ -75,7 +75,7 @@ impl Config {
         // `try_exists`, because `exists` answers `false` for a directory it cannot look
         // inside as readily as for one holding nothing.
         let mut found_config = false;
-        let mut unreadable = None;
+        let mut unreadable = Vec::new();
         for (file, format) in &CONFIG_FILES {
             let path = config_dir.join(file);
 
@@ -87,20 +87,27 @@ impl Config {
             match path.try_exists() {
                 Ok(true) => found_config = true,
                 Ok(false) => {}
-                Err(e) => unreadable = unreadable.or(Some((path, e))),
+                Err(e) => unreadable.push((path, e)),
             }
         }
-        // The name that failed, not the directory holding it: a looping symlink or one
-        // pointing somewhere unreadable leaves the directory itself perfectly fine.
-        if let (false, Some((path, e))) = (found_config, unreadable) {
+        // Every name failing says nothing about any one of them — what they have in
+        // common is the directory. Some failing is news about those: a looping symlink,
+        // or one pointing somewhere unreadable, leaves the directory itself fine.
+        if let (false, Some((path, e))) = (found_config, unreadable.first()) {
+            let subject = if unreadable.len() == CONFIG_FILES.len() {
+                config_dir.as_path()
+            } else {
+                path.as_path()
+            };
             let message = format!(
                 "Could not look for a configuration at {}: {e}",
-                path.display()
+                subject.display()
             );
 
             log::error!("{message}");
             return Err(ConfigError::Message(message));
         }
+
         if !found_config {
             // The directory is what a fresh install cannot work out for itself, and this
             // is the whole of what it prints (#113). Nothing creates it: on a platform

@@ -57,6 +57,14 @@ means to call.
 A name that quantifies has to earn it. `every`, `only`, `in order` and `never`
 each need enough cases in the body that a wrong implementation fails.
 
+### One case needs a user that file modes keep out
+
+`tests/first_run.rs` shuts a directory to mode `000`, to check that a
+configuration nostui cannot look at is not reported as missing. Run the suite as
+root — in a container, or under `act` — and that mode keeps nobody out, so the
+case fails saying so. It is the only one that does, and it fails rather than
+skipping because a skip would report success having proved nothing.
+
 ### A test nobody watched fail is not a test
 
 The defect this repository keeps producing is not a wrong assertion but an inert
