@@ -40,7 +40,7 @@ pkgin install nostui
 1. Create a `config.json` to the following path:
 
 - Linux: `~/.config/nostui/config.json`
-- Windows: `~\AppData\Roaming\0m1\nostui\config.json`
+- Windows: `%LOCALAPPDATA%\0m1\nostui\config\config.json`
 - macOS: `~/Library/Application Support/io.0m1.nostui/config.json`
 
 2. Add your key to the `config.json`:
