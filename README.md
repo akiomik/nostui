@@ -40,18 +40,29 @@ pkgin install nostui
 1. Create a `config.json` to the following path:
 
 - Linux: `~/.config/nostui/config.json`
-- Windows: `~\AppData\Roaming\0m1\nostui\config.json`
+- Windows: `%LOCALAPPDATA%\0m1\nostui\config\config.json`
 - macOS: `~/Library/Application Support/io.0m1.nostui/config.json`
 
 2. Add your key to the `config.json`:
 
-```json5
+```json
 {
-    "key": "nsec1...", // or "npub..." for readonly mode
-    "relays": ["wss://nos.lol"], // optional
-    "nip-38": { "enabled": true } // optional, broadcasts the currently playing track as a status (default: false)
+    "key": "nsec1...",
+    "relays": ["wss://nos.lol"]
 }
 ```
+
+`key` takes an `npub...` instead for read-only mode, and `relays` is optional —
+without it nostui uses its own list.
+
+`"nip-38": { "enabled": true }` is another key you can add. It broadcasts
+whatever you are playing as a NIP-38 status, to the relays above, where anyone
+can read it. It is off unless you write it.
+
+Every example here is JSON, and each is one object: keys from more than one go
+together inside a single pair of braces rather than one block after another.
+Comments belong to `config.json5`, which is read as JSON5 — `config.json` is read
+as JSON, which has none.
 
 ## Usage
 
@@ -90,16 +101,19 @@ Options:
 
 You can override or add keybindings in your config file under `keybindings.Home`. Your settings are merged on top of the defaults, so you only need to list the keys you want to change.
 
-```json5
+```json
 {
     "keybindings": {
         "Home": {
-            "<Ctrl-r>": "Repost",  // bind an additional key to an action
-            "<t>": "ScrollToTop"   // override an existing default
+            "<Ctrl-r>": "Repost",
+            "<t>": "ScrollToTop"
         }
     }
 }
 ```
+
+The first of those binds another key to an action; the second rebinds one the
+defaults already use.
 
 Each key is written between `<` and `>`. Modifiers are joined with `-` (e.g. `<Ctrl-p>`, `<Shift-g>`, `<Alt-Enter>`). Special keys such as `up`, `down`, `home`, `end`, `esc`, `enter`, `tab` and `space` are also supported.
 

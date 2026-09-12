@@ -17,6 +17,7 @@
 //! reach nothing that reads them, the program carries on to load a configuration that
 //! is not there, and exits 1 saying something went wrong.
 
+use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -83,6 +84,47 @@ fn help_is_printed_and_the_application_does_not_start() -> Result<()> {
         .success()
         .stdout(contains("Usage: nostui"))
         .stdout(contains("--version"));
+
+    Ok(())
+}
+
+/// A relative name means a different directory from every shell, and this output is what
+/// a bug report is built from — the no-configuration error names the config one too, so a
+/// report carrying both would disagree with itself over it.
+///
+/// Run from a directory of its own, since the place a relative name resolves to is the
+/// one the process is standing in.
+#[test]
+fn version_prints_the_place_a_relative_directory_resolves_to() -> Result<()> {
+    let cwd = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cli-relative");
+
+    fs::create_dir_all(&cwd)?;
+
+    // Canonical on Unix, because the child reads its own directory back through `getcwd`,
+    // which follows the symlinks a checkout may sit behind. Not on Windows, where
+    // `canonicalize` answers with a `\\?\` prefix that `GetCurrentDirectoryW` never
+    // produces, so the two forms would never match.
+    let cwd = if cfg!(windows) {
+        cwd
+    } else {
+        cwd.canonicalize()?
+    };
+
+    nostui()?
+        .current_dir(&cwd)
+        .env("NOSTUI_CONFIG", "cfg")
+        .env("NOSTUI_DATA", "data")
+        .arg("--version")
+        .assert()
+        .success()
+        .stdout(contains(format!(
+            "Config directory: {}",
+            cwd.join("cfg").display()
+        )))
+        .stdout(contains(format!(
+            "Data directory: {}",
+            cwd.join("data").display()
+        )));
 
     Ok(())
 }
