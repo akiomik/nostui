@@ -1,7 +1,7 @@
 pub mod keybindings;
 pub mod styles;
 
-use std::path::{self, Path, PathBuf};
+use std::path::PathBuf;
 
 use color_eyre::eyre::Result;
 use config::ConfigError;
@@ -29,6 +29,15 @@ const EXAMPLE_FILE: &str = "config.json";
 
 /// The least a configuration can hold, and what the error shows beside [`EXAMPLE_FILE`].
 const EXAMPLE_SNIPPET: &str = r#"{"key": "nsec1..."}"#;
+
+/// The names in [`CONFIG_FILES`] the error offers as alternatives: all of them but the
+/// one it tells a reader to write. Defined once so the message and the tests over it
+/// cannot come to disagree about which names that leaves.
+fn alternatives() -> impl Iterator<Item = (&'static str, config::FileFormat)> {
+    CONFIG_FILES
+        .into_iter()
+        .filter(|(file, _)| *file != EXAMPLE_FILE)
+}
 
 /// Whether a format reads [`EXAMPLE_SNIPPET`]. YAML does,
 /// being a superset of it here; TOML and INI want their own syntax, and a reader who
@@ -104,38 +113,18 @@ impl Config {
             }
         }
         if !found_config {
-            // Where the loader looked, which is what it joins each name onto. A blank
-            // `NOSTUI_CONFIG` leaves that empty and the names resolve against the working
-            // directory, so that is the place to name — and it is what `path::absolute`
-            // refuses to be asked about.
-            let probed = if config_dir.as_os_str().is_empty() {
-                Path::new(".")
-            } else {
-                config_dir.as_path()
-            };
-
-            // Absolute, because `get_config_dir` also answers `./.config` where there is
-            // no home directory to ask about: a relative name means a different place
-            // from every shell.
-            let directory = path::absolute(probed).unwrap_or_else(|_| probed.to_path_buf());
-
             // The part a stranger cannot supply for themselves: it differs per platform,
             // and this is the whole of what a fresh install prints, with no window open
             // to read anything else in (#113).
-            let found_nothing = format!("No configuration file found in {}", directory.display());
+            let found_nothing = format!("No configuration file found in {}", config_dir.display());
 
             // Split rather than listed together: the four are not interchangeable for the
             // snippet above them, and a line that named them as one would send a reader
             // to `config.ini` with JSON in it.
-            let others = || {
-                CONFIG_FILES
-                    .iter()
-                    .filter(|(file, _)| *file != EXAMPLE_FILE)
-            };
             let names = |json: bool| {
-                others()
+                alternatives()
                     .filter(move |(_, format)| reads_json(*format) == json)
-                    .map(|(file, _)| *file)
+                    .map(|(file, _)| file)
                     .collect::<Vec<_>>()
                     .join(", ")
             };
@@ -238,7 +227,7 @@ mod tests {
     /// rather than of a second copy of the predicate: what the message promises is that
     /// this snippet, in a file of that name, is read.
     #[test]
-    fn the_formats_the_error_says_take_the_snippet_take_it() -> Result<(), ConfigError> {
+    fn the_formats_the_error_says_take_the_snippet_take_it() {
         for (name, format) in CONFIG_FILES {
             let read = config::Config::builder()
                 .add_source(config::File::from_str(EXAMPLE_SNIPPET, format))
@@ -253,8 +242,6 @@ mod tests {
                 reads_json(format)
             );
         }
-
-        Ok(())
     }
 
     /// Both lines that end the error name formats, and each needs one to name: the
@@ -262,18 +249,12 @@ mod tests {
     /// that came out empty would introduce nothing at all, on every fresh install.
     #[test]
     fn the_error_has_a_format_to_name_on_each_of_its_last_two_lines() {
-        let others = || {
-            CONFIG_FILES
-                .iter()
-                .filter(|(file, _)| *file != EXAMPLE_FILE)
-        };
-
         assert!(
-            others().any(|(_, format)| reads_json(*format)),
+            alternatives().any(|(_, format)| reads_json(format)),
             "the error says these take the same text as {EXAMPLE_FILE}, and names none"
         );
         assert!(
-            others().any(|(_, format)| !reads_json(*format)),
+            alternatives().any(|(_, format)| !reads_json(format)),
             "the error says these want their own syntax, and names none"
         );
     }

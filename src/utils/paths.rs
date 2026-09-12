@@ -1,5 +1,5 @@
 use std::sync::LazyLock;
-use std::{env, path::PathBuf};
+use std::{env, path, path::PathBuf};
 
 use directories::ProjectDirs;
 
@@ -33,6 +33,13 @@ pub fn get_data_dir() -> PathBuf {
     directory
 }
 
+/// The directory nostui reads its configuration from, as a place rather than as a name.
+///
+/// `NOSTUI_CONFIG` can hold anything, including nothing at all — `env::var` answers
+/// `Ok("")` for a variable set without a value — and the fallback below is relative. Each
+/// of those names a different directory from every shell, and both the error printed when
+/// no configuration is found and the `--version` that gets pasted into a bug report have
+/// to name the same one.
 pub fn get_config_dir() -> PathBuf {
     let directory = if let Some(s) = CONFIG_FOLDER.clone() {
         s
@@ -41,7 +48,16 @@ pub fn get_config_dir() -> PathBuf {
     } else {
         PathBuf::from(".").join(".config")
     };
-    directory
+
+    // An empty path is the one thing `absolute` refuses, and it is where the names are
+    // joined onto nothing — the working directory.
+    let directory = if directory.as_os_str().is_empty() {
+        PathBuf::from(".")
+    } else {
+        directory
+    };
+
+    path::absolute(&directory).unwrap_or(directory)
 }
 
 /// The package version, and the directories this run would read and write.
