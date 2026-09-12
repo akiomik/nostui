@@ -26,9 +26,11 @@ fn config_dir() -> PathBuf {
 }
 
 /// Somewhere for `initialize_logging` to open its file before the configuration is read,
-/// so these runs do not write into the data directory of whoever runs the tests.
-fn data_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("first-run-data")
+/// so these runs do not write into the data directory of whoever runs the tests. One per
+/// case, because the cases in this file run as threads of one binary and the log is
+/// truncated at every start.
+fn data_dir(case: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("first-run-data-{case}"))
 }
 
 #[test]
@@ -42,7 +44,7 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
     // at the real data directory while every stderr assertion carried on passing. And
     // `initialize_logging` reads `RUST_LOG` ahead of `NOSTUI_LOGLEVEL` and its own
     // default, so what the runner exported decides whether anything is written at all.
-    match fs::remove_dir_all(data_dir()) {
+    match fs::remove_dir_all(data_dir("missing")) {
         Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e.into()),
         _ => {}
     }
@@ -50,7 +52,7 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
     Command::cargo_bin("nostui")?
         .timeout(RUN_TIMEOUT)
         .env("NOSTUI_CONFIG", &config_dir)
-        .env("NOSTUI_DATA", data_dir())
+        .env("NOSTUI_DATA", data_dir("missing"))
         .env("RUST_LOG", "nostui=error")
         .assert()
         .failure()
@@ -67,7 +69,7 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
     // `log::error!` would put the instructions past the reach of a `grep` for ERROR.
     // Counted rather than matched on a phrase, which would be a copy of prose in another
     // file and would stop asserting anything the moment that prose was reworded.
-    let log = fs::read_to_string(data_dir().join("nostui.log"))?;
+    let log = fs::read_to_string(data_dir("missing").join("nostui.log"))?;
 
     assert!(
         log.contains(&config_dir.display().to_string()),
@@ -78,6 +80,30 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
         1,
         "the instructions belong on the terminal, not in the log: {log}"
     );
+
+    Ok(())
+}
+
+/// `NOSTUI_CONFIG` set to nothing is set as far as `env::var` is concerned, so the loader
+/// takes the empty path and joins each name onto it — probing the working directory. The
+/// message has to say so: it once printed `No configuration file found in ` and left the
+/// instruction under it pointing at nothing.
+///
+/// The case above cannot see this. It hands over an absolute directory, where
+/// `path::absolute` changes nothing and the empty path never arises.
+#[test]
+fn a_blank_configuration_directory_names_the_working_directory_it_fell_back_to() -> Result<()> {
+    let cwd = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+
+    Command::cargo_bin("nostui")?
+        .timeout(RUN_TIMEOUT)
+        .current_dir(&cwd)
+        .env("NOSTUI_CONFIG", "")
+        .env("NOSTUI_DATA", data_dir("blank"))
+        .env("RUST_LOG", "nostui=error")
+        .assert()
+        .failure()
+        .stderr(contains(cwd.display().to_string()));
 
     Ok(())
 }
