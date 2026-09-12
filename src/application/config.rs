@@ -27,6 +27,20 @@ const CONFIG_FILES: [(&str, config::FileFormat); 5] = [
 /// particular, since `config.json5` and `config.yaml` read it too.
 const EXAMPLE_FILE: &str = "config.json";
 
+/// The least a configuration can hold, and what the error shows beside [`EXAMPLE_FILE`].
+const EXAMPLE_SNIPPET: &str = r#"{"key": "nsec1..."}"#;
+
+/// Whether a format reads [`EXAMPLE_SNIPPET`]. YAML does,
+/// being a superset of it here; TOML and INI want their own syntax, and a reader who
+/// carried the snippet into one of those gets `missing configuration field "key"` — which
+/// reads as having named the key wrong rather than having chosen the wrong file.
+const fn reads_json(format: config::FileFormat) -> bool {
+    matches!(
+        format,
+        config::FileFormat::Json | config::FileFormat::Json5 | config::FileFormat::Yaml
+    )
+}
+
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct AppConfig {
     #[serde(default)]
@@ -110,22 +124,32 @@ impl Config {
             // to read anything else in (#113).
             let found_nothing = format!("No configuration file found in {}", directory.display());
 
-            let alternatives = CONFIG_FILES
-                .iter()
-                .map(|(file, _)| *file)
-                .filter(|file| *file != EXAMPLE_FILE)
-                .collect::<Vec<_>>()
-                .join(", ");
+            // Split rather than listed together: the four are not interchangeable for the
+            // snippet above them, and a line that named them as one would send a reader
+            // to `config.ini` with JSON in it.
+            let others = || {
+                CONFIG_FILES
+                    .iter()
+                    .filter(|(file, _)| *file != EXAMPLE_FILE)
+            };
+            let names = |json: bool| {
+                others()
+                    .filter(move |(_, format)| reads_json(*format) == json)
+                    .map(|(file, _)| *file)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let (same_text, own_syntax) = (names(true), names(false));
 
             // Made as well as filled: `create_dir_all` is called for the data directory
             // and never for this one.
             let message = format!(
                 "{found_nothing}\n\
                  Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
-                 \x20   {{\"key\": \"nsec1...\"}}\n\
+                 \x20   {EXAMPLE_SNIPPET}\n\
                  An npub instead of an nsec starts nostui read-only.\n\
-                 These are read too, each in its own format:\n\
-                 \x20   {alternatives}"
+                 These take the same text: {same_text}\n\
+                 These want their own syntax: {own_syntax}"
             );
 
             // The first line only; `tests/first_run.rs` holds the log to it.
@@ -190,39 +214,63 @@ mod tests {
             Err(e) => {
                 // If it fails, it should be for expected reasons (no config file or no privatekey)
                 println!("Config failed as expected: {e:?}");
-                // The two ways `Config::new` refuses, named as it names them: no file
-                // at all, or one without a key — which arrives as `NotFound("key")` and
-                // reads `missing configuration field "key"`. The second is what a
-                // contributor gets for writing `key` where the older `privatekey` was
-                // expected, and for following the message this error now prints.
+                // The two ways `Config::new` refuses, in full rather than by a word of
+                // them: no file at all, or one without a key, which arrives as
+                // `NotFound("key")`. `contains("key")` would take almost any other error
+                // with it, since `config` appends `` for key `…` `` to its own — a
+                // `relays` written as a string passed here as an expected failure.
                 let err_msg = format!("{e:?}");
                 assert!(
-                    err_msg.contains("No configuration file found") || err_msg.contains("key"),
+                    err_msg.contains("No configuration file found")
+                        || err_msg.contains(r#"missing configuration field "key""#),
                     "an error here should name what is missing, got: {e:?}",
                 );
             }
         }
     }
 
-    /// The error ends by naming the formats it did not tell you to write, on a line of
-    /// their own under "These are read too". That line needs something on it: with
-    /// [`CONFIG_FILES`] holding nothing but `EXAMPLE_FILE` it would be blank but for its
-    /// indent, and the sentence above would introduce nothing, on every fresh install.
-    /// Two is where it starts reading as the plural it is written as.
-    ///
-    /// Asserted rather than branched on: neither is reachable from a fixed-length const
-    /// of five, so a branch would be dead code and a comment would be a claim nothing
-    /// holds to.
+    /// The error tells a reader which of the names take the text it shows and which want
+    /// their own, and [`reads_json`] is the only thing that decides. Asked of the parsers
+    /// rather than of a second copy of the predicate: what the message promises is that
+    /// this snippet, in a file of that name, is read.
     #[test]
-    fn the_error_has_at_least_two_formats_left_to_call_alternatives() {
-        let alternatives = CONFIG_FILES
-            .iter()
-            .filter(|(file, _)| *file != EXAMPLE_FILE)
-            .count();
+    fn the_formats_the_error_says_take_the_snippet_take_it() -> Result<(), ConfigError> {
+        for (name, format) in CONFIG_FILES {
+            let read = config::Config::builder()
+                .add_source(config::File::from_str(EXAMPLE_SNIPPET, format))
+                .build()
+                .and_then(|parsed| parsed.get_string("key"));
+
+            assert_eq!(
+                read.is_ok(),
+                reads_json(format),
+                "{name} reads the snippet: {}, and the error says {}",
+                read.is_ok(),
+                reads_json(format)
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Both lines that end the error name formats, and each needs one to name: the
+    /// message introduces them as taking the same text or wanting their own, so a list
+    /// that came out empty would introduce nothing at all, on every fresh install.
+    #[test]
+    fn the_error_has_a_format_to_name_on_each_of_its_last_two_lines() {
+        let others = || {
+            CONFIG_FILES
+                .iter()
+                .filter(|(file, _)| *file != EXAMPLE_FILE)
+        };
 
         assert!(
-            alternatives >= 2,
-            "the error introduces {alternatives} formats as \"read too\""
+            others().any(|(_, format)| reads_json(*format)),
+            "the error says these take the same text as {EXAMPLE_FILE}, and names none"
+        );
+        assert!(
+            others().any(|(_, format)| !reads_json(*format)),
+            "the error says these want their own syntax, and names none"
         );
     }
 
@@ -241,13 +289,7 @@ mod tests {
         assert!(
             CONFIG_FILES
                 .iter()
-                .any(|(file, format)| *file == EXAMPLE_FILE
-                    && matches!(
-                        format,
-                        config::FileFormat::Json
-                            | config::FileFormat::Json5
-                            | config::FileFormat::Yaml
-                    )),
+                .any(|(file, format)| *file == EXAMPLE_FILE && reads_json(*format)),
             "the error shows JSON beside {EXAMPLE_FILE}, which {CONFIG_FILES:?} does not read"
         );
     }
