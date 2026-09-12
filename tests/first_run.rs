@@ -35,11 +35,13 @@ fn data_dir() -> PathBuf {
 fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Result<()> {
     let config_dir = config_dir();
 
-    // `CARGO_TARGET_TMPDIR` outlives the run, so without this the log read below is
-    // whatever the last green run left. That matters for the one regression it cannot
-    // otherwise see: were `NOSTUI_DATA` to stop being honoured, the binary would truncate
-    // the log of whoever is running the tests, the stderr assertions would pass anyway,
-    // and this would read the stale file and agree.
+    // The log assertions at the end need the file this run writes, and two things stand
+    // between them and it. `CARGO_TARGET_TMPDIR` outlives a run, so a previous green
+    // run's log would be read in place of a missing one — which is the case most worth
+    // catching, since a `NOSTUI_DATA` that stopped being honoured would send the binary
+    // at the real data directory while every stderr assertion carried on passing. And
+    // `initialize_logging` reads `RUST_LOG` ahead of `NOSTUI_LOGLEVEL` and its own
+    // default, so what the runner exported decides whether anything is written at all.
     match fs::remove_dir_all(data_dir()) {
         Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e.into()),
         _ => {}
@@ -49,24 +51,22 @@ fn a_missing_configuration_says_where_to_put_one_and_what_to_write_in_it() -> Re
         .timeout(RUN_TIMEOUT)
         .env("NOSTUI_CONFIG", &config_dir)
         .env("NOSTUI_DATA", data_dir())
-        // `initialize_logging` takes this before `NOSTUI_LOGLEVEL` and before its own
-        // default, so without it whatever the runner exported decides whether the log
-        // read below is written at all — and an empty one passes the second assertion
-        // having looked at nothing. `NO_COLOR` is deliberately absent: the report is
-        // `color_eyre`'s, which emits its escape either way.
         .env("RUST_LOG", "nostui=error")
         .assert()
         .failure()
+        // No `NO_COLOR`, unlike `tests/cli.rs` where it silences clap: this report is
+        // `color_eyre`'s and is coloured either way, and every substring below sits away
+        // from the escapes.
         .stderr(contains(config_dir.display().to_string()))
         // The whole phrase: `contains("config.json")` matches `config.json5` too.
         .stderr(contains("write config.json in it"))
         .stderr(contains("{\"key\": \"nsec1...\"}"))
         .stderr(contains("config.toml"));
 
-    // An event is prefixed once however many lines it spans, so passing the whole message
-    // to `log::error!` puts the instructions past the reach of a `grep` for ERROR. Counted
-    // rather than matched on a phrase: the phrase would be a copy of prose in another file
-    // and would stop asserting anything the moment that prose was reworded.
+    // An event is prefixed once however many lines it spans, so the whole message in
+    // `log::error!` would put the instructions past the reach of a `grep` for ERROR.
+    // Counted rather than matched on a phrase, which would be a copy of prose in another
+    // file and would stop asserting anything the moment that prose was reworded.
     let log = fs::read_to_string(data_dir().join("nostui.log"))?;
 
     assert!(

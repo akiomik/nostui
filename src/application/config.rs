@@ -90,23 +90,25 @@ impl Config {
             }
         }
         if !found_config {
-            // The directory is the part a user cannot supply for themselves: it differs
-            // per platform, and this is the first thing a fresh install prints, with no
-            // window open to read anything else in (#113).
+            // Absolute: `get_config_dir` answers `./.config` where there is no home
+            // directory to ask about, and `NOSTUI_CONFIG` can be set to anything, so a
+            // relative name means a different place from every shell.
+            let directory = path::absolute(&config_dir).unwrap_or_else(|_| config_dir.clone());
+
+            // The part a stranger cannot supply for themselves: it differs per platform,
+            // and this is the whole of what a fresh install prints, with no window open
+            // to read anything else in (#113).
+            let found_nothing = format!("No configuration file found in {}", directory.display());
+
             let alternatives = CONFIG_FILES
                 .iter()
                 .map(|(file, _)| *file)
                 .filter(|file| *file != EXAMPLE_FILE)
                 .collect::<Vec<_>>()
                 .join(", ");
-            // Shown absolute: `get_config_dir` answers `./.config` when there is no home
-            // directory to ask about, and `NOSTUI_CONFIG` can be set to anything. A
-            // relative path here names a different place from every shell.
-            //
-            // The directory has to be made as well as filled: `create_dir_all` is called
-            // for the data directory and never for this one.
-            let shown = path::absolute(&config_dir).unwrap_or_else(|_| config_dir.clone());
-            let found_nothing = format!("No configuration file found in {}", shown.display());
+
+            // Made as well as filled: `create_dir_all` is called for the data directory
+            // and never for this one.
             let message = format!(
                 "{found_nothing}\n\
                  Make that directory if it is not there, then write {EXAMPLE_FILE} in it:\n\
@@ -116,7 +118,7 @@ impl Config {
                  \x20   {alternatives}"
             );
 
-            // The first line only; `tests/first_run.rs` is what holds the log to it.
+            // The first line only; `tests/first_run.rs` holds the log to it.
             log::error!("{found_nothing}");
             return Err(ConfigError::Message(message));
         }
