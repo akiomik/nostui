@@ -17,6 +17,7 @@
 //! reach nothing that reads them, the program carries on to load a configuration that
 //! is not there, and exits 1 saying something went wrong.
 
+use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -83,6 +84,40 @@ fn help_is_printed_and_the_application_does_not_start() -> Result<()> {
         .success()
         .stdout(contains("Usage: nostui"))
         .stdout(contains("--version"));
+
+    Ok(())
+}
+
+/// Both directories `--version` names are places rather than names. A relative one means
+/// a different directory from every shell, and this output is what a bug report is built
+/// from — the configuration error names the same two, so a report carrying both halves
+/// would disagree with itself.
+///
+/// Run from a directory of its own, since a relative name is resolved against whichever
+/// one the process is standing in.
+#[test]
+fn version_names_directories_that_do_not_depend_on_where_it_was_run() -> Result<()> {
+    let cwd = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cli-relative");
+
+    fs::create_dir_all(&cwd)?;
+
+    let cwd = cwd.canonicalize()?;
+
+    nostui()?
+        .current_dir(&cwd)
+        .env("NOSTUI_CONFIG", "cfg")
+        .env("NOSTUI_DATA", "data")
+        .arg("--version")
+        .assert()
+        .success()
+        .stdout(contains(format!(
+            "Config directory: {}",
+            cwd.join("cfg").display()
+        )))
+        .stdout(contains(format!(
+            "Data directory: {}",
+            cwd.join("data").display()
+        )));
 
     Ok(())
 }
