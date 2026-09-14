@@ -3462,9 +3462,9 @@ dependencies = [
 
 [[package]]
 name = "tears"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "596dbc1a06e9ac9d9c01a6129ed9efb7e81a1e9328d08191e0024bbe33b74199"
+checksum = "e9e536881579fba63e0bc1ed0fcaf04c219d74e9629f8801b2652425a0498515"
 dependencies = [
  "color-eyre",
  "crossterm 0.29.0",
