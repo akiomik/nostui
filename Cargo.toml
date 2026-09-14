@@ -59,7 +59,7 @@ criterion = "0.8"
 nostr-sdk = { version = "0.45", features = ["local-relay"] }
 predicates = "3"
 pretty_assertions = "1"
-rstest = "0.26"
+rstest = "0.27"
 
 [lints.clippy]
 absolute_paths = "warn"
