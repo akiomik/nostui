@@ -2083,9 +2083,9 @@ dependencies = [
 
 [[package]]
 name = "nostr-sdk"
-version = "0.45.2"
+version = "0.45.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "245f8642b10feecb0a40739a886ca1850e3be4e35dc6592b806ec437403ab9c9"
+checksum = "c53a37469ce2df8fe6471b6a4d1c4da833f86c7ba0138ac95299b6f37f69ec84"
 dependencies = [
  "async-utility",
  "async-wsocket",
