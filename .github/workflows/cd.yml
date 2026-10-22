@@ -3,16 +3,21 @@ name: CD # Continuous Deployment
 on:
   push:
     tags:
-      - '[v]?[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]*'
+      - '[0-9]*'
+  pull_request:
+    paths:
+      - '.github/workflows/cd.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  publish:
-    name: Publishing for ${{ matrix.os }}
+  package:
+    name: Package for ${{ matrix.os }} / ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -59,80 +64,95 @@ jobs:
             binary-name: nostui
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           target: ${{ matrix.target }}
           cache: false
+          build-warnings: ''
       - uses: Swatinem/rust-cache@v2
       - name: Install system dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libdbus-1-dev pkg-config
-      - name: Cargo build
-        uses: actions-rs/cargo@v1
+      - name: Build binary
+        uses: houseabsolute/actions-rust-cross@v1.0.8
         with:
           command: build
-          use-cross: ${{ matrix.use-cross }}
-          args: --release --target ${{ matrix.target }}
-      - name: install strip command
+          target: ${{ matrix.target }}
+          args: '--locked --release'
+          force-use-cross: ${{ matrix.use-cross }}
+          use-rust-cache: false
+      - name: Install ARM strip tool
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get install -y binutils-aarch64-linux-gnu
+      - name: Package binary and checksum
         shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          OS_NAME: ${{ matrix.os-name }}
+          ARCH: ${{ matrix.architecture }}
+          BINARY_POSTFIX: ${{ matrix.binary-postfix }}
         run: |
-          if [[ ${{ matrix.target }} == aarch64-unknown-linux-gnu ]]; then
-              sudo apt update
-              sudo apt-get install -y binutils-aarch64-linux-gnu
-          fi
-      - name: Packaging final binary
-        shell: bash
-        run: |
-          cd target/${{ matrix.target }}/release
-
-          ####### reduce binary size by removing debug symbols #######
-
-          BINARY_NAME=${{ matrix.binary-name }}${{ matrix.binary-postfix }}
-          if [[ ${{ matrix.target }} == aarch64-unknown-linux-gnu ]]; then
-
-            GCC_PREFIX="aarch64-linux-gnu-"
+          set -euo pipefail
+          cd "target/${TARGET}/release"
+          binary="nostui${BINARY_POSTFIX}"
+          if [[ "$TARGET" == aarch64-unknown-linux-gnu ]]; then
+            aarch64-linux-gnu-strip "$binary"
           else
-            GCC_PREFIX=""
+            strip "$binary"
           fi
-          "$GCC_PREFIX"strip $BINARY_NAME
-
-          ########## create tar.gz ##########
-
-          RELEASE_NAME=${{ matrix.binary-name }}-${GITHUB_REF/refs\/tags\//}-${{ matrix.os-name }}-${{ matrix.architecture }}
-
-          tar czvf $RELEASE_NAME.tar.gz $BINARY_NAME
-
-          ########## create sha256 ##########
-
-          if [[ ${{ runner.os }} == 'Windows' ]]; then
-            certutil -hashfile $RELEASE_NAME.tar.gz sha256 | grep -E [A-Fa-f0-9]{64} > $RELEASE_NAME.sha256
+          release_name="nostui-${GITHUB_REF_NAME##*/}-${OS_NAME}-${ARCH}"
+          tar czf "${release_name}.tar.gz" "$binary"
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            shasum -a 256 "${release_name}.tar.gz" > "${release_name}.sha256"
           else
-            shasum -a 256 $RELEASE_NAME.tar.gz > $RELEASE_NAME.sha256
+            sha256sum "${release_name}.tar.gz" > "${release_name}.sha256"
           fi
-      - name: Releasing assets
-        uses: softprops/action-gh-release@v1
+      - name: Store release assets
+        uses: actions/upload-artifact@v4
         with:
-          files: |
+          name: nostui-${{ matrix.target }}
+          path: |
             target/${{ matrix.target }}/release/${{ matrix.binary-name }}-*.tar.gz
             target/${{ matrix.target }}/release/${{ matrix.binary-name }}-*.sha256
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: nostui-*
+          path: release-assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: release-assets/*
+          fail_on_unmatched_files: true
 
   publish-cargo:
     name: Publishing to Cargo
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: package
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           cache: false
+          build-warnings: ''
       - uses: Swatinem/rust-cache@v2
-      - run: cargo publish
+      - run: cargo publish --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
