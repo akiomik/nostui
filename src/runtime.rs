@@ -14,6 +14,7 @@ use crate::application::config::keybindings::Action as KeyAction;
 use crate::application::config::Config;
 use crate::application::message::{AppMsg, EditorMsg, NostrMsg, SystemMsg, TimelineMsg};
 use crate::application::state::AppState;
+#[cfg(not(windows))]
 use crate::infrastructure::subscription::media::MediaEvents;
 use crate::infrastructure::subscription::nostr::NostrEvents;
 use crate::model::nostr_gateway::Message as NostrSubscriptionMessage;
@@ -128,6 +129,7 @@ impl<'a> Application for TearsApp<'a> {
             }),
         ];
 
+        #[cfg(not(windows))]
         if self.config.nip38.enabled {
             subs.push(Subscription::new(MediaEvents::new()).map(AppMsg::Media));
         }
