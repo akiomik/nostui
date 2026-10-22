@@ -70,7 +70,6 @@ jobs:
         with:
           target: ${{ matrix.target }}
           cache: false
-          build-warnings: ''
       - uses: Swatinem/rust-cache@v2
       - name: Install system dependencies
         if: runner.os == 'Linux'
@@ -152,7 +151,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           cache: false
-          build-warnings: ''
       - uses: Swatinem/rust-cache@v2
       - run: cargo publish --locked
         env:
