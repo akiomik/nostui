@@ -6,15 +6,25 @@ on:
       - 'v[0-9]*'
       - '[0-9]*'
   pull_request:
-    paths:
-      - '.github/workflows/cd.yml'
 
 permissions:
   contents: read
 
 jobs:
+  release-tag:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test release tag validation
+        run: bash .github/scripts/test_validate_release_tag.sh
+      - name: Validate tag before packaging
+        if: github.ref_type == 'tag'
+        run: bash .github/scripts/validate-release-tag.sh "$GITHUB_REF_NAME"
+
   package:
     name: Package for ${{ matrix.os }} / ${{ matrix.target }}
+    needs: release-tag
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
