@@ -10,6 +10,32 @@ permissions:
   contents: read
 
 jobs:
+  # Builds the package the way `cargo publish` would, which runs the build
+  # scripts and proc macros of every dependency. The job therefore gets no
+  # OIDC token and hands nothing to the publish jobs.
+  verify:
+    name: Verify package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - name: Check that the tag matches the package version
+        if: github.ref_type == 'tag'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          if [ "$tag" != "$version" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match package version ${version}" >&2
+            exit 1
+          fi
+      - run: cargo publish --dry-run --locked
+
+  # Builds the binaries, which also runs the build scripts and proc macros of
+  # every dependency, so these jobs can only read the repository. The publish
+  # job uploads what they package.
   package:
     name: Package for ${{ matrix.os }} / ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
@@ -22,68 +48,59 @@ jobs:
             target: x86_64-apple-darwin
             architecture: x86_64
             binary-postfix: ""
-            binary-name: nostui
-            use-cross: false
           - os: macos-latest
             os-name: macos
             target: aarch64-apple-darwin
             architecture: arm64
             binary-postfix: ""
-            use-cross: false
-            binary-name: nostui
-          - os: ubuntu-latest
+          # A Linux binary needs at least the glibc it was built against, so
+          # the Linux targets build on 22.04 (glibc 2.35) rather than on
+          # ubuntu-latest, to keep running on Ubuntu 22.04 and Debian 12.
+          # Revisit when GitHub retires these runners.
+          - os: ubuntu-22.04
             os-name: linux
             target: x86_64-unknown-linux-gnu
             architecture: x86_64
             binary-postfix: ""
-            use-cross: false
-            binary-name: nostui
           - os: windows-latest
             os-name: windows
             target: x86_64-pc-windows-msvc
             architecture: x86_64
             binary-postfix: ".exe"
-            use-cross: false
-            binary-name: nostui
-          - os: ubuntu-latest
+          # Built natively on an ARM runner rather than with cross.
+          - os: ubuntu-22.04-arm
             os-name: linux
             target: aarch64-unknown-linux-gnu
             architecture: arm64
             binary-postfix: ""
-            use-cross: true
-            binary-name: nostui
-          - os: ubuntu-latest
+          # Built with the 32-bit multilib toolchain rather than with cross.
+          - os: ubuntu-22.04
             os-name: linux
             target: i686-unknown-linux-gnu
             architecture: i686
             binary-postfix: ""
-            use-cross: true
-            binary-name: nostui
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      # No cache: one saved by another run could carry a poisoned build into
+      # the released binaries.
       - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v2
+        uses: actions-rust-lang/setup-rust-toolchain@v2.0.0
         with:
           target: ${{ matrix.target }}
           cache: false
-      - uses: Swatinem/rust-cache@v2
       - name: Install system dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libdbus-1-dev pkg-config
+      - name: Install the 32-bit toolchain
+        if: matrix.target == 'i686-unknown-linux-gnu'
+        run: sudo apt-get install -y gcc-multilib
       - name: Build binary
-        uses: houseabsolute/actions-rust-cross@v1.0.8
-        with:
-          command: build
-          target: ${{ matrix.target }}
-          args: '--locked --release'
-          force-use-cross: ${{ matrix.use-cross }}
-          use-rust-cache: false
-      - name: Install ARM strip tool
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: sudo apt-get install -y binutils-aarch64-linux-gnu
+        run: cargo build --locked --release --target ${{ matrix.target }}
       - name: Package binary and checksum
         shell: bash
         env:
@@ -95,11 +112,7 @@ jobs:
           set -euo pipefail
           cd "target/${TARGET}/release"
           binary="nostui${BINARY_POSTFIX}"
-          if [[ "$TARGET" == aarch64-unknown-linux-gnu ]]; then
-            aarch64-linux-gnu-strip "$binary"
-          else
-            strip "$binary"
-          fi
+          strip "$binary"
           release_name="nostui-${GITHUB_REF_NAME##*/}-${OS_NAME}-${ARCH}"
           tar czf "${release_name}.tar.gz" "$binary"
           if [[ "$RUNNER_OS" == macOS ]]; then
@@ -108,51 +121,86 @@ jobs:
             sha256sum "${release_name}.tar.gz" > "${release_name}.sha256"
           fi
       - name: Store release assets
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: nostui-${{ matrix.target }}
           path: |
-            target/${{ matrix.target }}/release/${{ matrix.binary-name }}-*.tar.gz
-            target/${{ matrix.target }}/release/${{ matrix.binary-name }}-*.sha256
+            target/${{ matrix.target }}/release/nostui-*.tar.gz
+            target/${{ matrix.target }}/release/nostui-*.sha256
           if-no-files-found: error
+          # Long enough to re-run the publish job after a failed upload.
+          retention-days: 7
 
+  # Uploads the packaged binaries in one go. This is the only job that can
+  # write to the repository, so it runs no build and no third-party action:
+  # only the runner's gh on the downloaded files.
   publish:
     name: Publish GitHub release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: package
+    needs: [verify, package]
     runs-on: ubuntu-latest
     permissions:
-      actions: read
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           pattern: nostui-*
-          path: release-assets
+          path: dist
           merge-multiple: true
-      - uses: softprops/action-gh-release@v3
-        with:
-          files: release-assets/*
-          fail_on_unmatched_files: true
-          generate_release_notes: true
 
+      # The package jobs name the files, so check that exactly the expected
+      # set arrived for this tag before uploading any of it. Keep the names
+      # in step with the package matrix.
+      - name: Check the packaged files
+        working-directory: dist
+        run: |
+          for platform in macos-x86_64 macos-arm64 linux-x86_64 windows-x86_64 linux-arm64 linux-i686; do
+            echo "nostui-${GITHUB_REF_NAME}-${platform}.tar.gz"
+            echo "nostui-${GITHUB_REF_NAME}-${platform}.sha256"
+          done | sort > ../expected.txt
+          printf '%s\n' * | sort > ../actual.txt
+          diff ../expected.txt ../actual.txt
+
+      # Releases are made either by hand, which creates the tag and so starts
+      # this workflow, or by pushing the tag. Add to the release when it
+      # exists, keeping its notes, and otherwise create it with notes
+      # generated from the merged pull requests. `--clobber` lets a re-run
+      # replace a partial upload with the same files from this run's
+      # artifacts.
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tags="$(gh release list --limit 1000 --json tagName --jq '.[].tagName')"
+          if grep -qxF "$GITHUB_REF_NAME" <<< "$tags"; then
+            gh release upload "$GITHUB_REF_NAME" --clobber dist/*
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes dist/*
+          fi
+
+  # Packs the same commit again and uploads it without compiling. Any step
+  # in this job can request the OIDC token, so it runs only actions/checkout,
+  # rust-lang's own tools and the runner image: no dependency code and no
+  # other actions.
   publish-cargo:
     name: Publishing to Cargo
     if: startsWith(github.ref, 'refs/tags/')
-    needs: package
+    needs: [verify, publish]
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # Required for crates.io Trusted Publishing (OIDC).
       id-token: write
+      contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v2
+        uses: actions/checkout@v7.0.1
         with:
-          cache: false
-      - uses: rust-lang/crates-io-auth-action@v1
+          persist-credentials: false
+      - run: rustup toolchain install
+      # Exchanges the workflow's OIDC token for a short-lived crates.io token.
+      - uses: rust-lang/crates-io-auth-action@v1.0.6
         id: auth
-      - run: cargo publish --locked
+      - run: cargo publish --locked --no-verify
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
